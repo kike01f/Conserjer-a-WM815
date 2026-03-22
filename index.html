@@ -2759,7 +2759,13 @@
       try {
         window.firebaseApp =
           firebase.apps && firebase.apps.length > 0 ? firebase.app() : firebase.initializeApp(firebaseConfig);
-        window.firebaseDB = firebase.firestore();
+        var _cgFs = firebase.firestore();
+        try {
+          _cgFs.settings({
+            experimentalAutoDetectLongPolling: true
+          });
+        } catch (eFsSet) {}
+        window.firebaseDB = _cgFs;
         window.db = window.firebaseDB;
         console.log("[Conserjería] Firebase OK — proyecto:", firebaseConfig.projectId);
       } catch (err) {
@@ -2774,6 +2780,13 @@
     window.CG_CLOUD_SYNC_ENABLED = window.CG_CLOUD_SYNC_ENABLED !== false;
     /* true (defecto): datos de negocio solo en RAM + Firestore; no localStorage persistente. false: modo clásico LS + sync. */
     window.CG_CLOUD_ONLY_STORAGE = typeof window.CG_CLOUD_ONLY_STORAGE === "boolean" ? window.CG_CLOUD_ONLY_STORAGE : true;
+    /* Opcional: true = nunca usar onSnapshot, solo pulls periódicos (más lecturas Firestore, máxima estabilidad). */
+    window.CG_FIRESTORE_FORCE_POLLING = window.CG_FIRESTORE_FORCE_POLLING === true;
+    /* Intervalo ms del modo polling (mín. 15s). Por defecto 90s. */
+    window.CG_FIRESTORE_POLL_MS =
+      typeof window.CG_FIRESTORE_POLL_MS === "number" && window.CG_FIRESTORE_POLL_MS >= 15000
+        ? window.CG_FIRESTORE_POLL_MS
+        : 90000;
   </script>
 </head>
 <body>
@@ -3050,6 +3063,9 @@
       pullAllInFlight: null,
       /** Evita registrar onSnapshot en el mismo tick que unsubscribe (otra fuente de "Unexpected state" en 11.x). */
       listenerAttachGen: 0,
+      /** Si true: sin onSnapshot; solo cloudPullAllOnce periódico (mitiga bugs del watch en algunos navegadores). */
+      preferPollingSync: false,
+      pollingTimer: null,
       /** Durante initCloudSync no encolar escrituras sueltas (evita carrera con pull/listener). */
       syncInitActive: false,
       pendingPushAfterInit: {}
@@ -3341,6 +3357,10 @@
     function __cgScheduleListenerRestart() {
       if (CG_SYNC_STATE.listenerRetryTimer) return;
       if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return;
+      if (CG_SYNC_STATE.preferPollingSync) {
+        __cgActivatePollingSync("scheduled_retry");
+        return;
+      }
       var n = Math.min(CG_SYNC_STATE.listenerFailures || 0, 8);
       var delay = Math.min(60000, 800 * Math.pow(2, n));
       __cgSyncLog("info", "listener_scheduled_restart", "en " + delay + "ms");
@@ -3390,6 +3410,12 @@
         } catch (eU) {}
       }
       CG_SYNC_STATE.unsubscribe = null;
+      if (CG_SYNC_STATE.pollingTimer != null) {
+        try {
+          clearInterval(CG_SYNC_STATE.pollingTimer);
+        } catch (ePoll) {}
+        CG_SYNC_STATE.pollingTimer = null;
+      }
       if (CG_SYNC_STATE.periodicPushTimer !== null) {
         try {
           clearInterval(CG_SYNC_STATE.periodicPushTimer);
@@ -3477,7 +3503,78 @@
       }
     }
 
+    function __cgFirestoreInternalBugMsg(err) {
+      var msg = err && (err.message != null ? String(err.message) : String(err));
+      return msg.indexOf("INTERNAL ASSERTION FAILED") !== -1;
+    }
+
+    /**
+     * Alternativa a onSnapshot: pulls periódicos. Más lecturas en Firestore, evita fallos del watch en algunos entornos.
+     * No llama a stopCloudSyncListener completo: no cancela el push periódico ya armado en finishOk.
+     */
+    function __cgActivatePollingSync(reason) {
+      if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return;
+      if (CG_SYNC_STATE.listenerRetryTimer) {
+        try {
+          clearTimeout(CG_SYNC_STATE.listenerRetryTimer);
+        } catch (eT) {}
+        CG_SYNC_STATE.listenerRetryTimer = null;
+      }
+      if (typeof CG_SYNC_STATE.unsubscribe === "function") {
+        try {
+          CG_SYNC_STATE.unsubscribe();
+        } catch (eU) {}
+      }
+      CG_SYNC_STATE.unsubscribe = null;
+      if (CG_SYNC_STATE.pollingTimer != null) {
+        try {
+          clearInterval(CG_SYNC_STATE.pollingTimer);
+        } catch (eP) {}
+        CG_SYNC_STATE.pollingTimer = null;
+      }
+      var pollMs =
+        typeof window.CG_FIRESTORE_POLL_MS === "number" && window.CG_FIRESTORE_POLL_MS >= 15000
+          ? window.CG_FIRESTORE_POLL_MS
+          : 90000;
+      function tick() {
+        if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return;
+        cloudPullAllOnce().catch(function (e) {
+          __cgSyncLog("warn", "poll_pull", e && e.code ? e.code : e);
+        });
+      }
+      tick();
+      CG_SYNC_STATE.pollingTimer = setInterval(tick, pollMs);
+      __cgSyncLog("warn", "firestore_polling_on", String(reason || "") + " · " + pollMs + "ms");
+    }
+
+    (function __cgBindFirestoreWatchCrashRecovery() {
+      if (window.__CG_FS_WATCH_RECOVERY) return;
+      window.__CG_FS_WATCH_RECOVERY = true;
+      window.addEventListener("unhandledrejection", function (ev) {
+        try {
+          var r = ev.reason;
+          var msg = r && (r.message != null ? String(r.message) : String(r));
+          if (msg.indexOf("INTERNAL ASSERTION FAILED") === -1) return;
+          if (msg.indexOf("FIRESTORE") === -1 && msg.indexOf("Firestore") === -1) return;
+          if (typeof CG_CLOUD_SYNC_ENABLED !== "undefined" && !CG_CLOUD_SYNC_ENABLED) return;
+          if (!window.firebaseDB) return;
+          if (CG_SYNC_STATE.preferPollingSync) {
+            ev.preventDefault();
+            return;
+          }
+          ev.preventDefault();
+          CG_SYNC_STATE.preferPollingSync = true;
+          __cgSyncLog("warn", "firestore_watch_assertion_recover", msg.slice(0, 160));
+          __cgActivatePollingSync("unhandledrejection");
+        } catch (eRec) {}
+      });
+    })();
+
     function startCloudSyncListener() {
+      if (CG_SYNC_STATE.preferPollingSync) {
+        __cgActivatePollingSync("prefer");
+        return;
+      }
       stopCloudSyncListener();
       var col = __cgCloudLsCol();
       if (!col) return;
@@ -3510,14 +3607,24 @@
                 if (typeof CG_SYNC_STATE.unsubscribe === "function") CG_SYNC_STATE.unsubscribe();
               } catch (eD) {}
               CG_SYNC_STATE.unsubscribe = null;
+              if (__cgFirestoreInternalBugMsg(err)) {
+                CG_SYNC_STATE.preferPollingSync = true;
+                __cgActivatePollingSync("listener_error");
+                return;
+              }
               __cgScheduleListenerRestart();
             }
           );
         } catch (eSnap) {
           __cgSyncLog("warn", "listener_attach_exception", eSnap);
-          __cgScheduleListenerRestart();
+          if (__cgFirestoreInternalBugMsg(eSnap)) {
+            CG_SYNC_STATE.preferPollingSync = true;
+            __cgActivatePollingSync("attach_exception");
+          } else {
+            __cgScheduleListenerRestart();
+          }
         }
-      }, 0);
+      }, 80);
     }
 
     function __cgCloudPullAllInner() {
@@ -3608,6 +3715,9 @@
 
       CG_SYNC_STATE.initGeneration++;
       CG_SYNC_STATE.listenerFailures = 0;
+      if (window.CG_FIRESTORE_FORCE_POLLING === true) {
+        CG_SYNC_STATE.preferPollingSync = true;
+      }
       var gen = CG_SYNC_STATE.initGeneration;
 
       try {
@@ -3631,55 +3741,78 @@
         if (!alive()) {
           result.reason = "superseded";
           CG_SYNC_STATE.lastInitResult = result;
+          return Promise.resolve(result);
+        }
+        function armPostPullUi() {
+          try {
+            if (CG_SYNC_STATE.preferPollingSync) {
+              __cgActivatePollingSync("init");
+            } else {
+              startCloudSyncListener();
+            }
+          } catch (eL) {
+            __cgSyncLog("warn", "listener_start", eL);
+          }
+          result.listenerStarted =
+            !!(CG_CLOUD_SYNC_ENABLED && window.firebaseDB && __cgCloudLsCol());
+          result.ok = true;
+          CG_SYNC_STATE.lastInitResult = result;
+          try {
+            if (window.CG_ACTIONS && typeof window.CG_ACTIONS.syncDepartamentosModuleFromLocal === "function") {
+              window.CG_ACTIONS.syncDepartamentosModuleFromLocal();
+            }
+          } catch (eS) {
+            __cgSyncLog("warn", "post_sync_dept_hook", eS);
+          }
+          if (CG_SYNC_STATE.periodicPushTimer !== null) {
+            try {
+              clearInterval(CG_SYNC_STATE.periodicPushTimer);
+            } catch (eC) {}
+            CG_SYNC_STATE.periodicPushTimer = null;
+          }
+          CG_SYNC_STATE.periodicPushTimer = setInterval(function () {
+            if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB || CG_SYNC_STATE.applyingRemote) return;
+            cloudPushAllKeysOnce().catch(function (eP) {
+              __cgSyncLog("warn", "periodic_push", eP && eP.code ? eP.code : eP);
+            });
+          }, 120000);
+          if (!window.__CG_CLOUD_LIFECYCLE_BOUND) {
+            window.__CG_CLOUD_LIFECYCLE_BOUND = true;
+            try {
+              window.addEventListener(
+                "pagehide",
+                function () {
+                  flushPendingCloudWritesNow();
+                },
+                { capture: true }
+              );
+              document.addEventListener("visibilitychange", function () {
+                if (document.visibilityState === "hidden") flushPendingCloudWritesNow();
+              });
+            } catch (eEv) {}
+          }
+          if (result.partial) __cgSyncLog("warn", "init_done_partial", CG_CLOUD_BUILDING_KEY);
+          else __cgSyncLog("info", "init_done_ok", CG_CLOUD_BUILDING_KEY);
           return result;
         }
-        try {
-          startCloudSyncListener();
-        } catch (eL) {
-          __cgSyncLog("warn", "listener_start", eL);
-        }
-        /* onSnapshot se registra en setTimeout(0) dentro de startCloudSyncListener */
-        result.listenerStarted =
-          !!(CG_CLOUD_SYNC_ENABLED && window.firebaseDB && __cgCloudLsCol());
-        result.ok = true;
-        CG_SYNC_STATE.lastInitResult = result;
-        try {
-          if (window.CG_ACTIONS && typeof window.CG_ACTIONS.syncDepartamentosModuleFromLocal === "function") {
-            window.CG_ACTIONS.syncDepartamentosModuleFromLocal();
-          }
-        } catch (eS) {
-          __cgSyncLog("warn", "post_sync_dept_hook", eS);
-        }
-        if (CG_SYNC_STATE.periodicPushTimer !== null) {
-          try {
-            clearInterval(CG_SYNC_STATE.periodicPushTimer);
-          } catch (eC) {}
-          CG_SYNC_STATE.periodicPushTimer = null;
-        }
-        CG_SYNC_STATE.periodicPushTimer = setInterval(function () {
-          if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB || CG_SYNC_STATE.applyingRemote) return;
-          cloudPushAllKeysOnce().catch(function (eP) {
-            __cgSyncLog("warn", "periodic_push", eP && eP.code ? eP.code : eP);
-          });
-        }, 120000);
-        if (!window.__CG_CLOUD_LIFECYCLE_BOUND) {
-          window.__CG_CLOUD_LIFECYCLE_BOUND = true;
-          try {
-            window.addEventListener(
-              "pagehide",
-              function () {
-                flushPendingCloudWritesNow();
-              },
-              { capture: true }
-            );
-            document.addEventListener("visibilitychange", function () {
-              if (document.visibilityState === "hidden") flushPendingCloudWritesNow();
+        var pend =
+          window.firebaseDB && typeof window.firebaseDB.waitForPendingWrites === "function"
+            ? window.firebaseDB.waitForPendingWrites().catch(function () {})
+            : Promise.resolve();
+        return pend
+          .then(function () {
+            return new Promise(function (r) {
+              setTimeout(r, 220);
             });
-          } catch (eEv) {}
-        }
-        if (result.partial) __cgSyncLog("warn", "init_done_partial", CG_CLOUD_BUILDING_KEY);
-        else __cgSyncLog("info", "init_done_ok", CG_CLOUD_BUILDING_KEY);
-        return result;
+          })
+          .then(function () {
+            if (!alive()) {
+              result.reason = "superseded";
+              CG_SYNC_STATE.lastInitResult = result;
+              return result;
+            }
+            return armPostPullUi();
+          });
       }
 
       /* Pull primero: un equipo nuevo puede tener plantilla local vacía; si empujáramos antes, pisaríamos Firestore.
