@@ -2598,8 +2598,12 @@
       typeof window.CG_FIRESTORE_BUILDING_KEY === "string" && window.CG_FIRESTORE_BUILDING_KEY.length > 0
         ? window.CG_FIRESTORE_BUILDING_KEY
         : "wm815_shared_v1";
-    /* session: solo en este dispositivo (evita pisar sesiones entre PCs). Resto de claves conciergeria_v1_* → nube. */
-    var __cgCloudExcludeKeys = { session: true };
+    /**
+     * Claves que NO se sobrescriben desde Firestore al hacer pull/listener.
+     * (La sesión se SUBE a la nube como respaldo, pero nunca se aplica desde otro equipo
+     * para no cerrar la sesión ni “cambiar de usuario” en caliente.)
+     */
+    var __cgCloudPullSkipKeys = { session: true };
     var __cgCloudApplyingRemote = false;
     var __cgCloudUnsubscribe = null;
     var __cgCloudPeriodicPushTimer = null;
@@ -2624,9 +2628,10 @@
     }
 
     function scheduleCloudWrite(shortKey) {
-      if (!CG_CLOUD_SYNC_ENABLED || __cgCloudApplyingRemote) return;
+      /* No usar __cgCloudApplyingRemote aquí: al aplicar el pull/listener el usuario puede editar
+         (p. ej. Personal) y esas subidas no deben perderse. applyRemoteLsDoc no llama a save(). */
+      if (!CG_CLOUD_SYNC_ENABLED) return;
       if (!window.firebaseDB || !__cgFirestoreFieldValue()) return;
-      if (__cgCloudExcludeKeys[shortKey]) return;
       clearTimeout(__cgCloudPushTimers[shortKey]);
       __cgCloudPushTimers[shortKey] = setTimeout(function () {
         __cgCloudPushKeyNow(shortKey);
@@ -2675,6 +2680,16 @@
       }
     }
 
+    function cloudPushKeyImmediate(shortKey) {
+      if (!CG_CLOUD_SYNC_ENABLED) return;
+      if (!window.firebaseDB || !__cgFirestoreFieldValue()) return;
+      if (__cgCloudPushTimers[shortKey]) {
+        clearTimeout(__cgCloudPushTimers[shortKey]);
+        delete __cgCloudPushTimers[shortKey];
+      }
+      __cgCloudPushKeyNow(shortKey);
+    }
+
     function stopCloudSyncListener() {
       if (typeof __cgCloudUnsubscribe === "function") {
         try {
@@ -2694,7 +2709,7 @@
       if (!docSnap || !docSnap.exists) return;
       var d = docSnap.data();
       if (!d || typeof d.key !== "string" || typeof d.value !== "string") return;
-      if (__cgCloudExcludeKeys[d.key]) return;
+      if (__cgCloudPullSkipKeys[d.key]) return;
       var full = LS + d.key;
       try {
         var cur = localStorage.getItem(full);
@@ -2753,7 +2768,6 @@
         var fk = localStorage.key(i);
         if (!fk || fk.indexOf(LS) !== 0) continue;
         var sk = fk.slice(LS.length);
-        if (__cgCloudExcludeKeys[sk]) continue;
         var raw = localStorage.getItem(fk);
         if (raw === null) continue;
         ops.push({ sk: sk, raw: raw });
@@ -3062,7 +3076,63 @@
     }
     function clearSession() {
       state.session = null;
-      localStorage.removeItem(LS + "session");
+      save("session", null);
+      if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
+        window.CG.cloudPushKeyImmediate("session");
+      }
+    }
+
+    /**
+     * Turno abierto = tramo en shiftLogs sin endAt, de un usuario con rol conserje.
+     * Si existe uno a nombre de otro conserje, no se permite que un segundo conserje inicie sesión
+     * (el administrador sí puede, para cerrar turnos en Administración → Turnos).
+     * El mismo conserje puede volver a entrar si su turno sigue abierto (p. ej. cerró el navegador).
+     */
+    function loginBlockedByOpenConserjeShift(candidateUserId) {
+      var list = load("shiftLogs", []);
+      if (!Array.isArray(list) || list.length === 0) return null;
+      var users = load("users", []);
+      var byId = {};
+      users.forEach(function (ux) {
+        if (ux && ux.id) byId[ux.id] = ux;
+      });
+      var i;
+      for (i = 0; i < list.length; i++) {
+        var s = list[i];
+        if (!s || s.endAt) continue;
+        var who = byId[s.userId];
+        if (!who || who.role !== "conserje") continue;
+        if (s.userId !== candidateUserId) {
+          return {
+            blockerName: String(s.userName || who.name || "otro conserje").trim() || "otro conserje"
+          };
+        }
+      }
+      return null;
+    }
+
+    function kickConserjeIfOpenShiftConflict() {
+      var u = currentUser();
+      if (!u || u.role !== "conserje") return false;
+      var bl = loginBlockedByOpenConserjeShift(u.id);
+      if (!bl) return false;
+      clearSession();
+      if (window.CG && typeof window.CG.flushPendingCloudWritesNow === "function") {
+        window.CG.flushPendingCloudWritesNow();
+      }
+      if (window.CG && typeof window.CG.stopCloudSyncListener === "function") {
+        window.CG.stopCloudSyncListener();
+      }
+      if (window.CG_UI && typeof window.CG_UI.showLogin === "function") {
+        window.CG_UI.showLogin();
+      }
+      toast(
+        "Sesión finalizada: " +
+          bl.blockerName +
+          " tiene un turno abierto en Libro de novedades. No puede haber otro conserje en sesión hasta cerrar ese turno.",
+        "warn"
+      );
+      return true;
     }
 
     function canSeeModule(modId) {
@@ -3628,7 +3698,7 @@
       APP_BRAND_NAME, MANUFACTURER_LOGO_URL,
       ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureBuildingKeys, migrateNovedadesSeq, migrateEncomiendasModule, migrateProveedoresModule, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
       attachVirtualAdminDepartment,
-      currentUser, setSession, clearSession,
+      currentUser, setSession, clearSession, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict,
       canSeeModule, toast, escapeHtml, fmtDate, isSameDay, isInCalendarMonth, normalizeActivityName, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
       proveedorSelectOptionsHtml,
@@ -3636,7 +3706,8 @@
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
       getPersonalization, setPersonalization, applyPersonalizationToDom,
       hexToRgb, snapshotThemeForExport, buildExportThemeRootCss, getExportAccentHex, getEmailShellThemeColors,
-      initCloudSync, stopCloudSyncListener, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPushAllKeysOnce
+      initCloudSync, stopCloudSyncListener, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPushAllKeysOnce,
+      flushPendingCloudWritesNow, cloudPushKeyImmediate
     };
     applyPersonalizationToDom();
   })();
@@ -8485,6 +8556,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         window.deleteUnit = deleteUnit;
         window.showUnitDetailModal = showUnitDetailModal;
         window.closeMapModalAndEditResident = closeMapModalAndEditResident;
+        window.updateUnitsTable = updateUnitsTable;
+        window.updateResidentsTable = updateResidentsTable;
+        window.updateOwnersTable = updateOwnersTable;
 
         // ===== EXPORTAR A EXCEL =====
         function exportToExcel() {
@@ -9591,6 +9665,36 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         staffChatRefreshFromStore();
         return;
       }
+      if (k === "users" || k === "roleModules") {
+        if (k === "roleModules" && window.CG_UI && typeof window.CG_UI.renderNav === "function") {
+          try {
+            window.CG_UI.renderNav();
+          } catch (eNav) {}
+        }
+        if (window.CG_ACTIONS && typeof window.CG_ACTIONS.renderAdmin === "function") {
+          try {
+            var tabStaff = document.querySelector(".admin-tab[data-adm=\"staff\"].active");
+            var tabPerm = document.querySelector(".admin-tab[data-adm=\"perm\"].active");
+            if (tabStaff) window.CG_ACTIONS.renderAdmin("staff");
+            if (tabPerm) window.CG_ACTIONS.renderAdmin("perm");
+          } catch (eAdm) {}
+        }
+        return;
+      }
+      if (k === "dashActMonth") {
+        var dm = document.getElementById("dash-act-month");
+        if (dm) {
+          try {
+            var vk = G.load("dashActMonth", null);
+            if (vk && typeof vk === "string" && /^\d{4}-\d{2}$/.test(vk)) dm.value = vk;
+          } catch (eDm) {}
+        }
+        return;
+      }
+      if (k === "shiftLogs") {
+        if (typeof G.kickConserjeIfOpenShiftConflict === "function") G.kickConserjeIfOpenShiftConflict();
+        return;
+      }
       if (k === "wm815_units" || k === "wm815_former_residents" || k === "departments" || k === "buildingUnits" || k === "buildingResidents" || k === "buildingParking") {
         if (window.CG_ACTIONS && typeof window.CG_ACTIONS.syncDepartamentosModuleFromLocal === "function") {
           try {
@@ -9895,6 +9999,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
 
     function readDashActivityMonthKey() {
+      try {
+        var lsVal = G.load("dashActMonth", null);
+        if (lsVal && typeof lsVal === "string" && /^\d{4}-\d{2}$/.test(lsVal)) return lsVal;
+      } catch (eLs) {}
       try {
         var raw = sessionStorage.getItem("cg_dash_act_month");
         if (raw && /^\d{4}-\d{2}$/.test(raw)) return raw;
@@ -10434,6 +10542,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           dashMonth.onchange = function () {
             try {
               sessionStorage.setItem("cg_dash_act_month", dashMonth.value);
+              G.save("dashActMonth", dashMonth.value);
             } catch (eM) {}
             navigate("dashboard");
           };
@@ -15248,6 +15357,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       list.push({ id: G.uid(), username: f.username.value.trim(), password: f.password.value, name: f.name.value.trim(), role: f.role.value });
     }
     G.state.users = list;
+    if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
+      window.CG.cloudPushKeyImmediate("users");
+    }
     UI.closeModal();
     G.toast("Usuario guardado");
     A.renderAdmin("staff");
@@ -15261,6 +15373,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     if (!confirm("¿Eliminar usuario?")) return;
     G.state.users = G.state.users.filter(function (x) { return x.id !== id; });
+    if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
+      window.CG.cloudPushKeyImmediate("users");
+    }
     G.toast("Usuario eliminado");
     A.renderAdmin("staff");
   };
@@ -15275,6 +15390,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       else con.push(mod);
     });
     G.state.roleModules = { admin: adm, conserje: con };
+    if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
+      window.CG.cloudPushKeyImmediate("roleModules");
+    }
     G.toast("Permisos actualizados");
     UI.renderNav();
   };
@@ -15603,6 +15721,18 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.toast("Credenciales incorrectas", "error");
       return;
     }
+    if (user.role === "conserje" && typeof G.loginBlockedByOpenConserjeShift === "function") {
+      var bl = G.loginBlockedByOpenConserjeShift(user.id);
+      if (bl) {
+        G.toast(
+          "No puede iniciar sesión: " +
+            bl.blockerName +
+            " tiene un turno abierto en Libro de novedades. Cierre ese turno antes de que otro conserje use el sistema (el administrador puede iniciar sesión para gestionarlo).",
+          "error"
+        );
+        return;
+      }
+    }
     G.setSession(user);
     UI.showApp();
     G.toast("Bienvenido, " + user.name);
@@ -15661,8 +15791,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   })();
 
   document.getElementById("btn-logout").addEventListener("click", function () {
-    if (typeof G.stopCloudSyncListener === "function") G.stopCloudSyncListener();
     G.clearSession();
+    if (typeof G.flushPendingCloudWritesNow === "function") G.flushPendingCloudWritesNow();
+    if (typeof G.stopCloudSyncListener === "function") G.stopCloudSyncListener();
     UI.showLogin();
     G.toast("Sesión cerrada", "warn");
   });
@@ -15704,22 +15835,25 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
 
   if (G.load("session", null) && G.currentUser()) {
-    UI.showApp();
-    if (typeof G.initCloudSync === "function") {
-      G.initCloudSync().then(function (r) {
-        if (r && r.ok) return;
-        if (r && r.reason === "disabled") return;
-        if (r && !r.ok) {
-          var code = r.err && r.err.code ? r.err.code : "";
-          var msg =
-            code === "permission-denied"
-              ? "Firebase: sin permiso para sincronizar. Despliegue las reglas Firestore."
-              : r.reason === "no-db" || r.reason === "no-fieldvalue"
-                ? "Firebase no disponible para sincronizar."
-                : "Error al sincronizar con Firebase (consola F12).";
-          G.toast(msg, "warn");
-        }
-      });
+    var kickedOnRestore =
+      typeof G.kickConserjeIfOpenShiftConflict === "function" && G.kickConserjeIfOpenShiftConflict();
+    if (!kickedOnRestore) {
+      UI.showApp();
+      if (typeof G.initCloudSync === "function") {
+        G.initCloudSync().then(function (r) {
+          if (!(r && r.ok) && !(r && r.reason === "disabled") && r && !r.ok) {
+            var code = r.err && r.err.code ? r.err.code : "";
+            var msg =
+              code === "permission-denied"
+                ? "Firebase: sin permiso para sincronizar. Despliegue las reglas Firestore."
+                : r.reason === "no-db" || r.reason === "no-fieldvalue"
+                  ? "Firebase no disponible para sincronizar."
+                  : "Error al sincronizar con Firebase (consola F12).";
+            G.toast(msg, "warn");
+          }
+          if (typeof G.kickConserjeIfOpenShiftConflict === "function") G.kickConserjeIfOpenShiftConflict();
+        });
+      }
     }
   } else {
     UI.showLogin();
