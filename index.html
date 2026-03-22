@@ -2780,13 +2780,18 @@
     window.CG_CLOUD_SYNC_ENABLED = window.CG_CLOUD_SYNC_ENABLED !== false;
     /* true (defecto): datos de negocio solo en RAM + Firestore; no localStorage persistente. false: modo clásico LS + sync. */
     window.CG_CLOUD_ONLY_STORAGE = typeof window.CG_CLOUD_ONLY_STORAGE === "boolean" ? window.CG_CLOUD_ONLY_STORAGE : true;
-    /* Opcional: true = nunca usar onSnapshot, solo pulls periódicos (más lecturas Firestore, máxima estabilidad). */
+    /* true = forzar solo pulls periódicos (redundante si no usa tiempo real). */
     window.CG_FIRESTORE_FORCE_POLLING = window.CG_FIRESTORE_FORCE_POLLING === true;
-    /* Intervalo ms del modo polling (mín. 15s). Por defecto 90s. */
+    /*
+     * Por defecto la app NO usa onSnapshot (bug Firestore 11.x "Unexpected state" ca9/b815 en watch).
+     * Solo si pone true aquí antes de cargar el body se activa escucha en tiempo real (más riesgo, menos lecturas).
+     */
+    window.CG_FIRESTORE_USE_REALTIME_LISTENER = window.CG_FIRESTORE_USE_REALTIME_LISTENER === true;
+    /* Intervalo ms del modo polling (mín. 15s). Por defecto 60s. */
     window.CG_FIRESTORE_POLL_MS =
       typeof window.CG_FIRESTORE_POLL_MS === "number" && window.CG_FIRESTORE_POLL_MS >= 15000
         ? window.CG_FIRESTORE_POLL_MS
-        : 90000;
+        : 60000;
   </script>
 </head>
 <body>
@@ -3048,8 +3053,8 @@
      */
     var CG_SYNC_STATE = {
       pullSkipKeys: { session: true },
-      /** Por clave (corta): último guardado local (Date.now) para no dejar que un snapshot remoto antiguo pise un alta reciente (p. ej. Personal → usuarios). */
-      lastLocalWriteMs: {},
+      /** Tras subir users/roleModules: ignorar pulls remotos de esa clave hasta este timestamp (evita que el polling pise altas recientes). */
+      lsPullQuietUntil: {},
       applyingRemote: false,
       remoteApplyDepth: 0,
       unsubscribe: null,
@@ -3305,6 +3310,11 @@
               800
             )
               .then(function () {
+                if (shortKey === "users" || shortKey === "roleModules") {
+                  CG_SYNC_STATE.lsPullQuietUntil = CG_SYNC_STATE.lsPullQuietUntil || {};
+                  var prevQ = CG_SYNC_STATE.lsPullQuietUntil[shortKey] || 0;
+                  CG_SYNC_STATE.lsPullQuietUntil[shortKey] = Math.max(prevQ, Date.now() + 18000);
+                }
                 resolve({ ok: true, skipped: false });
               })
               .catch(function (err) {
@@ -3320,6 +3330,16 @@
           resolve({ ok: false, reason: "exception", err: ePush });
         }
       });
+    }
+
+    /** Tras guardar personal/permisos por vía distinta a cloudPushLsKeyPromise, evita que un pull inmediato pise datos. */
+    function armLsKeyPullQuiet(shortKey, ms) {
+      if (!shortKey || (shortKey !== "users" && shortKey !== "roleModules")) return;
+      ms = typeof ms === "number" && ms > 0 ? ms : 18000;
+      CG_SYNC_STATE.lsPullQuietUntil = CG_SYNC_STATE.lsPullQuietUntil || {};
+      var until = Date.now() + ms;
+      var prev = CG_SYNC_STATE.lsPullQuietUntil[shortKey] || 0;
+      CG_SYNC_STATE.lsPullQuietUntil[shortKey] = Math.max(prev, until);
     }
 
     function cloudSyncAfterDirectLocalStorageWrite(shortKey) {
@@ -3485,10 +3505,9 @@
       var d = docSnap.data();
       if (!d || typeof d.key !== "string" || typeof d.value !== "string") return;
       if (CG_SYNC_STATE.pullSkipKeys[d.key]) return;
-      var remoteMs = d.updatedAt && typeof d.updatedAt.toMillis === "function" ? d.updatedAt.toMillis() : null;
-      var localMs = CG_SYNC_STATE.lastLocalWriteMs[d.key];
-      if (remoteMs != null && localMs != null && remoteMs < localMs - 3000) {
-        __cgSyncLog("info", "skip_stale_remote_doc", d.key);
+      var quietUntil = CG_SYNC_STATE.lsPullQuietUntil && CG_SYNC_STATE.lsPullQuietUntil[d.key];
+      if (quietUntil != null && Date.now() < quietUntil) {
+        __cgSyncLog("info", "skip_pull_quiet_window", d.key);
         return;
       }
       var full = LS + d.key;
@@ -3502,9 +3521,6 @@
         if (!P.localSetRaw(full, nextVal)) {
           __cgSyncLog("warn", "apply_remote_local_write_failed", d.key);
           return;
-        }
-        if (remoteMs != null) {
-          CG_SYNC_STATE.lastLocalWriteMs[d.key] = remoteMs;
         }
         window.dispatchEvent(
           new CustomEvent("cg-cloud-storage-applied", { detail: { key: d.key, source: "firestore" } })
@@ -3546,7 +3562,7 @@
       var pollMs =
         typeof window.CG_FIRESTORE_POLL_MS === "number" && window.CG_FIRESTORE_POLL_MS >= 15000
           ? window.CG_FIRESTORE_POLL_MS
-          : 90000;
+          : 60000;
       function tick() {
         if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return;
         cloudPullAllOnce().catch(function (e) {
@@ -3558,25 +3574,46 @@
       __cgSyncLog("warn", "firestore_polling_on", String(reason || "") + " · " + pollMs + "ms");
     }
 
+    function __cgRecoverFromFirestoreWatchBug(source, msg) {
+      try {
+        if (typeof CG_CLOUD_SYNC_ENABLED !== "undefined" && !CG_CLOUD_SYNC_ENABLED) return;
+        if (!window.firebaseDB) return;
+        if (CG_SYNC_STATE.preferPollingSync) return;
+        CG_SYNC_STATE.preferPollingSync = true;
+        __cgSyncLog("warn", "firestore_watch_assertion_recover", source + " " + String(msg || "").slice(0, 120));
+        __cgActivatePollingSync(source);
+      } catch (e) {}
+    }
+
     (function __cgBindFirestoreWatchCrashRecovery() {
       if (window.__CG_FS_WATCH_RECOVERY) return;
       window.__CG_FS_WATCH_RECOVERY = true;
+      window.addEventListener(
+        "error",
+        function (ev) {
+          try {
+            var msg = (ev && ev.message) || (ev && ev.error && ev.error.message) || "";
+            var fn = ev && ev.filename ? String(ev.filename) : "";
+            if (msg.indexOf("INTERNAL ASSERTION FAILED") === -1) return;
+            if (msg.indexOf("FIRESTORE") === -1 && msg.indexOf("Firestore") === -1 && fn.indexOf("firebase-firestore") === -1)
+              return;
+            __cgRecoverFromFirestoreWatchBug("window_error", msg);
+          } catch (e2) {}
+        },
+        true
+      );
       window.addEventListener("unhandledrejection", function (ev) {
         try {
           var r = ev.reason;
           var msg = r && (r.message != null ? String(r.message) : String(r));
           if (msg.indexOf("INTERNAL ASSERTION FAILED") === -1) return;
           if (msg.indexOf("FIRESTORE") === -1 && msg.indexOf("Firestore") === -1) return;
-          if (typeof CG_CLOUD_SYNC_ENABLED !== "undefined" && !CG_CLOUD_SYNC_ENABLED) return;
-          if (!window.firebaseDB) return;
           if (CG_SYNC_STATE.preferPollingSync) {
             ev.preventDefault();
             return;
           }
           ev.preventDefault();
-          CG_SYNC_STATE.preferPollingSync = true;
-          __cgSyncLog("warn", "firestore_watch_assertion_recover", msg.slice(0, 160));
-          __cgActivatePollingSync("unhandledrejection");
+          __cgRecoverFromFirestoreWatchBug("unhandledrejection", msg);
         } catch (eRec) {}
       });
     })();
@@ -3727,6 +3764,10 @@
       CG_SYNC_STATE.initGeneration++;
       CG_SYNC_STATE.listenerFailures = 0;
       if (window.CG_FIRESTORE_FORCE_POLLING === true) {
+        CG_SYNC_STATE.preferPollingSync = true;
+      } else if (window.CG_FIRESTORE_USE_REALTIME_LISTENER === true) {
+        CG_SYNC_STATE.preferPollingSync = false;
+      } else {
         CG_SYNC_STATE.preferPollingSync = true;
       }
       var gen = CG_SYNC_STATE.initGeneration;
@@ -3885,10 +3926,7 @@
         console.warn("[CG] save: localSetRaw falló (¿cuota llena?)", key);
         return;
       }
-      if (key !== "session") {
-        CG_SYNC_STATE.lastLocalWriteMs[key] = Date.now();
-        scheduleCloudWrite(key);
-      }
+      if (key !== "session") scheduleCloudWrite(key);
     }
 
     function uid() {
@@ -5335,7 +5373,7 @@
       getPersonalization, setPersonalization, applyPersonalizationToDom,
       hexToRgb, snapshotThemeForExport, buildExportThemeRootCss, getExportAccentHex, getEmailShellThemeColors,
       initCloudSync, stopCloudSyncListener, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPushAllKeysOnce,
-      flushPendingCloudWritesNow, cloudPushKeyImmediate, cloudPushLsKeyPromise, getCloudSyncLastInitResult,
+      flushPendingCloudWritesNow, cloudPushKeyImmediate, cloudPushLsKeyPromise, armLsKeyPullQuiet, getCloudSyncLastInitResult,
       syncLoginFirstAdminPanel,
       effectiveCloudOnlyStorage: function () {
         return __cgEffectiveCloudOnly();
@@ -17882,6 +17920,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       });
     }
     G.state.users = list;
+    if (typeof G.armLsKeyPullQuiet === "function") G.armLsKeyPullQuiet("users", 35000);
     var pushRes = null;
     if (typeof G.cloudPushLsKeyPromise === "function") {
       pushRes = await G.cloudPushLsKeyPromise("users");
@@ -17929,6 +17968,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (window.CG && typeof window.CG.flushPendingCloudWritesNow === "function") {
       window.CG.flushPendingCloudWritesNow();
     }
+    if (r && (r.mergedUsers || r.closedOrphans || r.remappedRows) && typeof G.armLsKeyPullQuiet === "function") {
+      G.armLsKeyPullQuiet("users", 35000);
+    }
     var parts = [];
     if (r.closedOrphans) parts.push(r.closedOrphans + " turno(s) huérfano(s) cerrado(s)");
     if (r.mergedUsers) parts.push(r.mergedUsers + " registro(s) duplicado(s) unificado(s)");
@@ -17949,6 +17991,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     if (!confirm("¿Eliminar usuario?")) return;
     G.state.users = G.state.users.filter(function (x) { return x.id !== id; });
+    if (typeof G.armLsKeyPullQuiet === "function") G.armLsKeyPullQuiet("users", 35000);
     var delRes = null;
     if (typeof G.cloudPushLsKeyPromise === "function") {
       delRes = await G.cloudPushLsKeyPromise("users");
@@ -17963,7 +18006,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     A.renderAdmin("staff");
   };
 
-  A.permSave = function () {
+  A.permSave = async function () {
     var adm = [];
     var con = [];
     document.querySelectorAll("input[data-role][data-mod]").forEach(function (inp) {
@@ -17973,7 +18016,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       else con.push(mod);
     });
     G.state.roleModules = { admin: adm, conserje: con };
-    if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
+    if (typeof G.cloudPushLsKeyPromise === "function") {
+      var pr = await G.cloudPushLsKeyPromise("roleModules");
+      if (pr && !pr.ok && !pr.skipped) {
+        G.toast("Permisos guardados aquí; no se pudo subir a la nube (revise F12).", "warn");
+        UI.renderNav();
+        return;
+      }
+    } else if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
       window.CG.cloudPushKeyImmediate("roleModules");
     }
     G.toast("Permisos actualizados");
@@ -18760,6 +18810,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         passwordVerifier: vNew
       };
       G.state.users = [user];
+      if (typeof G.armLsKeyPullQuiet === "function") G.armLsKeyPullQuiet("users", 60000);
       if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("users");
       G.setSession(user);
       UI.showApp();
