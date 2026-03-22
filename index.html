@@ -56,6 +56,9 @@
     /**
      * Capa centralizada localStorage / sessionStorage (misma clave de producto que el core CG).
      * Expuesta temprano para primer pintado (paleta) y reutilizada en todo el monolito vía window.CG.persist.
+     *
+     * Persistencia: localStorage es distinto por origen (protocolo + host + puerto). Abrir el mismo HTML
+     * como file://, otro localhost o otro puerto = datos distintos; use siempre la misma URL al desarrollar.
      */
     (function () {
       var LS = "conciergeria_v1_";
@@ -2768,6 +2771,8 @@
     /* Misma cadena que en firestore.rules (match /cg_building_shared/{buildingId}/...). Cámbiela en ambos sitios. */
     window.CG_FIRESTORE_BUILDING_KEY = window.CG_FIRESTORE_BUILDING_KEY || "wm815_shared_v1";
     window.CG_CLOUD_SYNC_ENABLED = window.CG_CLOUD_SYNC_ENABLED !== false;
+    /* true (defecto): datos de negocio solo en RAM + Firestore; no localStorage persistente. false: modo clásico LS + sync. */
+    window.CG_CLOUD_ONLY_STORAGE = typeof window.CG_CLOUD_ONLY_STORAGE === "boolean" ? window.CG_CLOUD_ONLY_STORAGE : true;
   </script>
 </head>
 <body>
@@ -2790,7 +2795,7 @@
             <label for="login-user">Usuario</label>
             <div class="login-input-wrap">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              <input type="text" id="login-user" autocomplete="username" required placeholder="admin o conserje" />
+              <input type="text" id="login-user" autocomplete="username" required placeholder="Su usuario" />
             </div>
           </div>
           <div class="form-group">
@@ -2805,6 +2810,26 @@
             <button type="button" class="login-forgot-link" id="cg-login-forgot">¿Olvidaste tu contraseña?</button>
           </div>
         </form>
+        <div id="cg-login-first-setup" class="hidden">
+          <p class="subtitle" style="margin-top: 0.5rem; margin-bottom: 1.25rem; text-align: left">
+            Primer uso en este navegador: registre el administrador del edificio. Luego podrá crear más usuarios en Administración.
+          </p>
+          <form id="cg-first-admin-form" action="#" method="post">
+            <div class="form-group">
+              <label for="cg-first-admin-name">Nombre visible</label>
+              <input type="text" id="cg-first-admin-name" autocomplete="name" required placeholder="Ej. Juan Pérez" />
+            </div>
+            <div class="form-group">
+              <label for="cg-first-admin-user">Usuario de acceso</label>
+              <input type="text" id="cg-first-admin-user" autocomplete="username" required placeholder="Sin espacios" />
+            </div>
+            <div class="form-group">
+              <label for="cg-first-admin-pass">Contraseña</label>
+              <input type="password" id="cg-first-admin-pass" autocomplete="new-password" required placeholder="Mínimo según validación de la app" />
+            </div>
+            <button type="submit" class="btn-login" id="cg-first-admin-submit">Crear administrador y entrar</button>
+          </form>
+        </div>
       </div>
       <button type="button" class="login-dev-logo" id="loginDevLogoBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="loginDevModalPanel" title="Información del proveedor">
         <img src="https://img.mailinblue.com/8323725/images/content_library/original/69ba11d918850cebd86808f2.png" alt="Elevate — más información" width="273" height="90" loading="lazy" decoding="async" />
@@ -2883,9 +2908,9 @@
 
   <script>
   /* === PART 1: storage, state, auth ===
-   * Opcional (p. ej. script inline previo): window.CG_AUTH_INCLUDE_DEMO_USERS = false
-   * para no crear usuarios demo en primer arranque. La config de Firebase (apiKey, etc.)
-   * es identificador público del SDK web; las reglas de Firestore definen el acceso real.
+   * Instalación limpia: sin usuarios ni datos de prueba precargados (primer administrador en el login).
+   * Con CG_CLOUD_ONLY_STORAGE (defecto true): datos bajo CG.LS viven en RAM + Firestore; la sesión de login solo en sessionStorage.
+   * La config de Firebase (apiKey, etc.) es identificador público del SDK web; las reglas definen el acceso.
    */
   (function () {
     /* ┌─ 1. Constantes de producto (LS, módulos, categorías, IDs fijos) ───────────────── */
@@ -2918,8 +2943,93 @@
       typeof window.CG_FIRESTORE_BUILDING_KEY === "string" && window.CG_FIRESTORE_BUILDING_KEY.length > 0
         ? window.CG_FIRESTORE_BUILDING_KEY
         : "wm815_shared_v1";
+    var CG_CLOUD_ONLY_STORAGE =
+      typeof window.CG_CLOUD_ONLY_STORAGE === "boolean" ? window.CG_CLOUD_ONLY_STORAGE : true;
+    /** Sesión de login en el navegador (pestaña); no se sube a Firestore. */
+    var CG_SESSION_BROWSER_KEY = "cg_tab_session_v1";
+    window.__cgMemLs = window.__cgMemLs || {};
+    var __cgMemLs = window.__cgMemLs;
+
+    function __cgEffectiveCloudOnly() {
+      return !!(CG_CLOUD_ONLY_STORAGE && CG_CLOUD_SYNC_ENABLED && window.firebaseDB);
+    }
+
+    (function __cgInstallLsPersistLayer() {
+      var origGet = P.localGetRaw.bind(P);
+      var origSet = P.localSetRaw.bind(P);
+      var origRem = P.localRemove.bind(P);
+      var origEach = P.eachLocalKeyWithPrefix.bind(P);
+
+      P.localGetRaw = function (fullKey) {
+        if (typeof fullKey !== "string") return origGet(fullKey);
+        if (fullKey === LS + "session" && __cgEffectiveCloudOnly()) {
+          return P.sessionGetRaw(CG_SESSION_BROWSER_KEY);
+        }
+        if (fullKey.indexOf(LS) !== 0) return origGet(fullKey);
+        if (!__cgEffectiveCloudOnly()) return origGet(fullKey);
+        var sk = fullKey.slice(LS.length);
+        if (Object.prototype.hasOwnProperty.call(__cgMemLs, sk)) return __cgMemLs[sk];
+        return null;
+      };
+
+      P.localSetRaw = function (fullKey, str) {
+        if (typeof fullKey !== "string") return origSet(fullKey, str);
+        if (fullKey === LS + "session" && __cgEffectiveCloudOnly()) {
+          if (str == null || str === "") P.sessionRemove(CG_SESSION_BROWSER_KEY);
+          else P.sessionSetRaw(CG_SESSION_BROWSER_KEY, str);
+          return true;
+        }
+        if (fullKey.indexOf(LS) !== 0) return origSet(fullKey, str);
+        if (!__cgEffectiveCloudOnly()) return origSet(fullKey, str);
+        var sk = fullKey.slice(LS.length);
+        __cgMemLs[sk] = str;
+        return true;
+      };
+
+      P.localRemove = function (fullKey) {
+        if (typeof fullKey === "string" && fullKey === LS + "session" && __cgEffectiveCloudOnly()) {
+          P.sessionRemove(CG_SESSION_BROWSER_KEY);
+          return;
+        }
+        if (typeof fullKey === "string" && fullKey.indexOf(LS) === 0 && __cgEffectiveCloudOnly()) {
+          var sk2 = fullKey.slice(LS.length);
+          delete __cgMemLs[sk2];
+          try {
+            origRem(fullKey);
+          } catch (eR) {}
+          return;
+        }
+        origRem(fullKey);
+      };
+
+      P.eachLocalKeyWithPrefix = function (prefix, fn) {
+        if (!prefix || typeof fn !== "function") return;
+        if (prefix === LS && __cgEffectiveCloudOnly()) {
+          var sk3;
+          for (sk3 in __cgMemLs) {
+            if (Object.prototype.hasOwnProperty.call(__cgMemLs, sk3)) fn(LS + sk3);
+          }
+          return;
+        }
+        origEach(prefix, fn);
+      };
+    })();
+
+    function __cgStripLegacyLocalStorageLsPrefix() {
+      if (!__cgEffectiveCloudOnly()) return;
+      try {
+        var rm = [];
+        var ix;
+        for (ix = 0; ix < localStorage.length; ix++) {
+          var k = localStorage.key(ix);
+          if (k && k.indexOf(LS) === 0) rm.push(k);
+        }
+        for (ix = 0; ix < rm.length; ix++) localStorage.removeItem(rm[ix]);
+      } catch (eZ) {}
+    }
+
     /**
-     * Estado interno del sync (Firestore ↔ persistencia local). No mezclar con UI.
+     * Estado interno del sync (Firestore ↔ memoria / LS según modo). No mezclar con UI.
      * Estrategia: last-write-wins en documentos ls/{key}; merge explícito solo en shiftLogs (tramos abiertos locales).
      */
     var CG_SYNC_STATE = {
@@ -2934,7 +3044,12 @@
       listenerRetryTimer: null,
       listenerFailures: 0,
       initGeneration: 0,
-      lastInitResult: null
+      lastInitResult: null,
+      /** Una sola promesa de pull global: dos col.get() concurrentes rompen el SDK 11.x ("Unexpected state"). */
+      pullAllInFlight: null,
+      /** Durante initCloudSync no encolar escrituras sueltas (evita carrera con pull/listener). */
+      syncInitActive: false,
+      pendingPushAfterInit: {}
     };
 
     function __cgSyncLog(level, code, detail) {
@@ -3025,11 +3140,38 @@
       CG_SYNC_STATE.applyingRemote = CG_SYNC_STATE.remoteApplyDepth > 0;
     }
 
+    function __cgMarkPushDeferredDuringInit() {
+      CG_SYNC_STATE.syncInitActive = true;
+      var keys = Object.keys(CG_SYNC_STATE.pushTimers);
+      var i;
+      for (i = 0; i < keys.length; i++) {
+        var sk = keys[i];
+        clearTimeout(CG_SYNC_STATE.pushTimers[sk]);
+        delete CG_SYNC_STATE.pushTimers[sk];
+        CG_SYNC_STATE.pendingPushAfterInit[sk] = true;
+      }
+    }
+
+    function __cgFlushDeferredPushesAfterInit() {
+      CG_SYNC_STATE.syncInitActive = false;
+      var pend = CG_SYNC_STATE.pendingPushAfterInit;
+      CG_SYNC_STATE.pendingPushAfterInit = {};
+      var k;
+      for (k in pend) {
+        if (pend[k]) scheduleCloudWrite(k);
+      }
+    }
+
     function scheduleCloudWrite(shortKey) {
       /* No usar CG_SYNC_STATE.applyingRemote aquí: al aplicar el pull/listener el usuario puede editar
          (p. ej. Personal) y esas subidas no deben perderse. applyRemoteLsDoc no llama a save(). */
+      if (shortKey === "session") return;
       if (!CG_CLOUD_SYNC_ENABLED) return;
       if (!window.firebaseDB || !__cgFirestoreFieldValue()) return;
+      if (CG_SYNC_STATE.syncInitActive) {
+        CG_SYNC_STATE.pendingPushAfterInit[shortKey] = true;
+        return;
+      }
       clearTimeout(CG_SYNC_STATE.pushTimers[shortKey]);
       CG_SYNC_STATE.pushTimers[shortKey] = setTimeout(function () {
         __cgCloudPushKeyNow(shortKey);
@@ -3078,6 +3220,10 @@
 
     function __cgCloudPushKeyNow(shortKey) {
       if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB || !__cgFirestoreFieldValue()) return;
+      if (CG_SYNC_STATE.syncInitActive) {
+        CG_SYNC_STATE.pendingPushAfterInit[shortKey] = true;
+        return;
+      }
       __cgSerialCloudWrite(function () {
         var full = LS + shortKey;
 
@@ -3166,16 +3312,25 @@
         var sk = keys[i];
         clearTimeout(CG_SYNC_STATE.pushTimers[sk]);
         delete CG_SYNC_STATE.pushTimers[sk];
-        __cgCloudPushKeyNow(sk);
+        if (CG_SYNC_STATE.syncInitActive) {
+          CG_SYNC_STATE.pendingPushAfterInit[sk] = true;
+        } else {
+          __cgCloudPushKeyNow(sk);
+        }
       }
     }
 
     function cloudPushKeyImmediate(shortKey) {
+      if (shortKey === "session") return;
       if (!CG_CLOUD_SYNC_ENABLED) return;
       if (!window.firebaseDB || !__cgFirestoreFieldValue()) return;
       if (CG_SYNC_STATE.pushTimers[shortKey]) {
         clearTimeout(CG_SYNC_STATE.pushTimers[shortKey]);
         delete CG_SYNC_STATE.pushTimers[shortKey];
+      }
+      if (CG_SYNC_STATE.syncInitActive) {
+        CG_SYNC_STATE.pendingPushAfterInit[shortKey] = true;
+        return;
       }
       __cgCloudPushKeyNow(shortKey);
     }
@@ -3200,6 +3355,11 @@
     function cloudSyncAbortInFlight() {
       CG_SYNC_STATE.initGeneration++;
       CG_SYNC_STATE.listenerFailures = 0;
+      if (CG_SYNC_STATE.syncInitActive) {
+        try {
+          __cgFlushDeferredPushesAfterInit();
+        } catch (eFl) {}
+      }
     }
 
     function getCloudSyncLastInitResult() {
@@ -3359,7 +3519,12 @@
     }
 
     function cloudPullAllOnce() {
-      return __cgRetryPromise("pullAll", __cgCloudPullAllInner, 3, 600);
+      if (CG_SYNC_STATE.pullAllInFlight) return CG_SYNC_STATE.pullAllInFlight;
+      var p = __cgRetryPromise("pullAll", __cgCloudPullAllInner, 3, 600);
+      CG_SYNC_STATE.pullAllInFlight = p.finally(function () {
+        CG_SYNC_STATE.pullAllInFlight = null;
+      });
+      return CG_SYNC_STATE.pullAllInFlight;
     }
 
     function __cgCloudPushAllKeysInner() {
@@ -3370,6 +3535,7 @@
         var ops = [];
         P.eachLocalKeyWithPrefix(LS, function (fk) {
           var sk = fk.slice(LS.length);
+          if (sk === "session") return;
           var raw = P.localGetRaw(fk);
           if (raw === null) return;
           ops.push({ sk: sk, raw: raw });
@@ -3426,6 +3592,11 @@
       CG_SYNC_STATE.initGeneration++;
       CG_SYNC_STATE.listenerFailures = 0;
       var gen = CG_SYNC_STATE.initGeneration;
+
+      try {
+        stopCloudSyncListener();
+      } catch (eStop) {}
+      __cgMarkPushDeferredDuringInit();
 
       try {
         if (typeof window.firebaseDB.enableNetwork === "function") {
@@ -3492,7 +3663,7 @@
         return result;
       }
 
-      /* Pull primero: un equipo nuevo tiene semilla local (demo); si empujáramos antes, pisaríamos Firestore.
+      /* Pull primero: un equipo nuevo puede tener plantilla local vacía; si empujáramos antes, pisaríamos Firestore.
        * Luego un push sube el estado ya fusionado con la nube (claves solo locales, etc.). */
       return cloudPullAllOnce()
         .then(function () {
@@ -3526,6 +3697,11 @@
           CG_SYNC_STATE.lastInitResult = result;
           __cgSyncLog("warn", "init_exception", err);
           return result;
+        })
+        .finally(function () {
+          try {
+            __cgFlushDeferredPushesAfterInit();
+          } catch (eFin) {}
         });
     }
 
@@ -3546,7 +3722,7 @@
         console.warn("[CG] save: localSetRaw falló (¿cuota llena?)", key);
         return;
       }
-      scheduleCloudWrite(key);
+      if (key !== "session") scheduleCloudWrite(key);
     }
 
     function uid() {
@@ -3556,39 +3732,11 @@
     /* ┌─ 4. Autenticación (PBKDF2, verificadores, puerta módulo Estadística) ──────────── */
     /* =============================================================================
      * Auth Config — Sin contraseñas en texto plano en el código ni en localStorage.
-     * Producción: antes de cargar la app, asigne window.CG_AUTH_INCLUDE_DEMO_USERS = false
-     * si no desea usuarios de demostración precargados (requiere datos/import previo).
      * Nota honesta: sin servidor, quien tenga el HTML y el almacenamiento local puede
      * analizar o sustituir datos; PBKDF2 solo evita texto plano obvio y unifica el flujo.
      * ============================================================================= */
-    var CG_AUTH_INCLUDE_DEMO_USERS =
-      typeof window.CG_AUTH_INCLUDE_DEMO_USERS === "boolean" ? window.CG_AUTH_INCLUDE_DEMO_USERS : true;
     var CG_AUTH_PBKDF2_ITERATIONS = 100000;
     var CG_AUTH_DEPT_GATE_KEY = "deptAdminGateVerifier";
-    /** Verificadores PBKDF2-SHA256 precalculados (solo modo demo). No exponen la clave en claro en el fuente. */
-    var CG_AUTH_DEMO_VERIFIERS = {
-      admin: {
-        v: 1,
-        alg: "PBKDF2-SHA256",
-        iterations: 100000,
-        saltB64: "wzsTQg+X8F8SiwSbSLRsUw==",
-        hashB64: "XwncvM45N/v7kWkQ8aoqSbJEqbnD7WLACQ9JKvqy/V4="
-      },
-      conserje: {
-        v: 1,
-        alg: "PBKDF2-SHA256",
-        iterations: 100000,
-        saltB64: "YGDU0CsXs26o05u2kd5T7Q==",
-        hashB64: "/eU3BhEQX1kE+/MzAvjZN3M4EiSrGLKNF8Ulwl6ku0A="
-      }
-    };
-    var CG_AUTH_DEMO_DEPT_GATE_VERIFIER = {
-      v: 1,
-      alg: "PBKDF2-SHA256",
-      iterations: 100000,
-      saltB64: "5TZY8YV2nvzrymmBl/xwtA==",
-      hashB64: "LO8AkOIXdTzvaQFDZM6y8EQ8UPClStfp5dgpXTkmdys="
-    };
 
     /* ========== Auth Utils (PBKDF2 / base64; va antes de State porque la migración los usa) ========== */
     function cgAuthBytesToB64(bytes) {
@@ -3642,7 +3790,7 @@
       return cgAuthTimingSafeEqual(got, expected);
     }
 
-    /* ========== Auth State (promesa única, migración usuarios, bootstrap clave Estadística demo) ========== */
+    /* ========== Auth State (promesa única, migración usuarios legacy) ========== */
     var __cgAuthReadyPromise = null;
     async function cgAuthMigrateUsersFromLegacy() {
       var users = load("users", []);
@@ -3672,11 +3820,6 @@
       }
       if (changed) save("users", users);
     }
-    function cgAuthEnsureDeptGateDemoBootstrap() {
-      if (!CG_AUTH_INCLUDE_DEMO_USERS) return;
-      if (load(CG_AUTH_DEPT_GATE_KEY, null)) return;
-      save(CG_AUTH_DEPT_GATE_KEY, CG_AUTH_DEMO_DEPT_GATE_VERIFIER);
-    }
     function authEnsureReady() {
       if (__cgAuthReadyPromise) return __cgAuthReadyPromise;
       __cgAuthReadyPromise = (async function () {
@@ -3684,11 +3827,6 @@
           await cgAuthMigrateUsersFromLegacy();
         } catch (e1) {
           console.warn("[Auth] Migración usuarios:", e1);
-        }
-        try {
-          cgAuthEnsureDeptGateDemoBootstrap();
-        } catch (e2) {
-          console.warn("[Auth] Bootstrap clave departamentos:", e2);
         }
       })();
       return __cgAuthReadyPromise;
@@ -3816,27 +3954,12 @@
       save("buildingParking", sb.buildingParking);
     }
 
+    /** Plantilla inicial: vacía salvo unidad virtual Admin y permisos por rol (sin usuarios ni registros de ejemplo). */
     function defaultState() {
-      const demoWriterName = "Conserje Demo";
-      const demoWriterIdSeed = uid();
-      const users = CG_AUTH_INCLUDE_DEMO_USERS
-        ? [
-            { id: uid(), username: "admin", name: "Administrador", role: "admin", passwordVerifier: CG_AUTH_DEMO_VERIFIERS.admin },
-            { id: uid(), username: "conserje", name: demoWriterName, role: "conserje", passwordVerifier: CG_AUTH_DEMO_VERIFIERS.conserje }
-          ]
-        : [];
-      const writerName = users.length > 1 ? users[1].name : demoWriterName;
-      const writerId = users.length > 1 ? users[1].id : demoWriterIdSeed;
       const roleModules = {
         admin: MODULES.filter(m => !m.adminOnly).map(m => m.id).concat(["admin"]),
         conserje: MODULES.filter(m => !m.adminOnly).map(m => m.id)
       };
-      const residentialDepts = [
-        { id: uid(), number: "101", status: "ocupado", owner: "Ana López", resident: "Ana López", email: "ana@ejemplo.com" },
-        { id: uid(), number: "102", status: "arrendado", owner: "Inmobiliaria Norte", resident: "Pedro Soto", email: "pedro@ejemplo.com" },
-        { id: uid(), number: "201", status: "disponible", owner: "Comunidad", resident: "", email: "" },
-        { id: uid(), number: "202", status: "airbnb", owner: "J. Martínez", resident: "Huésped temporal", email: "jm@ejemplo.com" }
-      ];
       const adminDept = {
         id: ADMIN_UNIT_ID,
         number: "Admin",
@@ -3846,37 +3969,21 @@
         email: "",
         isVirtualAdmin: true
       };
-      const departments = residentialDepts.concat([adminDept]);
-      const parkingConfig = { from: 1, to: 20 };
-      const parkingSlots = [];
-      const bodegas = [
-        { id: uid(), code: "B-01", deptId: departments[0].id, status: "ocupado", note: "Herramientas" },
-        { id: uid(), code: "B-02", deptId: departments[1].id, status: "ocupado", note: "" }
-      ];
-      const now = new Date();
-      const visits = [
-        { id: uid(), visitor: "Reparto Rápido", deptId: departments[0].id, at: new Date(now.getTime() - 3600000).toISOString(), vehicular: false, plate: "", parkingSlotId: "", outAt: null, registradoPor: writerName, visitKind: "persona", proveedorId: "" },
-        { id: uid(), visitor: "Visitante vehicular", deptId: departments[1].id, at: new Date(now.getTime() - 4.2 * 3600000).toISOString(), vehicular: true, plate: "ABCD12", parkingSlotId: "", outAt: null, registradoPor: writerName, visitKind: "persona", proveedorId: "" }
-      ];
-      const reservas = [
-        { id: uid(), space: "Salón multiuso", deptId: departments[0].id, start: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 18, 0).toISOString(), end: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 21, 0).toISOString(), note: "Reunión vecinos", registradoPor: writerName }
-      ];
-      const novedades = [
-        { id: uid(), seq: 1, at: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 9, 0).toISOString(), userId: writerId, userName: writerName, text: "Revisión de cámaras OK. Sin incidencias.", category: "Seguridad" },
-        { id: uid(), seq: 2, at: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 30).toISOString(), userId: writerId, userName: writerName, text: "Llegada proveedor agua potable piso 1.", category: "Proveedores" }
-      ];
-      const encomiendas = [];
-      const proveedores = [
-        { id: uid(), empresa: "Agua Potable SpA", tipoServicio: "Suministro / mantención", telefono: "+56 9 1111 2222", email: "contacto@aguapotable.cl" },
-        { id: uid(), empresa: "Limpieza Integral Ltda.", tipoServicio: "Aseo y áreas comunes", telefono: "+56 2 2345 6789", email: "operaciones@limpintegral.cl" }
-      ];
-      const config = {
-        commonSpaces: ["Salón multiuso", "Quincho", "Piscina", "Gimnasio", "Sala de eventos"],
-        visitorParkingCodes: ["V-1", "V-2", "V-3"]
-      };
-      const sb = seedBuildingFromDepartments(residentialDepts);
+      const departments = [adminDept];
+      const sb = seedBuildingFromDepartments([]);
       return {
-        users, roleModules, departments, parkingConfig, parkingSlots, bodegas, visits, reservas, novedades, encomiendas, proveedores, config,
+        users: [],
+        roleModules,
+        departments,
+        parkingConfig: { from: 1, to: 20 },
+        parkingSlots: [],
+        bodegas: [],
+        visits: [],
+        reservas: [],
+        novedades: [],
+        encomiendas: [],
+        proveedores: [],
+        config: { commonSpaces: [], visitorParkingCodes: [] },
         buildingUnits: sb.buildingUnits,
         buildingResidents: sb.buildingResidents,
         buildingFormerResidents: sb.buildingFormerResidents,
@@ -3912,6 +4019,22 @@
       authEnsureReady().catch(function (e) {
         console.warn("[Auth] ensureInit:", e);
       });
+    }
+
+    /** Muestra formulario de primer administrador si no hay usuarios (p. ej. instalación limpia o tras sync sin staff). */
+    function syncLoginFirstAdminPanel() {
+      var wrap = document.getElementById("cg-login-first-setup");
+      var form = document.getElementById("login-form");
+      if (!wrap || !form) return;
+      var users = load("users", []);
+      var empty = !Array.isArray(users) || users.length === 0;
+      if (empty) {
+        wrap.classList.remove("hidden");
+        form.classList.add("hidden");
+      } else {
+        wrap.classList.add("hidden");
+        form.classList.remove("hidden");
+      }
     }
 
     /* ┌─ 6. Estado de aplicación (getters/setters → load/save por clave) ─────────────── */
@@ -3972,7 +4095,7 @@
     function clearSession() {
       state.session = null;
       save("session", null);
-      if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
+      if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function" && !__cgEffectiveCloudOnly()) {
         window.CG.cloudPushKeyImmediate("session");
       }
     }
@@ -4587,13 +4710,13 @@
       save("migrated_proveedores_v1", true);
     }
 
-    /** Una vez: si config no tenía visitorParkingCodes, sembrar lista demo (visitas ≠ E- residentes). */
+    /** Una vez: si config no tenía visitorParkingCodes, inicializar vacío (sin códigos de ejemplo). */
     function migrateVisitorParkingCodes() {
       if (load("migrated_visitor_parking_v1", false)) return;
       var c = load("config", {});
       if (!c || typeof c !== "object") c = {};
       if (c.visitorParkingCodes === undefined) {
-        c = Object.assign({}, c, { visitorParkingCodes: ["V-1", "V-2", "V-3"] });
+        c = Object.assign({}, c, { visitorParkingCodes: [] });
         save("config", c);
       }
       save("migrated_visitor_parking_v1", true);
@@ -5042,6 +5165,11 @@
       hexToRgb, snapshotThemeForExport, buildExportThemeRootCss, getExportAccentHex, getEmailShellThemeColors,
       initCloudSync, stopCloudSyncListener, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPushAllKeysOnce,
       flushPendingCloudWritesNow, cloudPushKeyImmediate, getCloudSyncLastInitResult,
+      syncLoginFirstAdminPanel,
+      effectiveCloudOnlyStorage: function () {
+        return __cgEffectiveCloudOnly();
+      },
+      stripLegacyLocalStorageIfCloudOnly: __cgStripLegacyLocalStorageLsPrefix,
       validate: CG_VALIDATE
     };
     applyPersonalizationToDom();
@@ -11544,15 +11672,26 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function showLogin() {
       var ls = document.getElementById("login-screen");
       var app = document.getElementById("app-main");
+      if (app && document.activeElement && app.contains(document.activeElement)) {
+        try {
+          document.activeElement.blur();
+        } catch (eBlurL) {}
+      }
       ls.classList.remove("hidden");
       app.classList.add("hidden");
       ls.removeAttribute("aria-hidden");
       app.setAttribute("aria-hidden", "true");
       staffChatSetDockVisible(false);
+      if (window.CG && typeof window.CG.syncLoginFirstAdminPanel === "function") window.CG.syncLoginFirstAdminPanel();
     }
     function showApp() {
       var ls = document.getElementById("login-screen");
       var app = document.getElementById("app-main");
+      if (ls && document.activeElement && ls.contains(document.activeElement)) {
+        try {
+          document.activeElement.blur();
+        } catch (eBlur) {}
+      }
       ls.classList.add("hidden");
       app.classList.remove("hidden");
       ls.setAttribute("aria-hidden", "true");
@@ -12055,7 +12194,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         }).join("") + "</ul>" : "<p class=\"page-desc\">Sin novedades.</p>") +
         "</div></div>" +
         "<div class=\"toolbar\" style=\"margin-top:1rem\">" +
-        "<button type=\"button\" class=\"btn btn-danger btn-sm\" id=\"btn-reset-sys\" data-cg-act=\"resetSystemDemo\"><i class=\"fa-solid fa-rotate-left\"></i> Resetear sistema (datos demo)</button>" +
+        "<button type=\"button\" class=\"btn btn-danger btn-sm\" id=\"btn-reset-sys\" data-cg-act=\"resetSystemLocalData\"><i class=\"fa-solid fa-rotate-left\"></i> Resetear sistema (borrar datos locales)</button>" +
         "</div>"
       );
     }
@@ -17961,8 +18100,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   A.renderBodegasTableOnly = renderBodegasTableOnly;
 
-  A.resetSystemDemo = function () {
-    if (!confirm("Se borrarán todos los datos locales y se cargará la demo inicial. ¿Continuar?")) return;
+  A.resetSystemLocalData = function () {
+    if (!confirm("Se borrarán todos los datos locales y se aplicará una instalación limpia. Deberá registrar de nuevo al administrador en el inicio de sesión. ¿Continuar?")) return;
+    try {
+      G.persist.localRemove(G.LS + "session");
+    } catch (eS0) {}
     G.persist.eachLocalKeyWithPrefix(G.LS, function (k) {
       G.persist.localRemove(k);
     });
@@ -18346,35 +18488,124 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     UI.showApp();
     G.toast("Bienvenido, " + user.name);
     if (typeof G.initCloudSync === "function") {
-      G.initCloudSync().then(function (r) {
-        if (r && r.reason === "disabled") return;
-        if (r && r.reason === "superseded") return;
-        if (r && r.ok && r.partial) {
-          G.toast(
-            "Sincronización parcial: los datos en este equipo se mantienen; la red o Firebase no respondieron del todo. Reintente más tarde o revise permisos (F12).",
-            "warn"
-          );
-          return;
-        }
-        if (r && r.ok && !r.partial) {
-          G.toast("Sincronización con Firebase completada.", "success");
-          return;
-        }
-        if (r && !r.ok) {
-          var code = r.err && r.err.code ? r.err.code : "";
-          var msg =
-            code === "permission-denied"
-              ? "Firebase: permiso denegado. Despliegue firestore.rules (mismo edificio que en la app)."
-              : r.reason === "no-db"
-                ? "Firebase no está inicializado (revisar scripts y configuración del proyecto)."
-                : r.reason === "no-fieldvalue"
-                  ? "No cargó Firestore en el navegador (firestore-compat)."
-                  : "No se pudo completar la sincronización. Los datos locales siguen activos; revise la consola (F12).";
-          G.toast(msg, "error");
-        }
-      });
+      G.initCloudSync()
+        .then(function (r) {
+          if (r && r.reason === "disabled") return;
+          if (r && r.reason === "superseded") return;
+          if (r && r.ok && r.partial) {
+            G.toast(
+              "Sincronización parcial: los datos en este equipo se mantienen; la red o Firebase no respondieron del todo. Reintente más tarde o revise permisos (F12).",
+              "warn"
+            );
+            return;
+          }
+          if (r && r.ok && !r.partial) {
+            G.toast("Sincronización con Firebase completada.", "success");
+            return;
+          }
+          if (r && !r.ok) {
+            var code = r.err && r.err.code ? r.err.code : "";
+            var msg =
+              code === "permission-denied"
+                ? "Firebase: permiso denegado. Despliegue firestore.rules (mismo edificio que en la app)."
+                : r.reason === "no-db"
+                  ? "Firebase no está inicializado (revisar scripts y configuración del proyecto)."
+                  : r.reason === "no-fieldvalue"
+                    ? "No cargó Firestore en el navegador (firestore-compat)."
+                    : "No se pudo completar la sincronización. Los datos locales siguen activos; revise la consola (F12).";
+            G.toast(msg, "error");
+          }
+        })
+        .catch(function (eSync) {
+          console.warn("[CG] initCloudSync rechazó inesperadamente:", eSync);
+        });
     }
   });
+
+  var cgFirstAdminForm = document.getElementById("cg-first-admin-form");
+  if (cgFirstAdminForm) {
+    cgFirstAdminForm.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      if (G.state.users && G.state.users.length) {
+        if (typeof G.syncLoginFirstAdminPanel === "function") G.syncLoginFirstAdminPanel();
+        G.toast("Ya existen usuarios. Use el inicio de sesión habitual.", "warn");
+        return;
+      }
+      try {
+        await G.authEnsureReady();
+      } catch (e0) {
+        G.toast("No se pudo preparar la autenticación (¿Web Crypto disponible?)", "error");
+        return;
+      }
+      var nm = document.getElementById("cg-first-admin-name").value.trim();
+      var vu = G.validate.loginUsername(document.getElementById("cg-first-admin-user").value);
+      var vp = G.validate.loginPassword(document.getElementById("cg-first-admin-pass").value);
+      if (!nm.length) {
+        G.toast("Indique el nombre visible.", "error");
+        return;
+      }
+      if (!vu.ok) {
+        G.toast(vu.message, "error");
+        return;
+      }
+      if (!vp.ok) {
+        G.toast(vp.message, "error");
+        return;
+      }
+      var vNew;
+      try {
+        vNew = await G.authCreatePasswordVerifier(vp.value);
+      } catch (e2) {
+        G.toast("No se pudo crear la contraseña.", "error");
+        return;
+      }
+      var user = {
+        id: G.uid(),
+        username: vu.value,
+        name: nm,
+        role: "admin",
+        passwordVerifier: vNew
+      };
+      G.state.users = [user];
+      if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("users");
+      G.setSession(user);
+      UI.showApp();
+      G.toast("Bienvenido, " + user.name);
+      if (typeof G.initCloudSync === "function") {
+        G.initCloudSync()
+          .then(function (r) {
+            if (r && r.reason === "disabled") return;
+            if (r && r.reason === "superseded") return;
+            if (r && r.ok && r.partial) {
+              G.toast(
+                "Sincronización parcial: los datos en este equipo se mantienen; la red o Firebase no respondieron del todo. Reintente más tarde o revise permisos (F12).",
+                "warn"
+              );
+              return;
+            }
+            if (r && r.ok && !r.partial) {
+              G.toast("Sincronización con Firebase completada.", "success");
+              return;
+            }
+            if (r && !r.ok) {
+              var code = r.err && r.err.code ? r.err.code : "";
+              var msg =
+                code === "permission-denied"
+                  ? "Firebase: permiso denegado. Despliegue firestore.rules (mismo edificio que en la app)."
+                  : r.reason === "no-db"
+                    ? "Firebase no está inicializado (revisar scripts y configuración del proyecto)."
+                    : r.reason === "no-fieldvalue"
+                      ? "No cargó Firestore en el navegador (firestore-compat)."
+                      : "No se pudo completar la sincronización. Los datos locales siguen activos; revise la consola (F12).";
+              G.toast(msg, "error");
+            }
+          })
+          .catch(function (eSync) {
+            console.warn("[CG] initCloudSync rechazó inesperadamente:", eSync);
+          });
+      }
+    });
+  }
 
   (function cgLoginShellInit() {
     var forgot = document.getElementById("cg-login-forgot");
@@ -18432,6 +18663,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (mt) mt.setAttribute("aria-expanded", "false");
   });
 
+  function cgStripLegacyIfCloudOnly() {
+    if (typeof G.stripLegacyLocalStorageIfCloudOnly === "function") G.stripLegacyLocalStorageIfCloudOnly();
+  }
+  function cgStartApplicationRuntime() {
   G.ensureInit();
   G.runStartupLocalMigrations();
   G.ensureBuildingKeys();
@@ -18465,42 +18700,64 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (!kickedOnRestore) {
       UI.showApp();
       if (typeof G.initCloudSync === "function") {
-        G.initCloudSync().then(function (r) {
-          if (r && r.reason === "superseded") return;
-          if (r && r.ok && r.partial) {
-            G.toast(
-              "Sincronización parcial tras restaurar sesión: datos locales conservados; revise red o permisos si no ve cambios de otros equipos.",
-              "warn"
-            );
-          } else if (!(r && r.ok) && !(r && r.reason === "disabled") && r && !r.ok) {
-            var code = r.err && r.err.code ? r.err.code : "";
-            var msg =
-              code === "permission-denied"
-                ? "Firebase: sin permiso para sincronizar. Despliegue las reglas Firestore."
-                : r.reason === "no-db" || r.reason === "no-fieldvalue"
-                  ? "Firebase no disponible para sincronizar."
-                  : "Error al sincronizar con Firebase (consola F12). Los datos locales siguen en uso.";
-            G.toast(msg, "warn");
-          }
-          if (typeof G.kickConserjeIfOpenShiftConflict === "function") G.kickConserjeIfOpenShiftConflict();
-        });
+        G.initCloudSync()
+          .then(function (r) {
+            if (r && r.reason === "superseded") return;
+            if (r && r.ok && r.partial) {
+              G.toast(
+                "Sincronización parcial tras restaurar sesión: datos locales conservados; revise red o permisos si no ve cambios de otros equipos.",
+                "warn"
+              );
+            } else if (!(r && r.ok) && !(r && r.reason === "disabled") && r && !r.ok) {
+              var code = r.err && r.err.code ? r.err.code : "";
+              var msg =
+                code === "permission-denied"
+                  ? "Firebase: sin permiso para sincronizar. Despliegue las reglas Firestore."
+                  : r.reason === "no-db" || r.reason === "no-fieldvalue"
+                    ? "Firebase no disponible para sincronizar."
+                    : "Error al sincronizar con Firebase (consola F12). Los datos locales siguen en uso.";
+              G.toast(msg, "warn");
+            }
+            if (typeof G.kickConserjeIfOpenShiftConflict === "function") G.kickConserjeIfOpenShiftConflict();
+          })
+          .catch(function (eSync) {
+            console.warn("[CG] initCloudSync rechazó inesperadamente:", eSync);
+          });
       }
     }
   } else {
     (function cgBootLoginPullCloudFirst() {
       var btn = document.getElementById("login-submit");
+      var firstSub = document.getElementById("cg-first-admin-submit");
       var origLabel = btn ? btn.textContent : "";
+      var origFirstTxt = firstSub ? firstSub.textContent : "";
       var canPull =
         window.CG_CLOUD_SYNC_ENABLED !== false &&
         window.firebaseDB &&
         typeof G.cloudPullAllOnce === "function";
-      if (!canPull) {
+      function afterLoginScreenReady() {
         UI.showLogin();
+        if (typeof G.syncLoginFirstAdminPanel === "function") G.syncLoginFirstAdminPanel();
+      }
+      if (!canPull) {
+        afterLoginScreenReady();
         return;
       }
+      if (typeof G.effectiveCloudOnlyStorage === "function" && G.effectiveCloudOnlyStorage()) {
+        afterLoginScreenReady();
+        return;
+      }
+      var wrap = document.getElementById("cg-login-first-setup");
+      var form = document.getElementById("login-form");
+      if (wrap) wrap.classList.add("hidden");
+      if (form) form.classList.remove("hidden");
       if (btn) {
         btn.disabled = true;
         btn.textContent = "Sincronizando con la nube…";
+      }
+      if (firstSub) {
+        firstSub.disabled = true;
+        firstSub.textContent = "Espere sincronización…";
       }
       G.cloudPullAllOnce()
         .catch(function () {})
@@ -18509,9 +18766,25 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             btn.disabled = false;
             btn.textContent = origLabel;
           }
-          UI.showLogin();
+          if (firstSub) {
+            firstSub.disabled = false;
+            firstSub.textContent = origFirstTxt || "Crear administrador y entrar";
+          }
+          afterLoginScreenReady();
         });
     })();
+  }
+  }
+
+  if (typeof G.effectiveCloudOnlyStorage === "function" && G.effectiveCloudOnlyStorage() && typeof G.cloudPullAllOnce === "function") {
+    G.cloudPullAllOnce()
+      .catch(function () {})
+      .then(function () {
+        cgStripLegacyIfCloudOnly();
+        cgStartApplicationRuntime();
+      });
+  } else {
+    cgStartApplicationRuntime();
   }
 })();
 
