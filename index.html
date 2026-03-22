@@ -3939,6 +3939,182 @@
       return null;
     }
 
+    /**
+     * Cierra tramos de turno abiertos cuyo userId ya no es un conserje válido (empleado borrado,
+     * duplicado antiguo o rol cambiado). Unifica userId duplicados por mismo nombre de usuario.
+     * Solo invocación explícita (Administración → Personal) o API; no corre en arranque.
+     */
+    function cleanupStaffDirectoryAndShiftOrphans() {
+      var users = load("users", []);
+      if (!Array.isArray(users)) users = [];
+      var byId = {};
+      var ui;
+      for (ui = 0; ui < users.length; ui++) {
+        var ux = users[ui];
+        if (ux && ux.id) byId[ux.id] = ux;
+      }
+
+      var nowIso = new Date().toISOString();
+      var shiftLogs = load("shiftLogs", []);
+      if (!Array.isArray(shiftLogs)) shiftLogs = [];
+      var closedOrphans = 0;
+      var sl = shiftLogs.slice();
+      var si;
+      for (si = 0; si < sl.length; si++) {
+        var seg = sl[si];
+        if (!seg || !shiftLogTramoIsOpen(seg)) continue;
+        var who = byId[seg.userId];
+        if (!who || who.role !== "conserje") {
+          sl[si] = Object.assign({}, seg, { endAt: nowIso, endReason: "limpieza_usuario" });
+          closedOrphans++;
+        }
+      }
+      if (closedOrphans) save("shiftLogs", sl);
+
+      function normUserKey(u) {
+        if (!u || !u.username) return "";
+        return String(u.username).trim().toLowerCase();
+      }
+
+      var groups = {};
+      for (ui = 0; ui < users.length; ui++) {
+        var uu = users[ui];
+        if (!uu || !uu.id) continue;
+        var gk = normUserKey(uu);
+        if (!gk) gk = "__sin_usuario_" + uu.id;
+        if (!groups[gk]) groups[gk] = [];
+        groups[gk].push({ u: uu, idx: ui });
+      }
+
+      var idMap = {};
+      var mergedCanon = {};
+
+      Object.keys(groups).forEach(function (gk) {
+        var g = groups[gk];
+        if (g.length < 2) return;
+        g.sort(function (a, b) {
+          var aa = a.u.role === "admin" ? 0 : 1;
+          var bb = b.u.role === "admin" ? 0 : 1;
+          if (aa !== bb) return aa - bb;
+          var av = a.u.passwordVerifier ? 0 : 1;
+          var bv = b.u.passwordVerifier ? 0 : 1;
+          if (av !== bv) return av - bv;
+          return a.idx - b.idx;
+        });
+        var canon = Object.assign({}, g[0].u);
+        var gi;
+        for (gi = 1; gi < g.length; gi++) {
+          var dup = g[gi].u;
+          idMap[dup.id] = canon.id;
+          if (!canon.passwordVerifier && dup.passwordVerifier) {
+            canon = Object.assign({}, canon, { passwordVerifier: dup.passwordVerifier });
+          }
+          if (!(canon.name && String(canon.name).trim()) && dup.name) {
+            canon = Object.assign({}, canon, { name: dup.name });
+          }
+        }
+        mergedCanon[canon.id] = canon;
+      });
+
+      var mergedCount = Object.keys(idMap).length;
+      if (mergedCount === 0) {
+        return { closedOrphans: closedOrphans, mergedUsers: 0, remappedRows: 0 };
+      }
+
+      function mapUid(id) {
+        var cur = id;
+        var guard = 0;
+        while (idMap[cur] && guard < 32) {
+          cur = idMap[cur];
+          guard++;
+        }
+        return cur;
+      }
+
+      var newUsers = [];
+      var seen = {};
+      for (ui = 0; ui < users.length; ui++) {
+        var row = users[ui];
+        if (!row || !row.id) continue;
+        if (idMap[row.id]) continue;
+        var finalRow = mergedCanon[row.id] ? mergedCanon[row.id] : row;
+        if (seen[finalRow.id]) continue;
+        seen[finalRow.id] = true;
+        newUsers.push(finalRow);
+      }
+      save("users", newUsers);
+
+      byId = {};
+      for (ui = 0; ui < newUsers.length; ui++) {
+        if (newUsers[ui] && newUsers[ui].id) byId[newUsers[ui].id] = newUsers[ui];
+      }
+
+      function remapList(arr, key) {
+        if (!Array.isArray(arr) || !arr.length) return null;
+        var ch = 0;
+        var ri;
+        var out = arr.slice();
+        for (ri = 0; ri < out.length; ri++) {
+          var row = out[ri];
+          if (!row || row[key] == null || row[key] === "") continue;
+          var to = mapUid(row[key]);
+          if (to !== row[key]) {
+            out[ri] = Object.assign({}, row);
+            out[ri][key] = to;
+            ch++;
+          }
+        }
+        return ch ? { out: out, n: ch } : null;
+      }
+
+      var remappedRows = 0;
+      var slR = remapList(load("shiftLogs", []), "userId");
+      if (slR) {
+        save("shiftLogs", slR.out);
+        remappedRows += slR.n;
+      }
+      var novR = remapList(load("novedades", []), "userId");
+      if (novR) {
+        save("novedades", novR.out);
+        remappedRows += novR.n;
+      }
+      var chatR = remapList(load("staffChatMessages", []), "userId");
+      if (chatR) {
+        save("staffChatMessages", chatR.out);
+        remappedRows += chatR.n;
+      }
+      var actR = remapList(load("conserjeActivityLog", []), "userId");
+      if (actR) {
+        save("conserjeActivityLog", actR.out);
+        remappedRows += actR.n;
+      }
+
+      var readMap = load("chatLastReadByUser", {});
+      if (readMap && typeof readMap === "object" && !Array.isArray(readMap)) {
+        var nk = {};
+        var rk;
+        for (rk in readMap) {
+          if (!Object.prototype.hasOwnProperty.call(readMap, rk)) continue;
+          var mk = mapUid(rk);
+          var v = readMap[rk];
+          if (!nk[mk] || (typeof v === "string" && v > nk[mk])) nk[mk] = v;
+        }
+        save("chatLastReadByUser", nk);
+      }
+
+      var sess = load("session", null);
+      if (sess && sess.userId) {
+        var su = mapUid(sess.userId);
+        if (su !== sess.userId) {
+          save("session", Object.assign({}, sess, { userId: su }));
+        }
+      }
+
+      state.session = load("session", null);
+
+      return { closedOrphans: closedOrphans, mergedUsers: mergedCount, remappedRows: remappedRows };
+    }
+
     function kickConserjeIfOpenShiftConflict() {
       var u = currentUser();
       if (!u || u.role !== "conserje") return false;
@@ -4789,6 +4965,7 @@
       authEnsureReady, authValidateDeptGateNewPassword, authVerifyLoginPassword, authCreatePasswordVerifier, authDeptGateExists, authVerifyDeptGate, authSetDeptGateFromPasswords, authSetDeptGateInitial,
       shiftLogTramoIsOpen,
       currentUser, setSession, clearSession, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict,
+      cleanupStaffDirectoryAndShiftOrphans,
       canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, normalizeActivityName, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
       proveedorSelectOptionsHtml,
@@ -16379,17 +16556,23 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     var list = (G.state.shiftLogs || []).slice();
+    var userById = {};
+    (G.state.users || []).forEach(function (ux) {
+      if (ux && ux.id) userById[ux.id] = ux;
+    });
     var ji;
     for (ji = 0; ji < list.length; ji++) {
-      if (shiftTramoAbiertoSeg(list[ji]) && list[ji].userId !== u.id) {
-        G.toast(
-          "No puede abrir turno: ya hay un tramo abierto a nombre de " +
-            (list[ji].userName || "otro conserje") +
-            ". Debe cerrarse primero (Libro de novedades o un administrador en Turnos).",
-          "error"
-        );
-        return;
-      }
+      var oth = list[ji];
+      if (!shiftTramoAbiertoSeg(oth) || oth.userId === u.id) continue;
+      var otherUser = userById[oth.userId];
+      if (!otherUser || otherUser.role !== "conserje") continue;
+      G.toast(
+        "No puede abrir turno: ya hay un tramo abierto a nombre de " +
+          (oth.userName || otherUser.name || "otro conserje") +
+          ". Debe cerrarse primero (Libro de novedades o un administrador en Turnos).",
+        "error"
+      );
+      return;
     }
     if (shiftFindOpen(list, u.id)) {
       G.toast("Ya tiene un turno abierto. Cierre el turno actual antes de abrir otro.", "warn");
@@ -16931,8 +17114,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   function buildRenderAdminStaffHtml() {
     return (
       "<div class=\"card\"><div class=\"card-h\"><h3>Personal</h3>" +
-      "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"userOpen\" data-cg-empty=\"1\"><i class=\"fa-solid fa-user-plus\"></i> Nuevo usuario</button></div>" +
-      "<div class=\"card-b\"><table class=\"data-table\"><thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th></th></tr></thead><tbody>" +
+      "<div class=\"toolbar\" style=\"gap:0.5rem;flex-wrap:wrap\">" +
+      "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"userOpen\" data-cg-empty=\"1\"><i class=\"fa-solid fa-user-plus\"></i> Nuevo usuario</button>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"staffCleanupDuplicates\" data-cg-empty=\"1\" title=\"Cierra turnos de empleados inexistentes y fusiona usuarios con el mismo nombre de acceso\">" +
+      "<i class=\"fa-solid fa-broom\"></i> Limpiar duplicados / turnos huérfanos</button></div></div>" +
+      "<div class=\"card-b\"><p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.86rem\">" +
+      "Si hubo sincronizaciones o altas repetidas, puede quedar más de una ficha con el mismo <strong>usuario</strong> o turnos abiertos ligados a fichas ya borradas; eso bloquea el botón «Abrir turno». Use la limpieza con todos los conserjes fuera de sesión si es posible.</p>" +
+      "<table class=\"data-table\"><thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th></th></tr></thead><tbody>" +
       G.state.users
         .map(function (u) {
           return (
@@ -17283,6 +17471,42 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     UI.closeModal();
     G.toast("Usuario guardado");
     A.renderAdmin("staff");
+  };
+
+  A.staffCleanupDuplicates = function () {
+    var u = G.currentUser();
+    if (!u || u.role !== "admin") {
+      G.toast("Solo el administrador puede ejecutar la limpieza.", "error");
+      return;
+    }
+    if (
+      !confirm(
+        "Se cerrarán automáticamente los turnos abiertos asociados a empleados que ya no existen o que ya no son conserje, y se fusionarán usuarios duplicados (mismo nombre de acceso). " +
+          "Referencias en novedades, chat y bitácora se reasignarán al usuario que se conserve. ¿Continuar?"
+      )
+    ) {
+      return;
+    }
+    var r;
+    try {
+      r = G.cleanupStaffDirectoryAndShiftOrphans();
+    } catch (eCl) {
+      G.toast("No se pudo completar la limpieza (consola F12).", "error");
+      return;
+    }
+    if (window.CG && typeof window.CG.flushPendingCloudWritesNow === "function") {
+      window.CG.flushPendingCloudWritesNow();
+    }
+    var parts = [];
+    if (r.closedOrphans) parts.push(r.closedOrphans + " turno(s) huérfano(s) cerrado(s)");
+    if (r.mergedUsers) parts.push(r.mergedUsers + " registro(s) duplicado(s) unificado(s)");
+    if (r.remappedRows) parts.push(r.remappedRows + " referencia(s) actualizada(s)");
+    G.toast(parts.length ? parts.join(". ") + "." : "No había duplicados ni turnos huérfanos que corregir.");
+    A.renderAdmin("staff");
+    var admTurnosTab = document.querySelector(".admin-tab[data-adm=\"turnos\"].active");
+    if (admTurnosTab) A.renderAdmin("turnos");
+    if (typeof A.renderShiftPanelNovedades === "function") A.renderShiftPanelNovedades();
+    if (typeof G.kickConserjeIfOpenShiftConflict === "function") G.kickConserjeIfOpenShiftConflict();
   };
 
   A.userDel = function (id) {
