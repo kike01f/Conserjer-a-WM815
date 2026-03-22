@@ -3048,6 +3048,26 @@
     }
 
     /**
+     * Si el pull a Firestore falla, la RAM (__cgMemLs) queda vacía pero el navegador puede tener copia en localStorage.
+     * Sin esto, un recargo con red mala borraría todo al ignorar LS en modo cloud-only.
+     */
+    function __cgHydrateMemLsFromLocalStorageBackup() {
+      if (!__cgEffectiveCloudOnly()) return;
+      try {
+        var ix;
+        for (ix = 0; ix < localStorage.length; ix++) {
+          var k = localStorage.key(ix);
+          if (!k || k.indexOf(LS) !== 0) continue;
+          var sk = k.slice(LS.length);
+          if (sk === "session") continue;
+          if (Object.prototype.hasOwnProperty.call(__cgMemLs, sk)) continue;
+          var v = localStorage.getItem(k);
+          if (v != null) __cgMemLs[sk] = v;
+        }
+      } catch (eH) {}
+    }
+
+    /**
      * Estado interno del sync (Firestore ↔ memoria / LS según modo). No mezclar con UI.
      * Estrategia: last-write-wins en documentos ls/{key}; merge explícito solo en shiftLogs (tramos abiertos locales).
      */
@@ -4197,6 +4217,11 @@
 
     /** Primera ejecución: persistir plantilla defaultState (una sola responsabilidad: escritura inicial). */
     function ensureInitSeedFromDefaultIfNeeded() {
+      if (__cgEffectiveCloudOnly()) {
+        /* La nube (pull) + migraciones + attachVirtualAdmin son la fuente de verdad; sembrar defaultState aquí
+         * pisaba datos reales cuando faltaba la clave "initialized" en Firestore o el pull iba detrás del arranque. */
+        return;
+      }
       if (load("initialized", false)) return;
       var d = defaultState();
       save("users", d.users);
@@ -5379,6 +5404,7 @@
         return __cgEffectiveCloudOnly();
       },
       stripLegacyLocalStorageIfCloudOnly: __cgStripLegacyLocalStorageLsPrefix,
+      __cgHydrateMemLsFromLocalStorageBackup: __cgHydrateMemLsFromLocalStorageBackup,
       validate: CG_VALIDATE
     };
     applyPersonalizationToDom();
@@ -19022,9 +19048,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   if (typeof G.effectiveCloudOnlyStorage === "function" && G.effectiveCloudOnlyStorage() && typeof G.cloudPullAllOnce === "function") {
     G.cloudPullAllOnce()
-      .catch(function () {})
       .then(function () {
         cgStripLegacyIfCloudOnly();
+      })
+      .catch(function (ePullBoot) {
+        console.warn("[CG] Pull inicial desde Firestore falló; se intenta recuperar datos desde localStorage de este navegador.", ePullBoot);
+        if (typeof G.__cgHydrateMemLsFromLocalStorageBackup === "function") {
+          G.__cgHydrateMemLsFromLocalStorageBackup();
+        }
+      })
+      .then(function () {
         cgStartApplicationRuntime();
       });
   } else {
