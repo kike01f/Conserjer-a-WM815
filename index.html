@@ -173,10 +173,10 @@
     })();
   </script>
   <script>
-    /* file:// + marco (iframe / vista previa del IDE): Chrome trata cada marco como origen propio.
-       Si la ruta tiene acentos, macOS puede usar Unicode NFC en un sitio y NFD en otro (misma carpeta,
-       distinta cadena en la URL) → «Unsafe attempt to load URL file://… from frame with URL file://…».
-       Bloqueamos la acción por defecto de TODOS los submit en captura (window + document) y sugerimos HTTP. */
+    /* file://: Chrome trata cada marco como origen propio; rutas con acentos pueden diferir en NFC/NFD
+       → «Unsafe attempt to load URL file://… from frame with URL file://…» al enviar formularios o navegar.
+       Siempre cancelamos la navegación por defecto de submit (captura) y fijamos action="#" en formularios;
+       los manejadores JS siguen ejecutándose en fase burbuja. */
     (function () {
       if (location.protocol !== "file:") return;
       function cgFileUrlIsEmbedded() {
@@ -190,26 +190,58 @@
         } catch (e2) {}
         return false;
       }
-      if (!cgFileUrlIsEmbedded()) return;
+      function cgFilePathHasNonAscii() {
+        try {
+          return /[^\u0000-\u007f]/.test(decodeURIComponent(location.pathname || ""));
+        } catch (eP) {
+          return false;
+        }
+      }
 
       function cgBlockSubmitDefaultNavigation(ev) {
+        var t = ev.target;
+        if (!t || t.nodeName !== "FORM") return;
         ev.preventDefault();
       }
       window.addEventListener("submit", cgBlockSubmitDefaultNavigation, true);
       document.addEventListener("submit", cgBlockSubmitDefaultNavigation, true);
 
+      function cgPatchFormEl(f) {
+        if (!f || f.nodeName !== "FORM") return;
+        var a = f.getAttribute("action");
+        if (a == null || a === "") f.setAttribute("action", "#");
+        if (!f.getAttribute("method")) f.setAttribute("method", "post");
+      }
+
       function cgEnsureFormsNoNavigate() {
         try {
-          document.querySelectorAll("form").forEach(function (f) {
-            if (!f.getAttribute("action")) f.setAttribute("action", "#");
-            if (!f.getAttribute("method")) f.setAttribute("method", "post");
-          });
+          document.querySelectorAll("form").forEach(cgPatchFormEl);
         } catch (e3) {}
       }
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", cgEnsureFormsNoNavigate);
-      } else {
+
+      function cgObserveNewForms() {
+        try {
+          var obs = new MutationObserver(function (muts) {
+            muts.forEach(function (m) {
+              m.addedNodes.forEach(function (n) {
+                if (!n || n.nodeType !== 1) return;
+                if (n.nodeName === "FORM") cgPatchFormEl(n);
+                if (n.querySelectorAll) n.querySelectorAll("form").forEach(cgPatchFormEl);
+              });
+            });
+          });
+          obs.observe(document.documentElement, { childList: true, subtree: true });
+        } catch (eObs) {}
+      }
+
+      function armDom() {
         cgEnsureFormsNoNavigate();
+        cgObserveNewForms();
+      }
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", armDom);
+      } else {
+        armDom();
       }
 
       function showFramedFileBanner() {
@@ -256,14 +288,37 @@
         wrap.appendChild(hint);
         (document.body || document.documentElement).appendChild(wrap);
       }
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", showFramedFileBanner);
-      } else {
-        showFramedFileBanner();
+
+      function showFileNonAsciiHint() {
+        if (document.getElementById("cg-file-protocol-banner")) return;
+        var wrap = document.createElement("div");
+        wrap.id = "cg-file-protocol-banner";
+        wrap.setAttribute("role", "status");
+        wrap.style.cssText =
+          "position:fixed;left:0;right:0;top:0;z-index:2147483646;padding:8px 14px;font:13px/1.4 system-ui,sans-serif;" +
+          "background:#365f14;color:#f8fafc;text-align:center;border-bottom:1px solid #74bd20;";
+        wrap.textContent =
+          "Ruta file:// con caracteres especiales (acentos): use ./serve.sh (HTTP) o renombre la carpeta sin acentos para evitar avisos de Chrome.";
+        (document.body || document.documentElement).appendChild(wrap);
       }
-      console.warn(
-        "[Conserjería] file:// en marco: abra index.html en pestaña nueva o use HTTP (./serve.sh). Rutas con acentos pueden disparar el aviso de Chrome (NFC/NFD)."
-      );
+
+      if (cgFileUrlIsEmbedded()) {
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", showFramedFileBanner);
+        } else {
+          showFramedFileBanner();
+        }
+        console.warn(
+          "[Conserjería] file:// en marco: abra index.html en pestaña nueva o use HTTP (./serve.sh). Rutas con acentos pueden disparar el aviso de Chrome (NFC/NFD)."
+        );
+      } else if (cgFilePathHasNonAscii()) {
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", showFileNonAsciiHint);
+        } else {
+          showFileNonAsciiHint();
+        }
+        console.warn("[Conserjería] file:// con acentos en la ruta: preferible ./serve.sh o carpeta ASCII.");
+      }
     })();
   </script>
   <!-- Módulo Departamentos: UI incrustada; datos en localStorage (prefijo CG.LS + wm815_*). -->
@@ -2913,9 +2968,9 @@
           </div>
         </div>
         <div id="cg-chat-thread" class="cg-chat-thread" role="log" aria-live="polite" aria-relevant="additions"></div>
-        <form id="cg-chat-form" class="cg-chat-form" action="#" method="post">
+        <form id="cg-chat-form" class="cg-chat-form" action="#" method="post" onsubmit="return false;">
           <label class="sr-only" for="cg-chat-input">Escribir mensaje</label>
-          <textarea id="cg-chat-input" rows="2" maxlength="2000" placeholder="Escriba un mensaje…" required></textarea>
+          <textarea id="cg-chat-input" rows="2" maxlength="4000" placeholder="Escriba un mensaje…" required></textarea>
           <button type="submit" class="btn btn-primary btn-sm"><i class="fa-solid fa-paper-plane"></i> Enviar</button>
         </form>
       </div>
@@ -3075,6 +3130,8 @@
       pullSkipKeys: { session: true },
       /** Tras subir users/roleModules: ignorar pulls remotos de esa clave hasta este timestamp (evita que el polling pise altas recientes). */
       lsPullQuietUntil: {},
+      /** Anti-rafaga: último cloudPullAllOnce al volver a la pestaña (visibility). */
+      lastVisiblePullAt: 0,
       applyingRemote: false,
       remoteApplyDepth: 0,
       unsubscribe: null,
@@ -3719,6 +3776,23 @@
       return CG_SYNC_STATE.pullAllInFlight;
     }
 
+    /** Pull de un solo doc `ls` (p. ej. chat) sin esperar al ciclo global (~60s). */
+    function cloudPullSingleLsKey(shortKey) {
+      if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return Promise.resolve();
+      if (!shortKey || shortKey === "session" || CG_SYNC_STATE.pullSkipKeys[shortKey]) return Promise.resolve();
+      var col = __cgCloudLsCol();
+      if (!col) return Promise.resolve();
+      return col
+        .doc(__cgCloudSanitizeDocId(shortKey))
+        .get()
+        .then(function (snap) {
+          applyRemoteLsDoc(snap);
+        })
+        .catch(function (e) {
+          __cgSyncLog("warn", "pull_single_ls", shortKey + " " + (e && e.code ? e.code : e));
+        });
+    }
+
     function __cgCloudPushAllKeysInner() {
       var col = __cgCloudLsCol();
       if (!col) return Promise.resolve();
@@ -3859,7 +3933,20 @@
                 { capture: true }
               );
               document.addEventListener("visibilitychange", function () {
-                if (document.visibilityState === "hidden") flushPendingCloudWritesNow();
+                if (document.visibilityState === "hidden") {
+                  flushPendingCloudWritesNow();
+                  return;
+                }
+                if (document.visibilityState !== "visible") return;
+                var now = Date.now();
+                if (now - (CG_SYNC_STATE.lastVisiblePullAt || 0) < 2800) return;
+                CG_SYNC_STATE.lastVisiblePullAt = now;
+                try {
+                  var u = window.CG && window.CG.currentUser && window.CG.currentUser();
+                  if (u && window.CG.cloudPullAllOnce) {
+                    window.CG.cloudPullAllOnce().catch(function () {});
+                  }
+                } catch (eVisPull) {}
               });
             } catch (eEv) {}
           }
@@ -5397,7 +5484,7 @@
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
       getPersonalization, setPersonalization, applyPersonalizationToDom,
       hexToRgb, snapshotThemeForExport, buildExportThemeRootCss, getExportAccentHex, getEmailShellThemeColors,
-      initCloudSync, stopCloudSyncListener, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPushAllKeysOnce,
+      initCloudSync, stopCloudSyncListener, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPullSingleLsKey, cloudPushAllKeysOnce,
       flushPendingCloudWritesNow, cloudPushKeyImmediate, cloudPushLsKeyPromise, armLsKeyPullQuiet, getCloudSyncLastInitResult,
       syncLoginFirstAdminPanel,
       effectiveCloudOnlyStorage: function () {
@@ -7017,7 +7104,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             }
         };
 
-        window.loadUnitsFromCloud = async function() {
+        window.loadUnitsFromCloud = async function(silent) {
             try {
                 const raw = window.CG_PERSIST.localGetRaw(__deptUnitsStorageKey());
                 if (!raw) {
@@ -7036,11 +7123,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 appState.units = units;
                 console.log('✅ Datos cargados desde almacenamiento local:', units.length, 'unidades');
                 updateAllUI();
-                showNotification('success', '✅ Datos cargados desde este dispositivo');
+                if (!silent) showNotification('success', '✅ Datos cargados desde este dispositivo');
                 return true;
             } catch (error) {
                 console.error('Error cargando datos locales:', error);
-                showNotification('error', '❌ Error al cargar datos locales');
+                if (!silent) showNotification('error', '❌ Error al cargar datos locales');
                 appState.units = [];
                 updateAllUI();
                 return false;
@@ -10487,7 +10574,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
             try {
                 console.log('💾 Cargando datos desde almacenamiento local del navegador...');
-                const cloudSuccess = await loadUnitsFromCloud();
+                var deptRemount = !!window.__CG_DEPT_HAS_MOUNTED_ONCE;
+                window.__CG_DEPT_HAS_MOUNTED_ONCE = true;
+                const cloudSuccess = await loadUnitsFromCloud(deptRemount);
                 
                 try {
                     const formerResidentsLoaded = await loadFormerResidentsFromCloud();
@@ -11601,6 +11690,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         migrateResidentsWithoutRegistrationDate();
       }
     }, 400);
+    if (window.CG_ACTIONS && typeof window.CG_ACTIONS.initDepartamentosEmbeddedModule === "function") {
+      window.CG_ACTIONS.initDepartamentosEmbeddedModule();
+    }
+    if (window.CG_ACTIONS && typeof window.CG_ACTIONS.bindDepartamentosExcelImport === "function") {
+      window.CG_ACTIONS.bindDepartamentosExcelImport();
+    }
   };
 })();
 
@@ -11636,7 +11731,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var staffChatLastMsgs = "";
 
     function staffChatLastReadMap() {
-      return G.load("chatLastReadByUser", {}) || {};
+      var raw = G.load("chatLastReadByUser", {}) || {};
+      return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
     }
     function staffChatGetRead(userId) {
       return staffChatLastReadMap()[userId] || "";
@@ -11651,12 +11747,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (!u) return;
       staffChatSetRead(u.id, new Date().toISOString());
     }
+    function staffChatMessagesSafe() {
+      return Array.isArray(G.state.staffChatMessages) ? G.state.staffChatMessages : [];
+    }
     function staffChatUnreadCount() {
       var u = G.currentUser();
       if (!u) return 0;
       var after = staffChatGetRead(u.id);
-      return G.state.staffChatMessages.filter(function (m) {
-        return !after || m.at > after;
+      return staffChatMessagesSafe().filter(function (m) {
+        return m && (!after || m.at > after);
       }).length;
     }
     function staffChatPanelOpen() {
@@ -11671,13 +11770,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       else btn.classList.add("hidden");
     }
     function staffChatClearAll() {
-      if (!G.currentUser() || G.currentUser().role !== "admin") {
+      var cuClr = G.currentUser();
+      if (!cuClr || cuClr.role !== "admin") {
         G.toast("Solo el administrador puede vaciar el chat", "warn");
         return;
       }
       if (!confirm("¿Eliminar todos los mensajes del chat? Esta acción no se puede deshacer.")) return;
       G.state.staffChatMessages = [];
       staffChatLastMsgs = "[]";
+      if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffChatMessages");
       staffChatRenderThread();
       staffChatUpdateBadge();
       G.toast("Conversación vaciada");
@@ -11698,7 +11799,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var thread = document.getElementById("cg-chat-thread");
       if (!thread) return;
       var uid = (G.currentUser() || {}).id;
-      var list = G.state.staffChatMessages.slice().sort(function (a, b) {
+      var list = staffChatMessagesSafe().slice().sort(function (a, b) {
         return new Date(a.at) - new Date(b.at);
       });
       thread.textContent = "";
@@ -11709,6 +11810,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         thread.appendChild(emptyP);
       } else {
         list.forEach(function (m) {
+          if (!m || typeof m !== "object") return;
           var mine = m.userId === uid;
           var roleCls = m.role === "admin" ? "cg-chat-bubble--admin" : "cg-chat-bubble--conserje";
           var bubbleCls = "cg-chat-bubble " + (mine ? "cg-chat-bubble--me" : "cg-chat-bubble--other") + " " + roleCls;
@@ -11732,7 +11834,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       thread.scrollTop = thread.scrollHeight;
     }
     function staffChatRefreshFromStore() {
-      var json = JSON.stringify(G.state.staffChatMessages);
+      var json = JSON.stringify(staffChatMessagesSafe());
       if (json !== staffChatLastMsgs) {
         staffChatLastMsgs = json;
         if (staffChatPanelOpen()) {
@@ -11750,42 +11852,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         staffChatRefreshFromStore();
         return;
       }
-      if (k === "users" || k === "roleModules") {
-        if (k === "roleModules" && window.CG_UI && typeof window.CG_UI.renderNav === "function") {
-          try {
-            window.CG_UI.renderNav();
-          } catch (eNav) {}
-        }
-        if (window.CG_ACTIONS && typeof window.CG_ACTIONS.renderAdmin === "function") {
-          try {
-            var tabStaff = document.querySelector(".admin-tab[data-adm=\"staff\"].active");
-            var tabPerm = document.querySelector(".admin-tab[data-adm=\"perm\"].active");
-            if (tabStaff) window.CG_ACTIONS.renderAdmin("staff");
-            if (tabPerm) window.CG_ACTIONS.renderAdmin("perm");
-          } catch (eAdm) {}
-        }
-        return;
-      }
-      if (k === "dashActMonth") {
-        var dm = document.getElementById("dash-act-month");
-        if (dm) {
-          try {
-            var vk = G.load("dashActMonth", null);
-            if (vk && typeof vk === "string" && /^\d{4}-\d{2}$/.test(vk)) dm.value = vk;
-          } catch (eDm) {}
-        }
-        return;
-      }
-      if (k === "shiftLogs") {
-        if (typeof G.kickConserjeIfOpenShiftConflict === "function") G.kickConserjeIfOpenShiftConflict();
-        return;
-      }
-      if (k === "wm815_units" || k === "wm815_former_residents" || k === "departments" || k === "buildingUnits" || k === "buildingResidents" || k === "buildingParking") {
-        if (window.CG_ACTIONS && typeof window.CG_ACTIONS.syncDepartamentosModuleFromLocal === "function") {
-          try {
-            window.CG_ACTIONS.syncDepartamentosModuleFromLocal();
-          } catch (eCloudDept) {}
-        }
+      if (window.CG_UI && typeof window.CG_UI.refreshAfterRemoteLsKey === "function") {
+        try {
+          window.CG_UI.refreshAfterRemoteLsKey(k);
+        } catch (eCloudUi) {}
       }
     });
     var CG_STAFF_CHAT_MAX_LEN = 4000;
@@ -11796,6 +11866,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (t.length > CG_STAFF_CHAT_MAX_LEN) {
         G.toast("Mensaje demasiado largo (máx. " + CG_STAFF_CHAT_MAX_LEN + " caracteres).", "warn");
         return;
+      }
+      if (G.validate && typeof G.validate.textBlock === "function") {
+        var vt = G.validate.textBlock(t, { label: "Mensaje", min: 1, max: CG_STAFF_CHAT_MAX_LEN });
+        if (!vt.ok) {
+          G.toast(vt.message, "warn");
+          return;
+        }
+        t = vt.value;
+      }
+      if (!Array.isArray(G.state.staffChatMessages)) {
+        G.state.staffChatMessages = [];
       }
       var list = G.state.staffChatMessages.slice();
       list.push({
@@ -11808,20 +11889,20 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       });
       G.state.staffChatMessages = list;
       staffChatLastMsgs = JSON.stringify(list);
+      if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffChatMessages");
       staffChatMarkRead();
       staffChatRenderThread();
       staffChatUpdateBadge();
     }
     function staffChatBind() {
       if (staffChatBound) return;
-      staffChatBound = true;
-      var root = document.getElementById("cg-staff-chat-root");
       var toggle = document.getElementById("cg-chat-toggle");
       var panel = document.getElementById("cg-chat-panel");
       var closeBtn = document.getElementById("cg-chat-close");
       var form = document.getElementById("cg-chat-form");
       var input = document.getElementById("cg-chat-input");
       if (!toggle || !panel) return;
+      staffChatBound = true;
       var clearBtn = document.getElementById("cg-chat-clear");
       if (clearBtn) {
         clearBtn.addEventListener("click", function () {
@@ -11834,10 +11915,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           panel.classList.remove("hidden");
           toggle.setAttribute("aria-expanded", "true");
           staffChatSyncClearButton();
-          staffChatMarkRead();
-          staffChatRenderThread();
-          staffChatUpdateBadge();
-          if (input) setTimeout(function () { input.focus(); }, 80);
+          var finishOpen = function () {
+            staffChatMarkRead();
+            staffChatRenderThread();
+            staffChatUpdateBadge();
+            if (input) setTimeout(function () { input.focus(); }, 80);
+          };
+          if (typeof G.cloudPullSingleLsKey === "function") {
+            G.cloudPullSingleLsKey("staffChatMessages").finally(finishOpen);
+          } else {
+            finishOpen();
+          }
         } else {
           panel.classList.add("hidden");
           toggle.setAttribute("aria-expanded", "false");
@@ -11870,11 +11958,23 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     function staffChatStartPoll() {
       if (staffChatPollId) return;
+      var staffChatPollMs = 7000;
       staffChatPollId = window.setInterval(function () {
+        if (!G.currentUser()) return;
         var root = document.getElementById("cg-staff-chat-root");
-        if (!root || root.classList.contains("hidden")) return;
-        staffChatRefreshFromStore();
-      }, 3500);
+        if (!root) return;
+        var p =
+          typeof G.cloudPullSingleLsKey === "function"
+            ? G.cloudPullSingleLsKey("staffChatMessages")
+            : Promise.resolve();
+        if (p && typeof p.finally === "function") {
+          p.finally(function () {
+            staffChatRefreshFromStore();
+          });
+        } else {
+          staffChatRefreshFromStore();
+        }
+      }, staffChatPollMs);
     }
     function staffChatStopPoll() {
       if (staffChatPollId) {
@@ -12212,6 +12312,78 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       } catch (eUpd) {}
     }
 
+    function updateDashboardSummaryStatsOnly() {
+      if (!document.getElementById("dash-stat-visits-today")) return;
+      var today = new Date();
+      var yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+      var visitsToday = G.state.visits.filter(function (v) {
+        return G.isSameDay(v.at, today);
+      }).length;
+      var visitsYesterday = G.state.visits.filter(function (v) {
+        return G.isSameDay(v.at, yesterday);
+      }).length;
+      var reservasActivas = G.state.reservas.filter(function (r) {
+        return new Date(r.end) >= today;
+      }).length;
+      var encList = G.state.encomiendas || [];
+      var encPend = encList.filter(function (e) {
+        return !e.entregadoAt;
+      }).length;
+      var encReceivedToday = encList.filter(function (e) {
+        return e.receivedAt && G.isSameDay(e.receivedAt, today);
+      }).length;
+      var encReceivedYesterday = encList.filter(function (e) {
+        return e.receivedAt && G.isSameDay(e.receivedAt, yesterday);
+      }).length;
+      var elV = document.getElementById("dash-stat-visits-today");
+      if (elV) elV.textContent = String(visitsToday);
+      var elDeltaV = document.getElementById("dash-stat-visits-delta");
+      if (elDeltaV) elDeltaV.innerHTML = dashCompareDelta(visitsToday, visitsYesterday);
+      var elR = document.getElementById("dash-stat-reservas-activas");
+      if (elR) elR.textContent = String(reservasActivas);
+      var elEp = document.getElementById("dash-stat-enc-pend");
+      if (elEp) elEp.textContent = String(encPend);
+      var elEt = document.getElementById("dash-stat-enc-today");
+      if (elEt) elEt.textContent = String(encReceivedToday);
+      var elDeltaE = document.getElementById("dash-stat-enc-delta");
+      if (elDeltaE) elDeltaE.innerHTML = dashCompareDelta(encReceivedToday, encReceivedYesterday);
+    }
+
+    function updateDashboardActivityAndNovBodiesOnly() {
+      var actEl = document.getElementById("cg-dash-act-body");
+      if (actEl) {
+        try {
+          actEl.innerHTML = buildDashMonthlyConserjeActivityHtml();
+        } catch (eAct) {}
+      }
+      var novEl = document.getElementById("cg-dash-nov-recent-body");
+      if (novEl) {
+        try {
+          var novRec = G.state.novedades.slice().sort(function (a, b) {
+            return new Date(b.at) - new Date(a.at);
+          }).slice(0, 5);
+          novEl.innerHTML = novRec.length
+            ? "<ul style=\"list-style:none\">" +
+              novRec
+                .map(function (n) {
+                  return (
+                    "<li style=\"padding:0.5rem 0;border-bottom:1px solid var(--gray-200)\"><strong>#" +
+                    (n.seq || "—") +
+                    "</strong> · " +
+                    G.fmtDate(n.at) +
+                    " — " +
+                    G.escapeHtml(n.text.slice(0, 80)) +
+                    (n.text.length > 80 ? "…" : "") +
+                    "</li>"
+                  );
+                })
+                .join("") +
+              "</ul>"
+            : "<p class=\"page-desc\">Sin novedades.</p>";
+        } catch (eNov) {}
+      }
+    }
+
     function readDashActivityMonthKey() {
       try {
         var lsVal = G.load("dashActMonth", null);
@@ -12406,9 +12578,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<span class=\"page-desc\" style=\"margin:0;font-size:0.78rem\">Solo visitas <strong>vehiculares de persona</strong>: tiempos en vivo, aviso a 30 min del límite de 5 h y multa tras 15 min de gracia. <strong>Alerta sonora</strong> al cruzar cada umbral (tras un clic o tecla en la app, por política del navegador). Proveedores llevan tiempo sin multas; peatones sin cómputo.</span></div>" +
         "<div class=\"card-b\" id=\"dash-veh-alerts\" aria-live=\"polite\"></div></div>" +
         "<div class=\"cg-dash-stat-grid\">" +
-        "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-user-group\" aria-hidden=\"true\"></i> Visitas hoy</h3></div><div class=\"card-b\"><p class=\"cg-dash-stat-val\">" + visitsToday + "</p><p class=\"page-desc\">Entradas registradas con fecha de hoy</p>" + visDelta + "</div></div>" +
-        "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-calendar-check\" aria-hidden=\"true\"></i> Reservas activas</h3></div><div class=\"card-b\"><p class=\"cg-dash-stat-val\">" + reservasActivas + "</p><p class=\"page-desc\">Espacios comunes con vigencia hoy o futura</p></div></div>" +
-        "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact cg-dash-stat-card--with-footer-btn\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-box\" aria-hidden=\"true\"></i> Encomiendas</h3></div><div class=\"card-b cg-dash-stat-card-b--stack\"><div class=\"cg-dash-stat-card-b__top\"><p class=\"cg-dash-stat-val\">" + encPend + "</p><p class=\"page-desc\">Pendientes de retiro en conserjería</p><p class=\"page-desc\" style=\"margin:0.4rem 0 0\">Recibidas hoy: <strong>" + encReceivedToday + "</strong></p>" + encRecDelta + "</div>" +
+        "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-user-group\" aria-hidden=\"true\"></i> Visitas hoy</h3></div><div class=\"card-b\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-visits-today\">" + visitsToday + "</p><p class=\"page-desc\">Entradas registradas con fecha de hoy</p><span id=\"dash-stat-visits-delta\">" + visDelta + "</span></div></div>" +
+        "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-calendar-check\" aria-hidden=\"true\"></i> Reservas activas</h3></div><div class=\"card-b\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-reservas-activas\">" + reservasActivas + "</p><p class=\"page-desc\">Espacios comunes con vigencia hoy o futura</p></div></div>" +
+        "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact cg-dash-stat-card--with-footer-btn\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-box\" aria-hidden=\"true\"></i> Encomiendas</h3></div><div class=\"card-b cg-dash-stat-card-b--stack\"><div class=\"cg-dash-stat-card-b__top\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-enc-pend\">" + encPend + "</p><p class=\"page-desc\">Pendientes de retiro en conserjería</p><p class=\"page-desc\" style=\"margin:0.4rem 0 0\">Recibidas hoy: <strong id=\"dash-stat-enc-today\">" + encReceivedToday + "</strong></p><span id=\"dash-stat-enc-delta\">" + encRecDelta + "</span></div>" +
         (encPend ? "<div class=\"cg-dash-stat-card-b__footer\"><button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"encomiendas\">Ver módulo</button></div>" : "") + "</div></div>" +
         "</div>" +
         "<div class=\"cg-dash-charts-row\">" +
@@ -12419,18 +12591,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<p class=\"cg-dash-chart-meta\" id=\"dash-enc-chart-summary\" aria-live=\"polite\"></p>" +
         "<div class=\"cg-dash-chart-wrap\"><canvas id=\"dash-chart-encomiendas\" aria-label=\"Gráfico comparativo de encomiendas recibidas\"></canvas></div></div></div>" +
         "</div>" +
-        "<div class=\"card cg-dash-nov-card cg-dash-act-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-user-clock\" aria-hidden=\"true\"></i> Registro de actividad</h3><span class=\"page-desc\" style=\"margin:0;font-size:0.78rem;flex:1;text-align:right\">Ranking mensual por conserje y bitácora de acciones.</span></div><div class=\"card-b\">" +
+        "<div class=\"card cg-dash-nov-card cg-dash-act-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-user-clock\" aria-hidden=\"true\"></i> Registro de actividad</h3><span class=\"page-desc\" style=\"margin:0;font-size:0.78rem;flex:1;text-align:right\">Ranking mensual por conserje y bitácora de acciones.</span></div><div class=\"card-b\" id=\"cg-dash-act-body\">" +
         actTable +
         "</div></div>" +
-        "<div class=\"card cg-dash-nov-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-clipboard-list\" aria-hidden=\"true\"></i> Novedades recientes</h3></div><div class=\"card-b\">" +
+        "<div class=\"card cg-dash-nov-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-clipboard-list\" aria-hidden=\"true\"></i> Novedades recientes</h3></div><div class=\"card-b\" id=\"cg-dash-nov-recent-body\">" +
         (novRec.length ? "<ul style=\"list-style:none\">" + novRec.map(function (n) {
           return "<li style=\"padding:0.5rem 0;border-bottom:1px solid var(--gray-200)\"><strong>#" + (n.seq || "—") + "</strong> · " + G.fmtDate(n.at) +
             " — " + G.escapeHtml(n.text.slice(0, 80)) + (n.text.length > 80 ? "…" : "") + "</li>";
         }).join("") + "</ul>" : "<p class=\"page-desc\">Sin novedades.</p>") +
-        "</div></div>" +
-        "<div class=\"toolbar\" style=\"margin-top:1rem\">" +
-        "<button type=\"button\" class=\"btn btn-danger btn-sm\" id=\"btn-reset-sys\" data-cg-act=\"resetSystemLocalData\"><i class=\"fa-solid fa-rotate-left\"></i> Resetear sistema (borrar datos locales)</button>" +
-        "</div>"
+        "</div></div>"
       );
     }
 
@@ -12571,7 +12740,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"cg-module-intro\">" +
         "<p class=\"page-desc\">Registre empresas o contratistas que ingresan al edificio. En <strong>Visitas</strong> puede asociar el ingreso a un proveedor para dejar trazabilidad (empresa, servicio y contacto opcional).</p></div>" +
         "<div class=\"card\"><div class=\"card-h\"><h3>Registrar proveedor</h3></div><div class=\"card-b\">" +
-        "<form id=\"f-prov\">" +
+        "<form id=\"f-prov\" action=\"#\" method=\"post\">" +
         "<input type=\"hidden\" name=\"pid\" id=\"prov-pid\" value=\"\" />" +
         "<div class=\"cg-form-grid-2\">" +
         "<div class=\"form-group\"><label for=\"prov-empresa\">Nombre de la empresa *</label><input name=\"empresa\" id=\"prov-empresa\" required placeholder=\"Ej: Mantenciones Norte SpA\" autocomplete=\"organization\" /></div>" +
@@ -12648,7 +12817,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
     /** Opciones para &lt;datalist&gt;: sugerencias; el usuario puede escribir cualquier texto. */
     function visitorParkingDatalistOptionsHtml() {
-      var codes = G.state.config.visitorParkingCodes || [];
+      var cfg = G.state.config || {};
+      var codes = cfg.visitorParkingCodes || [];
       if (!Array.isArray(codes)) return "";
       return codes
         .map(function (c) {
@@ -12678,7 +12848,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<h4><i class=\"fa-solid fa-door-open\" style=\"opacity:0.85\"></i> Dentro del edificio ahora</h4>" +
         "<div id=\"vis-open-list\" aria-live=\"polite\"></div></div>" +
         "<div class=\"card cg-card-accent--visit\"><div class=\"card-h\"><h3>Registrar ingreso</h3></div><div class=\"card-b\">" +
-        "<form id=\"f-visit\" class=\"cg-visit-form\">" +
+        "<form id=\"f-visit\" class=\"cg-visit-form\" action=\"#\" method=\"post\">" +
         "<div class=\"cg-form-block\">" +
         "<p class=\"cg-form-block-title\">Tipo de ingreso</p>" +
         "<div class=\"form-group\">" +
@@ -12775,7 +12945,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         gateHint +
         "<div class=\"card\"><div class=\"card-h\"><h3>Control de turno</h3></div><div class=\"card-b\" id=\"shift-nov-panel\"><p class=\"page-desc\">Cargando…</p></div></div>" +
         "<div class=\"card\"><div class=\"card-h\"><h3>Nueva entrada</h3></div><div class=\"card-b\">" +
-        "<form id=\"f-nov\">" +
+        "<form id=\"f-nov\" action=\"#\" method=\"post\">" +
         "<div class=\"form-group\"><label>Categoría</label><select name=\"category\" required>" + catsForm + "</select></div>" +
         "<div class=\"form-group\"><label>Descripción</label><textarea name=\"text\" rows=\"3\" required placeholder=\"Detalle de la novedad…\"></textarea></div>" +
         "<button type=\"submit\" class=\"btn btn-primary\"><i class=\"fa-solid fa-book\"></i> Registrar</button></form></div></div>" +
@@ -12809,7 +12979,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
 
     function pageAdmin() {
-      if (G.currentUser().role !== "admin") {
+      var cu = G.currentUser();
+      if (!cu || cu.role !== "admin") {
         return "<p class=\"page-desc\">No autorizado.</p>";
       }
       return (
@@ -12853,8 +13024,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function cgBindDepartamentosViewEvents() {
       if (window.CG && window.CG.migrateDeptStorageKeysOnce) window.CG.migrateDeptStorageKeysOnce();
       if (window.CG && window.CG.mountDepartamentosModule) window.CG.mountDepartamentosModule();
-      if (window.CG_ACTIONS && CG_ACTIONS.initDepartamentosEmbeddedModule) CG_ACTIONS.initDepartamentosEmbeddedModule();
-      if (window.CG_ACTIONS && CG_ACTIONS.bindDepartamentosExcelImport) CG_ACTIONS.bindDepartamentosExcelImport();
     }
 
     function bindPageEvents(view) {
@@ -12887,6 +13056,220 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
     }
 
+    /**
+     * Tras aplicar un documento remoto de Firestore: refresca nav, módulos visibles y trozos del dashboard.
+     * No sustituye el pull/listener; evita listas obsoletas cuando otro equipo escribe la misma clave.
+     */
+    function refreshAfterRemoteLsKey(k) {
+      if (!k || k === "session") return;
+      if (!G.currentUser()) return;
+      var A = window.CG_ACTIONS;
+      var view = typeof getCurrentView === "function" ? getCurrentView() : null;
+      var dash = view === "dashboard";
+
+      if (k === "roleModules") {
+        try {
+          renderNav();
+        } catch (eNav) {}
+      }
+      if (k === "users" || k === "roleModules") {
+        if (A && typeof A.renderAdmin === "function") {
+          try {
+            var tabStaff = document.querySelector(".admin-tab[data-adm=\"staff\"].active");
+            var tabPerm = document.querySelector(".admin-tab[data-adm=\"perm\"].active");
+            if (tabStaff) A.renderAdmin("staff");
+            if (tabPerm) A.renderAdmin("perm");
+          } catch (eAdm) {}
+        }
+      }
+
+      if (k === "dashActMonth") {
+        var dm = document.getElementById("dash-act-month");
+        if (dm) {
+          try {
+            var vk = G.load("dashActMonth", null);
+            if (vk && typeof vk === "string" && /^\d{4}-\d{2}$/.test(vk)) dm.value = vk;
+          } catch (eDm) {}
+        }
+      }
+
+      if (k === "shiftLogs") {
+        if (A && typeof G.kickConserjeIfOpenShiftConflict === "function") G.kickConserjeIfOpenShiftConflict();
+        if (A && typeof A.renderAdmin === "function") {
+          try {
+            var admTurn = document.querySelector(".admin-tab[data-adm=\"turnos\"].active");
+            if (admTurn) A.renderAdmin("turnos");
+          } catch (eT) {}
+        }
+        if (A && typeof A.renderShiftPanelNovedades === "function") {
+          try {
+            A.renderShiftPanelNovedades();
+          } catch (eSp) {}
+        }
+      }
+
+      var deptKeys = [
+        "wm815_units",
+        "wm815_former_residents",
+        "departments",
+        "buildingUnits",
+        "buildingResidents",
+        "buildingFormerResidents",
+        "buildingParking"
+      ];
+      if (deptKeys.indexOf(k) >= 0 && A && typeof A.syncDepartamentosModuleFromLocal === "function") {
+        try {
+          A.syncDepartamentosModuleFromLocal();
+        } catch (eDept) {}
+        if (view === "departamentos") {
+          if (typeof window.loadUnitsFromCloud === "function") {
+            window.loadUnitsFromCloud(true).catch(function () {});
+          }
+          if (typeof window.loadFormerResidentsFromCloud === "function") {
+            window.loadFormerResidentsFromCloud().catch(function () {});
+          }
+        }
+      }
+
+      if (k === "parkingConfig" || k === "parkingSlots") {
+        if (A && typeof A.syncParkingSlotsFromBuilding === "function") {
+          try {
+            A.syncParkingSlotsFromBuilding();
+          } catch (ePk) {}
+        }
+        if (document.getElementById("parking-grid") && A && typeof A.renderParkingGrid === "function") {
+          try {
+            A.renderParkingGrid();
+          } catch (ePg) {}
+        }
+      }
+
+      if (k === "config") {
+        if (A && typeof A.renderAdmin === "function") {
+          try {
+            var tabCfg = document.querySelector(".admin-tab[data-adm=\"cfg\"].active");
+            if (tabCfg) A.renderAdmin("cfg");
+          } catch (eCfg) {}
+        }
+      }
+
+      if (k === "personalization") {
+        try {
+          G.applyPersonalizationToDom();
+        } catch (ePal) {}
+        if (A && typeof A.renderAdmin === "function") {
+          try {
+            var tabPer = document.querySelector(".admin-tab[data-adm=\"personalizacion\"].active");
+            if (tabPer) A.renderAdmin("personalizacion");
+          } catch (ePe) {}
+        }
+      }
+
+      if (k === "visits" || k === "visitVehAlertLog") {
+        if (document.getElementById("tbl-vis-wrap") && A && typeof A.renderVisitas === "function") {
+          try {
+            A.renderVisitas();
+          } catch (eVis) {}
+        }
+        if (A && typeof A.processVehicularVisitAlerts === "function") {
+          try {
+            A.processVehicularVisitAlerts();
+          } catch (eVa) {}
+        }
+        if (A && typeof A.updateVisitLiveDurations === "function") {
+          try {
+            A.updateVisitLiveDurations();
+          } catch (eLd) {}
+        }
+        if (A && typeof A.renderDashboardVehAlerts === "function") {
+          try {
+            A.renderDashboardVehAlerts();
+          } catch (eDv) {}
+        }
+        if (dash) {
+          updateDashboardChartsDataOnly();
+          updateDashboardSummaryStatsOnly();
+          updateDashboardActivityAndNovBodiesOnly();
+        }
+      }
+
+      if (k === "encomiendas") {
+        if (document.getElementById("enc-wrap") && A && typeof A.renderEncomiendas === "function") {
+          try {
+            A.renderEncomiendas();
+          } catch (eEnc) {}
+        }
+        if (dash) {
+          updateDashboardChartsDataOnly();
+          updateDashboardSummaryStatsOnly();
+          updateDashboardActivityAndNovBodiesOnly();
+        }
+      }
+
+      if (k === "reservas") {
+        if (document.getElementById("res-module-summary") && A && typeof A.renderReservas === "function") {
+          try {
+            A.renderReservas();
+          } catch (eRes) {}
+        }
+        if (dash) {
+          updateDashboardSummaryStatsOnly();
+          updateDashboardActivityAndNovBodiesOnly();
+        }
+      }
+
+      if (k === "novedades") {
+        if (document.getElementById("tl-nov") && A && typeof A.renderNovedades === "function") {
+          try {
+            A.renderNovedades();
+          } catch (eNov) {}
+        }
+        if (A && typeof A.renderShiftPanelNovedades === "function") {
+          try {
+            A.renderShiftPanelNovedades();
+          } catch (eSn) {}
+        }
+        if (A && typeof A.renderAdmin === "function") {
+          try {
+            var admTurnNov = document.querySelector(".admin-tab[data-adm=\"turnos\"].active");
+            if (admTurnNov) A.renderAdmin("turnos");
+          } catch (eAdmNov) {}
+        }
+        if (dash) {
+          updateDashboardActivityAndNovBodiesOnly();
+        }
+      }
+
+      if (k === "proveedores") {
+        if (document.getElementById("tbl-prov-wrap") && A && typeof A.renderProveedores === "function") {
+          try {
+            A.renderProveedores();
+          } catch (ePr) {}
+        }
+      }
+
+      if (k === "bodegas") {
+        if (document.getElementById("tbl-bod-wrap") && A && typeof A.renderBodegas === "function") {
+          try {
+            A.renderBodegas();
+          } catch (eBo) {}
+        }
+      }
+
+      if (k === "conserjeActivityLog") {
+        if (dash) updateDashboardActivityAndNovBodiesOnly();
+      }
+
+      if (
+        dash &&
+        (k === "wm815_units" ||
+          k === "departments" ||
+          k === "buildingUnits" ||
+          k === "users")
+      ) {
+        updateDashboardActivityAndNovBodiesOnly();
+      }
+    }
 
     function pageEncomiendas() {
       return (
@@ -12910,7 +13293,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     window.CG_UI = {
       showLogin, showApp, navigate, renderNav, openModal, closeModal, getCurrentView,
       pageDepartamentos, pageEstacionamientos, pageBodegas, pageProveedores, pageVisitas, pageEncomiendas, pageReservas, pageNovedades, pageAdmin,
-      bindPageEvents, checkVehicularVisitWarnings, renderDashboardCharts
+      bindPageEvents, checkVehicularVisitWarnings, renderDashboardCharts,
+      refreshAfterRemoteLsKey
     };
   })();
   </script>
@@ -13679,6 +14063,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         return;
       }
       A.syncDepartamentosModuleFromLocal();
+      if (typeof window.loadUnitsFromCloud === "function") {
+        window.loadUnitsFromCloud(true).catch(function () {});
+      }
+      if (typeof window.loadFormerResidentsFromCloud === "function") {
+        window.loadFormerResidentsFromCloud().catch(function () {});
+      }
     }, 3000);
   };
 
@@ -16051,7 +16441,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var w = document.getElementById("tbl-prov-wrap");
     if (!w) return;
     var q = ((document.getElementById("flt-prov-q") || {}).value || "").toLowerCase();
-    var rows = (G.state.proveedores || []).slice().sort(function (a, b) {
+    var src = G.state.proveedores;
+    var rows = (Array.isArray(src) ? src : []).slice().sort(function (a, b) {
       return String(a.empresa || "").localeCompare(String(b.empresa || ""), "es");
     });
     if (q) {
@@ -16101,7 +16492,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.proveedorEditForm = function (id) {
-    var p = (G.state.proveedores || []).find(function (x) { return x.id === id; });
+    var list = Array.isArray(G.state.proveedores) ? G.state.proveedores : [];
+    var p = list.find(function (x) { return x.id === id; });
     if (!p) return;
     var pe = document.getElementById("prov-pid");
     var em = document.getElementById("prov-empresa");
@@ -16119,7 +16511,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   A.proveedorDel = function (id) {
     if (!confirm("¿Eliminar este proveedor del registro?")) return;
-    G.state.proveedores = (G.state.proveedores || []).filter(function (x) { return x.id !== id; });
+    var cur = Array.isArray(G.state.proveedores) ? G.state.proveedores : [];
+    G.state.proveedores = cur.filter(function (x) { return x.id !== id; });
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("proveedores");
     G.toast("Proveedor eliminado");
     A.renderProveedores();
   };
@@ -16157,13 +16551,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           telefono: vtel.value,
           email: vm.value
         };
-        var list = (G.state.proveedores || []).slice();
+        var list = (Array.isArray(G.state.proveedores) ? G.state.proveedores : []).slice();
         if (pid) {
           list = list.map(function (x) { return x.id === pid ? Object.assign({}, x, o) : x; });
         } else {
           list.push(Object.assign({ id: G.uid() }, o));
         }
         G.state.proveedores = list;
+        if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("proveedores");
         G.toast("Proveedor guardado");
         f.reset();
         var hid = document.getElementById("prov-pid");
@@ -16260,7 +16655,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var w = document.getElementById("tbl-vis-wrap");
     if (!w) return;
     var todayD = new Date();
-    var rows = G.state.visits.slice().sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
+    var allVis = Array.isArray(G.state.visits) ? G.state.visits : [];
+    var rows = allVis.slice().sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
     if (scope === "open") rows = rows.filter(function (v) { return !v.outAt; });
     else if (scope === "today") rows = rows.filter(function (v) { return G.isSameDay(v.at, todayD); });
     else if (scope === "prov")
@@ -16279,7 +16675,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     var openListEl = document.getElementById("vis-open-list");
     if (openListEl) {
-      var openVis = G.state.visits
+      var openVis = allVis
         .filter(function (v) {
           return !v.outAt;
         })
@@ -16339,9 +16735,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     var stVis = document.getElementById("vis-module-stats");
     if (stVis) {
-      var visToday = G.state.visits.filter(function (v) { return G.isSameDay(v.at, todayD); }).length;
-      var openN = G.state.visits.filter(function (v) { return !v.outAt; }).length;
-      var vehOpenN = G.state.visits.filter(function (v) { return !v.outAt && v.vehicular; }).length;
+      var visToday = allVis.filter(function (v) { return G.isSameDay(v.at, todayD); }).length;
+      var openN = allVis.filter(function (v) { return !v.outAt; }).length;
+      var vehOpenN = allVis.filter(function (v) { return !v.outAt && v.vehicular; }).length;
       stVis.innerHTML =
         "<div class=\"cg-stat-chip cg-stat-chip--visit\"><span class=\"cg-stat-chip-val\">" + visToday + "</span><span class=\"cg-stat-chip-lbl\">Visitas hoy</span></div>" +
         "<div class=\"cg-stat-chip cg-stat-chip--visit\"><span class=\"cg-stat-chip-val\">" + openN + "</span><span class=\"cg-stat-chip-lbl\">Dentro del edificio</span></div>" +
@@ -16449,7 +16845,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         e.preventDefault();
         var fd = new FormData(f);
         var ingreso = (fd.get("visitIngreso") || "persona").toString();
-        var veh = f.vehicular.checked;
+        var vehEl = f.querySelector("#v-veh") || f.elements.vehicular;
+        var veh = vehEl && vehEl.checked;
         var vpc = veh ? (fd.get("visitorParkingCode") || "").toString().trim() : "";
         var visitor = "";
         var proveedorId = "";
@@ -16741,7 +17138,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.reservaOpen = function (id) {
-    var r = id ? G.state.reservas.find(function (x) { return x.id === id; }) : { space: "", deptId: "", start: "", end: "", note: "" };
+    var resList = Array.isArray(G.state.reservas) ? G.state.reservas : [];
+    var r = id ? resList.find(function (x) { return x.id === id; }) : { space: "", deptId: "", start: "", end: "", note: "" };
     if (id && !r) return;
     var csp = G.state.config.commonSpaces || [];
     if (!csp.length) {
@@ -16756,7 +17154,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var deptOpts = deptSelectOpts(r.deptId);
     UI.openModal(
       "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>" + (id ? "Editar reserva" : "Nueva reserva") + "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
-      "<div class=\"modal-b\"><form id=\"f-res\">" +
+      "<div class=\"modal-b\"><form id=\"f-res\" action=\"#\" method=\"post\" onsubmit=\"return false;\">" +
       "<div class=\"cg-form-block\"><p class=\"cg-form-block-title\">Espacio y unidad</p>" +
       "<div class=\"cg-form-grid-2\">" +
       "<div class=\"form-group\"><label>Espacio común</label><select name=\"space\" required>" + sp + "</select></div>" +
@@ -16774,7 +17172,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   function deptSelectOpts(selId) {
-    return G.state.departments.map(function (d) {
+    return (Array.isArray(G.state.departments) ? G.state.departments : []).map(function (d) {
       return "<option value=\"" + G.escapeAttr(d.id) + "\"" + (d.id === selId ? " selected" : "") + ">" + G.escapeHtml(G.departmentSelectLabel(d)) + "</option>";
     }).join("");
   }
@@ -16821,7 +17219,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       note: vnote.value
     };
     var cn = conserjeNombreSesion();
-    var list = G.state.reservas.slice();
+    var list = (Array.isArray(G.state.reservas) ? G.state.reservas : []).slice();
     if (id) {
       var i = list.findIndex(function (x) { return x.id === id; });
       if (i >= 0) {
@@ -16830,6 +17228,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
     } else list.push(Object.assign({ id: G.uid(), registradoPor: cn }, o));
     G.state.reservas = list;
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("reservas");
     var dRes = G.deptById(o.deptId);
     var dLab = dRes ? dRes.number : "—";
     if (id) {
@@ -16854,8 +17253,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     if (!confirm("¿Eliminar reserva?")) return;
-    var rDel = G.state.reservas.find(function (r) { return r.id === id; });
-    G.state.reservas = G.state.reservas.filter(function (r) { return r.id !== id; });
+    var curRes = Array.isArray(G.state.reservas) ? G.state.reservas : [];
+    var rDel = curRes.find(function (r) { return r.id === id; });
+    G.state.reservas = curRes.filter(function (r) { return r.id !== id; });
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("reservas");
     if (rDel) {
       var dRd = G.deptById(rDel.deptId);
       G.logConserjeActivity(
@@ -16868,10 +17269,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.renderReservas = function () {
+    var allR = Array.isArray(G.state.reservas) ? G.state.reservas : [];
     var sumEl = document.getElementById("res-module-summary");
     if (sumEl) {
       var now = new Date();
-      var allR = G.state.reservas || [];
       var vigentes = allR.filter(function (r) { return new Date(r.end) >= now; });
       var total = allR.length;
       var prox = vigentes.slice().sort(function (a, b) { return new Date(a.start) - new Date(b.start); }).slice(0, 4);
@@ -16911,7 +17312,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var w = document.getElementById("tbl-res-wrap");
     if (!w) return;
     var isAdmRes = G.currentUser() && G.currentUser().role === "admin";
-    var rows = G.state.reservas.slice().sort(function (a, b) { return new Date(b.start) - new Date(a.start); });
+    var rows = allR.slice().sort(function (a, b) { return new Date(b.start) - new Date(a.start); });
     if (q) {
       rows = rows.filter(function (r) {
         return ((r.space || "") + " " + (r.note || "") + " " + (r.registradoPor || "")).toLowerCase().indexOf(q) >= 0;
@@ -16943,7 +17344,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   function nextNovedadSeq() {
     var m = 0;
-    G.state.novedades.forEach(function (n) { if (n.seq && n.seq > m) m = n.seq; });
+    var list = Array.isArray(G.state.novedades) ? G.state.novedades : [];
+    list.forEach(function (n) {
+      if (n.seq && n.seq > m) m = n.seq;
+    });
     return m + 1;
   }
 
@@ -17121,7 +17525,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       text: "Turno cerrado.",
       shiftSegmentId: open.id
     };
-    G.state.novedades = G.state.novedades.concat([novRec]);
+    G.state.novedades = (Array.isArray(G.state.novedades) ? G.state.novedades : []).concat([novRec]);
+    if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
+      window.CG.cloudPushKeyImmediate("novedades");
+    }
     G.logConserjeActivity("turno_cerrar", "Cerró turno de conserjería (control horario)");
     G.toast("Cierre de turno registrado. Vuelva a abrir turno en Libro de novedades para usar el resto de módulos.");
     var admTurnosTab = document.querySelector(".admin-tab[data-adm=\"turnos\"]");
@@ -17134,7 +17541,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.shiftLogDel = function (id) {
-    if (G.currentUser().role !== "admin") {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
       G.toast("Solo administrador", "error");
       return;
     }
@@ -17145,6 +17553,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     G.state.shiftLogs = list;
+    if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
+      window.CG.cloudPushKeyImmediate("shiftLogs");
+    }
     G.toast("Registro eliminado");
     A.renderAdmin("turnos");
     if (typeof A.renderShiftPanelNovedades === "function") A.renderShiftPanelNovedades();
@@ -17256,8 +17667,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var tl = document.getElementById("tl-nov");
     var sumEl = document.getElementById("flt-nov-summary");
     if (!tl) return;
-    var total = (G.state.novedades || []).length;
-    var rows = G.state.novedades.slice().sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
+    var novSrc = Array.isArray(G.state.novedades) ? G.state.novedades : [];
+    var total = novSrc.length;
+    var rows = novSrc.slice().sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
     rows = rows.filter(function (n) {
       if (cat && n.category !== cat) return false;
       var ta = new Date(n.at).getTime();
@@ -17365,8 +17777,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       f.onsubmit = function (e) {
         e.preventDefault();
         var u = G.currentUser();
+        if (!u) {
+          G.toast("Inicie sesión para registrar.", "warn");
+          return;
+        }
         if (f.category.value === "Turno") {
           G.toast("Las marcas de turno las gestiona el administrador", "warn");
+          return;
+        }
+        var vt = G.validate.textBlock(f.text.value, { label: "Descripción", min: 1, max: 8000 });
+        if (!vt.ok) {
+          G.toast(vt.message, "error");
           return;
         }
         var rec = {
@@ -17376,9 +17797,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           userId: u.id,
           userName: u.name,
           category: f.category.value,
-          text: f.text.value.trim()
+          text: vt.value
         };
-        G.state.novedades = G.state.novedades.concat([rec]);
+        G.state.novedades = (Array.isArray(G.state.novedades) ? G.state.novedades : []).concat([rec]);
+        if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("novedades");
         G.logConserjeActivity(
           "novedad",
           "Registró novedad [" + (rec.category || "—") + "] — " + (rec.text || "").slice(0, 140)
@@ -17417,17 +17839,19 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
 
   A.novTurnoOpen = function (id) {
-    if (G.currentUser().role !== "admin") {
+    var cuNt = G.currentUser();
+    if (!cuNt || cuNt.role !== "admin") {
       G.toast("Solo administrador", "error");
       return;
     }
-    var n = id ? G.state.novedades.find(function (x) { return x.id === id; }) : null;
+    var novListNt = Array.isArray(G.state.novedades) ? G.state.novedades : [];
+    var n = id ? novListNt.find(function (x) { return x.id === id; }) : null;
     if (id && (!n || n.category !== "Turno")) return;
     var atVal = n ? localDatetimeValue(new Date(n.at)) : localDatetimeValue(new Date());
-    var uid = n ? n.userId : G.currentUser().id;
+    var uid = n ? n.userId : cuNt.id;
     var text = n ? n.text || "" : "Turno cerrado.";
     var segSel = n && n.shiftSegmentId ? n.shiftSegmentId : "";
-    var userOpts = G.state.users
+    var userOpts = (Array.isArray(G.state.users) ? G.state.users : [])
       .map(function (usr) {
         return (
           "<option value=\"" +
@@ -17446,7 +17870,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>" +
         (n ? "Editar marca de turno #" + n.seq : "Nueva marca de turno") +
         "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
-        "<div class=\"modal-b\"><form id=\"f-nov-turno\">" +
+        "<div class=\"modal-b\"><form id=\"f-nov-turno\" action=\"#\" method=\"post\" onsubmit=\"return false;\">" +
         "<div class=\"form-group\"><label>Texto en bitácora</label><textarea name=\"text\" rows=\"3\" required>" +
         G.escapeHtml(text) +
         "</textarea></div>" +
@@ -17468,19 +17892,30 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.novTurnoSave = function () {
+    var cuSave = G.currentUser();
+    if (!cuSave || cuSave.role !== "admin") {
+      G.toast("Solo administrador", "error");
+      return;
+    }
     var f = document.getElementById("f-nov-turno");
     if (!f) return;
-    var usr = G.state.users.find(function (x) { return x.id === f.userId.value; });
+    var usr = (Array.isArray(G.state.users) ? G.state.users : []).find(function (x) { return x.id === f.userId.value; });
     if (!usr) {
       G.toast("Usuario inválido", "error");
       return;
     }
-    var text = f.text.value.trim();
-    if (!text) {
-      G.toast("Indique el texto", "error");
+    var vt = G.validate.textBlock(f.text.value, { label: "Texto en bitácora", min: 1, max: 8000 });
+    if (!vt.ok) {
+      G.toast(vt.message, "error");
       return;
     }
-    var at = new Date(f.at.value).toISOString();
+    var text = vt.value;
+    var vAt = G.validate.datetimeLocal(f.at.value, "Fecha y hora");
+    if (!vAt.ok) {
+      G.toast(vAt.message, "error");
+      return;
+    }
+    var at = vAt.iso;
     var seg = (f.shiftSegmentId && f.shiftSegmentId.value) ? f.shiftSegmentId.value.trim() : "";
     var nid = f.nid.value;
     var base = {
@@ -17491,14 +17926,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       userName: usr.name,
       shiftSegmentId: seg || ""
     };
+    var curNov = Array.isArray(G.state.novedades) ? G.state.novedades : [];
     if (!nid) {
-      G.state.novedades = G.state.novedades.concat([Object.assign({ id: G.uid(), seq: nextNovedadSeq() }, base)]);
+      G.state.novedades = curNov.concat([Object.assign({ id: G.uid(), seq: nextNovedadSeq() }, base)]);
     } else {
-      G.state.novedades = G.state.novedades.map(function (x) {
+      G.state.novedades = curNov.map(function (x) {
         if (x.id !== nid) return x;
         return Object.assign({}, x, base);
       });
     }
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("novedades");
     UI.closeModal();
     G.toast("Guardado");
     var admTurnTab = document.querySelector(".admin-tab[data-adm=\"turnos\"]");
@@ -17507,7 +17944,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.novOpen = function (id) {
-    var n = G.state.novedades.find(function (x) { return x.id === id; });
+    var n = (Array.isArray(G.state.novedades) ? G.state.novedades : []).find(function (x) { return x.id === id; });
     if (!n) return;
     var uNov = G.currentUser();
     if (uNov && uNov.role !== "admin" && !novedadConserjeMayEdit(n, uNov)) {
@@ -17515,7 +17952,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     if (n.category === "Turno") {
-      if (G.currentUser().role !== "admin") {
+      if (!uNov || uNov.role !== "admin") {
         G.toast("Solo el administrador puede editar marcas de turno", "warn");
         return;
       }
@@ -17531,7 +17968,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       .join("");
     UI.openModal(
       "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>Editar novedad #" + n.seq + "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
-      "<div class=\"modal-b\"><form id=\"f-nov-e\">" +
+      "<div class=\"modal-b\"><form id=\"f-nov-e\" action=\"#\" method=\"post\" onsubmit=\"return false;\">" +
       "<div class=\"form-group\"><label>Categoría</label><select name=\"category\">" + cats + "</select></div>" +
       "<div class=\"form-group\"><label>Descripción</label><textarea name=\"text\" rows=\"4\">" + G.escapeHtml(n.text) + "</textarea></div>" +
       "<input type=\"hidden\" name=\"nid\" value=\"" + G.escapeAttr(n.id) + "\" /></form></div>" +
@@ -17544,7 +17981,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var f = document.getElementById("f-nov-e");
     if (!f) return;
     var id = f.nid.value;
-    var prev = G.state.novedades.find(function (x) { return x.id === id; });
+    var novArr = Array.isArray(G.state.novedades) ? G.state.novedades : [];
+    var prev = novArr.find(function (x) { return x.id === id; });
     var uSave = G.currentUser();
     if (uSave && uSave.role !== "admin" && prev && !novedadConserjeMayEdit(prev, uSave)) {
       G.toast("No puede guardar: la entrada no pertenece a su turno abierto o ya quedó en un turno cerrado.", "error");
@@ -17558,10 +17996,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.toast("Categoría no válida aquí", "error");
       return;
     }
-    G.state.novedades = G.state.novedades.map(function (n) {
+    var vtx = G.validate.textBlock(f.text.value, { label: "Descripción", min: 1, max: 8000 });
+    if (!vtx.ok) {
+      G.toast(vtx.message, "error");
+      return;
+    }
+    G.state.novedades = novArr.map(function (n) {
       if (n.id !== id) return n;
-      return Object.assign({}, n, { category: f.category.value, text: f.text.value.trim() });
+      return Object.assign({}, n, { category: f.category.value, text: vtx.value });
     });
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("novedades");
     UI.closeModal();
     G.toast("Novedad actualizada");
     nav("novedades");
@@ -17573,7 +18017,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     if (!confirm("¿Eliminar esta entrada del libro?")) return;
-    G.state.novedades = G.state.novedades.filter(function (n) { return n.id !== id; });
+    G.state.novedades = (Array.isArray(G.state.novedades) ? G.state.novedades : []).filter(function (n) { return n.id !== id; });
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("novedades");
     G.toast("Eliminada");
     var admTurnosTab = document.querySelector(".admin-tab[data-adm=\"turnos\"]");
     if (admTurnosTab && admTurnosTab.classList.contains("active")) A.renderAdmin("turnos");
@@ -17593,6 +18038,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
 
   function buildRenderAdminStaffHtml() {
+    var staffUsers = Array.isArray(G.state.users) ? G.state.users : [];
     return (
       "<div class=\"card\"><div class=\"card-h\"><h3>Personal</h3>" +
       "<div class=\"toolbar\" style=\"gap:0.5rem;flex-wrap:wrap\">" +
@@ -17602,7 +18048,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"card-b\"><p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.86rem\">" +
       "Si hubo sincronizaciones o altas repetidas, puede quedar más de una ficha con el mismo <strong>usuario</strong> o turnos abiertos ligados a fichas ya borradas; eso bloquea el botón «Abrir turno». Use la limpieza con todos los conserjes fuera de sesión si es posible.</p>" +
       "<table class=\"data-table\"><thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th></th></tr></thead><tbody>" +
-      G.state.users
+      staffUsers
         .map(function (u) {
           return (
             "<tr><td>" +
@@ -17632,15 +18078,18 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       p.innerHTML = buildRenderAdminStaffHtml();
     } else if (tab === "perm") {
       var rows = "";
-      G.MODULES.forEach(function (m) {
+      var rm = G.state.roleModules && typeof G.state.roleModules === "object" && !Array.isArray(G.state.roleModules) ? G.state.roleModules : {};
+      var rmAdm = Array.isArray(rm.admin) ? rm.admin : [];
+      var rmCon = Array.isArray(rm.conserje) ? rm.conserje : [];
+      (Array.isArray(G.MODULES) ? G.MODULES : []).forEach(function (m) {
         if (m.adminOnly) return;
-        var ca = (G.state.roleModules.admin || []).indexOf(m.id) >= 0 ? "checked" : "";
-        var cc = (G.state.roleModules.conserje || []).indexOf(m.id) >= 0 ? "checked" : "";
+        var ca = rmAdm.indexOf(m.id) >= 0 ? "checked" : "";
+        var cc = rmCon.indexOf(m.id) >= 0 ? "checked" : "";
         rows += "<tr><td>" + G.escapeHtml(m.label) + "</td><td style=\"text-align:center\"><input type=\"checkbox\" data-role=\"admin\" data-mod=\"" + m.id + "\" " + ca + " /></td>" +
           "<td style=\"text-align:center\"><input type=\"checkbox\" data-role=\"conserje\" data-mod=\"" + m.id + "\" " + cc + " /></td></tr>";
       });
       rows += "<tr><td><strong>Administración</strong> (solo admin)</td><td style=\"text-align:center\"><input type=\"checkbox\" data-role=\"admin\" data-mod=\"admin\" " +
-        ((G.state.roleModules.admin || []).indexOf("admin") >= 0 ? "checked" : "") + " /></td><td>—</td></tr>";
+        (rmAdm.indexOf("admin") >= 0 ? "checked" : "") + " /></td><td>—</td></tr>";
       p.innerHTML = "<div class=\"card\"><div class=\"card-h\"><h3>Módulos visibles por rol</h3></div><div class=\"card-b\">" +
         "<table class=\"data-table\"><thead><tr><th>Módulo</th><th>Admin</th><th>Conserje</th></tr></thead><tbody>" + rows + "</tbody></table>" +
         "<button type=\"button\" class=\"btn btn-primary\" style=\"margin-top:1rem\" data-cg-act=\"permSave\"><i class=\"fa-solid fa-floppy-disk\"></i> Guardar permisos</button>" +
@@ -17697,7 +18146,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var now = new Date();
       var logs = (G.state.shiftLogs || []).slice();
       var byUser = {};
-      G.state.users.forEach(function (u) {
+      var usersTurn = Array.isArray(G.state.users) ? G.state.users : [];
+      usersTurn.forEach(function (u) {
         byUser[u.id] = { name: u.name, role: u.role, ms: 0 };
       });
       logs.forEach(function (seg) {
@@ -17706,7 +18156,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var ov = shiftOverlapMs(seg.startAt, endT.toISOString(), wr.start, wr.end);
         if (ov > 0 && byUser[seg.userId]) byUser[seg.userId].ms += ov;
       });
-      var sumRows = G.state.users
+      var sumRows = usersTurn
         .filter(function (u) {
           return u.role !== "admin";
         })
@@ -17767,7 +18217,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           );
         })
         .join("");
-      var turnoNovList = (G.state.novedades || [])
+      var turnoNovList = (Array.isArray(G.state.novedades) ? G.state.novedades : [])
         .filter(function (n) {
           return n.category === "Turno";
         })
@@ -17860,12 +18310,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         palCards +
         "</div></div></div>";
     } else if (tab === "cfg") {
-      var cfg = G.state.parkingConfig;
-      var lines = (G.state.config.commonSpaces || []).join("\n");
+      var pkRaw = G.state.parkingConfig;
+      var cfg =
+        pkRaw && typeof pkRaw === "object" && !Array.isArray(pkRaw) ? pkRaw : { from: 1, to: 20 };
+      var pkFrom = typeof cfg.from === "number" && isFinite(cfg.from) ? cfg.from : 1;
+      var pkTo = typeof cfg.to === "number" && isFinite(cfg.to) ? cfg.to : 20;
+      var cfgState = G.state.config && typeof G.state.config === "object" && !Array.isArray(G.state.config) ? G.state.config : {};
+      var lines = (Array.isArray(cfgState.commonSpaces) ? cfgState.commonSpaces : []).join("\n");
       p.innerHTML = "<div class=\"card\"><div class=\"card-h\"><h3>Rango estacionamientos (códigos E-)</h3></div><div class=\"card-b\">" +
         "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Los valores <em>Desde</em>/<em>Hasta</em> son numéricos; en el mapa se crean como <strong>E-1</strong> … <strong>E-</strong><em>n</em> si aún no existen.</p>" +
-        "<div class=\"toolbar\" style=\"gap:1rem\"><label>Desde <input type=\"number\" id=\"cfg-pk-a\" value=\"" + G.escapeAttr(String(cfg.from)) + "\" /></label>" +
-        "<label>Hasta <input type=\"number\" id=\"cfg-pk-b\" value=\"" + G.escapeAttr(String(cfg.to)) + "\" /></label>" +
+        "<div class=\"toolbar\" style=\"gap:1rem\"><label>Desde <input type=\"number\" id=\"cfg-pk-a\" value=\"" + G.escapeAttr(String(pkFrom)) + "\" /></label>" +
+        "<label>Hasta <input type=\"number\" id=\"cfg-pk-b\" value=\"" + G.escapeAttr(String(pkTo)) + "\" /></label>" +
         "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"cfgParking\">Aplicar</button></div></div></div>" +
         "<div class=\"card\"><div class=\"card-h\"><h3>Espacios comunes (uno por línea)</h3></div><div class=\"card-b\">" +
         "<textarea id=\"cfg-spaces\" rows=\"6\" style=\"width:100%;font:inherit\">" + G.escapeHtml(lines) + "</textarea>" +
@@ -17873,14 +18328,20 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"card\"><div class=\"card-h\"><h3>Estacionamientos solo para visitas</h3></div><div class=\"card-b\">" +
         "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Un código por línea (ej. <strong>V-1</strong>, <strong>Visitas A</strong>). En <strong>Visitas</strong> vehicular estas entradas aparecen como <em>sugerencias</em> al escribir; el conserje puede indicar cualquier otro número o texto.</p>" +
         "<textarea id=\"cfg-vp\" rows=\"5\" style=\"width:100%;font:inherit\">" +
-        G.escapeHtml((G.state.config.visitorParkingCodes || []).join("\n")) +
+        G.escapeHtml((Array.isArray(cfgState.visitorParkingCodes) ? cfgState.visitorParkingCodes : []).join("\n")) +
         "</textarea>" +
         "<button type=\"button\" class=\"btn btn-primary\" style=\"margin-top:0.75rem\" data-cg-act=\"cfgVisitorParkingSave\">Guardar estacionamientos visitas</button></div></div>";
     }
   };
 
   A.userOpen = function (id) {
-    var u = id ? G.state.users.find(function (x) { return x.id === id; }) : { name: "", username: "", role: "conserje" };
+    var cuUo = G.currentUser();
+    if (!cuUo || cuUo.role !== "admin") {
+      G.toast("Solo el administrador puede gestionar el personal.", "error");
+      return;
+    }
+    var usersList = Array.isArray(G.state.users) ? G.state.users : [];
+    var u = id ? usersList.find(function (x) { return x.id === id; }) : { name: "", username: "", role: "conserje" };
     if (id && !u) return;
     UI.openModal(
       "<div class=\"modal\"><div class=\"modal-h\"><h4>" + (id ? "Editar usuario" : "Nuevo usuario") + "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
@@ -17897,6 +18358,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.userSave = async function () {
+    var cuUs = G.currentUser();
+    if (!cuUs || cuUs.role !== "admin") {
+      G.toast("Solo el administrador puede gestionar el personal.", "error");
+      return;
+    }
     var f = document.getElementById("f-user");
     if (!f) return;
     try {
@@ -17906,7 +18372,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     var id = f.uid.value;
-    var list = G.state.users.slice();
+    var list = (Array.isArray(G.state.users) ? G.state.users : []).slice();
     if (id) {
       var i = list.findIndex(function (x) { return x.id === id; });
       if (i < 0) return;
@@ -18011,12 +18477,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   A.userDel = async function (id) {
     var u = G.currentUser();
+    if (!u || u.role !== "admin") {
+      G.toast("Solo el administrador puede eliminar usuarios.", "error");
+      return;
+    }
     if (u.id === id) {
       G.toast("No puede eliminar su propia sesión", "error");
       return;
     }
     if (!confirm("¿Eliminar usuario?")) return;
-    G.state.users = G.state.users.filter(function (x) { return x.id !== id; });
+    G.state.users = (Array.isArray(G.state.users) ? G.state.users : []).filter(function (x) { return x.id !== id; });
     if (typeof G.armLsKeyPullQuiet === "function") G.armLsKeyPullQuiet("users", 35000);
     var delRes = null;
     if (typeof G.cloudPushLsKeyPromise === "function") {
@@ -18033,6 +18503,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.permSave = async function () {
+    var cuPerm = G.currentUser();
+    if (!cuPerm || cuPerm.role !== "admin") {
+      G.toast("Solo el administrador puede guardar permisos.", "error");
+      return;
+    }
     var adm = [];
     var con = [];
     document.querySelectorAll("input[data-role][data-mod]").forEach(function (inp) {
@@ -18112,6 +18587,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
 
   A.repMonthlyHtml = function () {
+    var cuRep = G.currentUser();
+    if (!cuRep || cuRep.role !== "admin") {
+      G.toast("Solo el administrador puede generar reportes.", "error");
+      return;
+    }
     var yEl = document.getElementById("rep-month-y");
     var mEl = document.getElementById("rep-month-m");
     if (!yEl || !mEl) {
@@ -18265,22 +18745,34 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.repExport = function () {
-    var mod = document.getElementById("rep-mod").value;
-    var d1 = document.getElementById("rep-d1").value;
-    var d2 = document.getElementById("rep-d2").value;
+    var modEl = document.getElementById("rep-mod");
+    var d1El = document.getElementById("rep-d1");
+    var d2El = document.getElementById("rep-d2");
+    if (!modEl || !d1El || !d2El) {
+      G.toast("Vuelva a abrir Administración → Reportes", "warn");
+      return;
+    }
+    var cuEx = G.currentUser();
+    if (!cuEx || cuEx.role !== "admin") {
+      G.toast("Solo el administrador puede exportar datos.", "error");
+      return;
+    }
+    var mod = modEl.value;
+    var d1 = d1El.value;
+    var d2 = d2El.value;
     var data;
     if (mod === "reservas") {
-      data = G.state.reservas.filter(function (r) {
+      data = (Array.isArray(G.state.reservas) ? G.state.reservas : []).filter(function (r) {
         return inDateRange(r.start, d1, d2) || inDateRange(r.end, d1, d2);
       });
     } else if (mod === "visits") {
-      data = G.state.visits.filter(function (v) {
+      data = (Array.isArray(G.state.visits) ? G.state.visits : []).filter(function (v) {
         return inDateRange(v.at, d1, d2);
       });
     } else if (mod === "proveedores") {
-      data = G.state.proveedores || [];
+      data = Array.isArray(G.state.proveedores) ? G.state.proveedores : [];
     } else if (mod === "novedades") {
-      data = G.state.novedades.filter(function (n) {
+      data = (Array.isArray(G.state.novedades) ? G.state.novedades : []).filter(function (n) {
         return inDateRange(n.at, d1, d2);
       });
     } else if (mod === "encomiendas") {
@@ -18314,8 +18806,19 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.cfgParking = function () {
-    var a = parseInt(document.getElementById("cfg-pk-a").value, 10);
-    var b = parseInt(document.getElementById("cfg-pk-b").value, 10);
+    var cuCfg = G.currentUser();
+    if (!cuCfg || cuCfg.role !== "admin") {
+      G.toast("Solo el administrador puede cambiar la configuración.", "error");
+      return;
+    }
+    var elA = document.getElementById("cfg-pk-a");
+    var elB = document.getElementById("cfg-pk-b");
+    if (!elA || !elB) {
+      G.toast("Vuelva a abrir Administración → Configuración", "warn");
+      return;
+    }
+    var a = parseInt(elA.value, 10);
+    var b = parseInt(elB.value, 10);
     if (isNaN(a) || isNaN(b) || a > b) {
       G.toast("Rango inválido", "error");
       return;
@@ -18341,14 +18844,36 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.cfgSpacesSave = function () {
-    var raw = document.getElementById("cfg-spaces").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
-    G.state.config = Object.assign({}, G.state.config, { commonSpaces: raw });
+    var cuSp = G.currentUser();
+    if (!cuSp || cuSp.role !== "admin") {
+      G.toast("Solo el administrador puede guardar la configuración.", "error");
+      return;
+    }
+    var ta = document.getElementById("cfg-spaces");
+    if (!ta) {
+      G.toast("Vuelva a abrir Administración → Configuración", "warn");
+      return;
+    }
+    var raw = ta.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+    var prev = G.state.config && typeof G.state.config === "object" && !Array.isArray(G.state.config) ? G.state.config : {};
+    G.state.config = Object.assign({}, prev, { commonSpaces: raw });
     G.toast("Espacios comunes guardados");
   };
 
   A.cfgVisitorParkingSave = function () {
-    var raw = document.getElementById("cfg-vp").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
-    G.state.config = Object.assign({}, G.state.config, { visitorParkingCodes: raw });
+    var cuVp = G.currentUser();
+    if (!cuVp || cuVp.role !== "admin") {
+      G.toast("Solo el administrador puede guardar la configuración.", "error");
+      return;
+    }
+    var ta = document.getElementById("cfg-vp");
+    if (!ta) {
+      G.toast("Vuelva a abrir Administración → Configuración", "warn");
+      return;
+    }
+    var raw = ta.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+    var prev = G.state.config && typeof G.state.config === "object" && !Array.isArray(G.state.config) ? G.state.config : {};
+    G.state.config = Object.assign({}, prev, { visitorParkingCodes: raw });
     G.toast("Estacionamientos para visitas guardados");
     A.renderAdmin("cfg");
   };
@@ -18400,6 +18925,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.adminApplyPalette = function (palId) {
+    var cuPal = G.currentUser();
+    if (!cuPal || cuPal.role !== "admin") {
+      G.toast("Solo el administrador puede cambiar la paleta.", "error");
+      return;
+    }
     if (typeof G.setPersonalization === "function") G.setPersonalization({ palette: palId });
     A.renderAdmin("personalizacion");
     G.toast("Paleta aplicada");
@@ -18670,6 +19200,19 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         }
         if (el.id === "flt-vis-scope" && window.CG_ACTIONS && CG_ACTIONS.renderVisitas) {
           CG_ACTIONS.renderVisitas();
+          return;
+        }
+        if (
+          (el.id === "v-ing-persona" || el.id === "v-ing-prov") &&
+          window.CG_ACTIONS &&
+          typeof CG_ACTIONS.visitFormToggleTipoIngreso === "function"
+        ) {
+          CG_ACTIONS.visitFormToggleTipoIngreso();
+          return;
+        }
+        if (el.id === "v-veh") {
+          var vex = document.getElementById("veh-extra");
+          if (vex) vex.style.display = el.checked ? "block" : "none";
           return;
         }
         if (el.id === "dash-act-month") {
