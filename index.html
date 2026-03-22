@@ -148,6 +148,40 @@
             }
           } catch (e) {}
         },
+        /**
+         * Borra del navegador todo lo guardado por esta app en este origen:
+         * todas las claves localStorage con prefijo del producto, sessionStorage usado por Conserjería
+         * y el espejo en memoria (__cgMemLs) del modo solo-nube.
+         * No borra datos en Firestore (si usa sync, el remoto sigue intacto hasta que otro cliente escriba).
+         */
+        clearAllAppBrowserStorage: function () {
+          var prefix = LS;
+          var toRemove = [];
+          var i;
+          var k;
+          try {
+            for (i = 0; i < localStorage.length; i++) {
+              k = localStorage.key(i);
+              if (k && k.indexOf(prefix) === 0) toRemove.push(k);
+            }
+            for (i = 0; i < toRemove.length; i++) {
+              localStorage.removeItem(toRemove[i]);
+            }
+          } catch (e1) {}
+          try {
+            sessionStorage.removeItem("cg_dash_act_month");
+            sessionStorage.removeItem("cg_tab_session_v1");
+          } catch (e2) {}
+          try {
+            if (window.__cgMemLs && typeof window.__cgMemLs === "object") {
+              for (k in window.__cgMemLs) {
+                if (Object.prototype.hasOwnProperty.call(window.__cgMemLs, k)) {
+                  delete window.__cgMemLs[k];
+                }
+              }
+            }
+          } catch (e3) {}
+        },
         /** Copia valor crudo si destino vacío (migraciones legacy). */
         copyLocalRawIfMissing: function (targetFullKey, sourceFullKey) {
           if (this.localGetRaw(targetFullKey) !== null) return false;
@@ -2965,15 +2999,15 @@
       <main class="content" id="main-content" tabindex="-1"></main>
     </div>
     <div id="cg-staff-chat-root" class="cg-staff-chat-root hidden" aria-hidden="true">
-      <button type="button" id="cg-chat-toggle" class="cg-chat-fab" aria-expanded="false" aria-controls="cg-chat-panel" title="Chat comunitario del equipo" aria-label="Abrir o cerrar chat del equipo">
+      <button type="button" id="cg-chat-toggle" class="cg-chat-fab" aria-expanded="false" aria-controls="cg-chat-panel" title="Canal con administración (tiempo real)" aria-label="Abrir o cerrar canal con administración">
         <i class="fa-solid fa-comments" aria-hidden="true"></i>
         <span id="cg-chat-badge" class="cg-chat-badge hidden" aria-live="polite">0</span>
       </button>
-      <div id="cg-chat-panel" class="cg-chat-panel hidden" role="dialog" aria-modal="false" aria-label="Chat comunitario">
+      <div id="cg-chat-panel" class="cg-chat-panel hidden" role="dialog" aria-modal="false" aria-label="Canal con administración">
         <div class="cg-chat-panel-head">
           <div>
-            <strong class="cg-chat-panel-title">Chat del equipo</strong>
-            <p class="cg-chat-panel-sub">Una sola conversación para conserjes y administración</p>
+            <strong class="cg-chat-panel-title">Canal con administración</strong>
+            <p class="cg-chat-panel-sub" id="cg-chat-panel-sub"></p>
           </div>
           <div class="cg-chat-panel-actions">
             <button type="button" class="btn btn-danger btn-sm hidden" id="cg-chat-clear" title="Vaciar historial del chat (solo administrador)" aria-label="Vaciar historial del chat (solo administrador)"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
@@ -3603,8 +3637,8 @@
     }
 
     /**
-     * Une mensajes de chat por id (o huella legada) para que dos equipos puedan escribir sin borrarse mutuamente.
-     * Si el remoto es [] se respeta (vaciar historial desde admin).
+     * Une mensajes del canal conserje↔admin por id (huella legada). El documento remoto guarda el hilo completo;
+     * la UI filtra por rol (cada conserje solo ve lo suyo + admin). Si el remoto es [] se respeta (vaciar desde admin).
      */
     function __cgMergeStaffChatPull(curRaw, incomingRaw) {
       var loc = [];
@@ -11868,12 +11902,39 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function staffChatMessagesSafe() {
       return Array.isArray(G.state.staffChatMessages) ? G.state.staffChatMessages : [];
     }
+    /**
+     * Canal unilateral conserje ↔ admin: en Firestore sigue el hilo completo; cada conserje solo ve
+     * sus envíos y los mensajes del administrador (no lee a otros conserjes). El admin ve todo.
+     */
+    function staffChatMessagesForViewer() {
+      var u = G.currentUser();
+      var all = staffChatMessagesSafe();
+      if (!u) return [];
+      var sorted = all.slice().sort(function (a, b) {
+        return new Date((a && a.at) || 0) - new Date((b && b.at) || 0);
+      });
+      if (u.role === "admin") return sorted;
+      return sorted.filter(function (m) {
+        if (!m || typeof m !== "object") return false;
+        if (m.role === "admin") return true;
+        if (m.userId === u.id) return true;
+        return false;
+      });
+    }
     function staffChatUnreadCount() {
       var u = G.currentUser();
       if (!u) return 0;
       var after = staffChatGetRead(u.id);
       return staffChatMessagesSafe().filter(function (m) {
-        return m && (!after || m.at > after);
+        if (!m || typeof m !== "object") return false;
+        if (after && !(m.at > after)) return false;
+        if (u.role === "admin") {
+          if (m.userId === u.id) return false;
+          if (m.role === "conserje") return true;
+          if (!m.role && m.userId) return true;
+          return false;
+        }
+        return m.role === "admin";
       }).length;
     }
     function staffChatPanelOpen() {
@@ -11886,6 +11947,18 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var u = G.currentUser();
       if (u && u.role === "admin") btn.classList.remove("hidden");
       else btn.classList.add("hidden");
+    }
+    function staffChatSyncPanelSub() {
+      var el = document.getElementById("cg-chat-panel-sub");
+      var u = G.currentUser();
+      if (!el || !u) return;
+      if (u.role === "admin") {
+        el.textContent =
+          "Vista completa del canal: mensajes de todos los conserjes y respuestas de administración. Sincronizado en tiempo real con Firestore.";
+      } else {
+        el.textContent =
+          "Canal directo con administración: solo ve sus mensajes y los del admin; no ve mensajes de otros conserjes. Tiempo real.";
+      }
     }
     function staffChatClearAll() {
       var cuClr = G.currentUser();
@@ -11917,14 +11990,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var thread = document.getElementById("cg-chat-thread");
       if (!thread) return;
       var uid = (G.currentUser() || {}).id;
-      var list = staffChatMessagesSafe().slice().sort(function (a, b) {
-        return new Date(a.at) - new Date(b.at);
-      });
+      var cu = G.currentUser();
+      var list = staffChatMessagesForViewer();
       thread.textContent = "";
       if (!list.length) {
         var emptyP = document.createElement("p");
         emptyP.className = "cg-chat-empty";
-        emptyP.textContent = "Sin mensajes aún. Escriba abajo para iniciar la conversación del equipo.";
+        emptyP.textContent =
+          cu && cu.role === "admin"
+            ? "Sin mensajes aún. Los avisos de los conserjes aparecerán aquí en tiempo real."
+            : "Sin mensajes aún. Escriba abajo para contactar a administración; las respuestas del admin llegan al instante.";
         thread.appendChild(emptyP);
       } else {
         list.forEach(function (m) {
@@ -12033,6 +12108,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           panel.classList.remove("hidden");
           toggle.setAttribute("aria-expanded", "true");
           staffChatSyncClearButton();
+          staffChatSyncPanelSub();
           var finishOpen = function () {
             staffChatMarkRead();
             staffChatRenderThread();
@@ -12076,7 +12152,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     function staffChatStartPoll() {
       if (staffChatPollId) return;
-      var staffChatPollMs = 7000;
+      var staffChatPollMs = 4000;
       staffChatPollId = window.setInterval(function () {
         if (!G.currentUser()) return;
         var root = document.getElementById("cg-staff-chat-root");
@@ -12110,6 +12186,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (typeof G.attachStaffChatRemoteSync === "function") G.attachStaffChatRemoteSync();
         staffChatStartPoll();
         staffChatLastMsgs = "";
+        staffChatSyncPanelSub();
         staffChatRefreshFromStore();
         staffChatSyncClearButton();
       } else {
@@ -18467,7 +18544,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<textarea id=\"cfg-vp\" rows=\"5\" style=\"width:100%;font:inherit\">" +
         G.escapeHtml((Array.isArray(cfgState.visitorParkingCodes) ? cfgState.visitorParkingCodes : []).join("\n")) +
         "</textarea>" +
-        "<button type=\"button\" class=\"btn btn-primary\" style=\"margin-top:0.75rem\" data-cg-act=\"cfgVisitorParkingSave\">Guardar estacionamientos visitas</button></div></div>";
+        "<button type=\"button\" class=\"btn btn-primary\" style=\"margin-top:0.75rem\" data-cg-act=\"cfgVisitorParkingSave\">Guardar estacionamientos visitas</button></div></div>" +
+        "<div class=\"card\" style=\"margin-top:1rem;border-color:var(--danger-color)\"><div class=\"card-h\"><h3>Zona de mantenimiento</h3></div><div class=\"card-b\">" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Elimina <strong>por completo</strong> los datos de la app en <strong>este navegador</strong> (localStorage y sessionStorage del producto). Luego se crea una instalación limpia y deberá registrar de nuevo al administrador. Los datos en la nube (Firestore) <strong>no</strong> se borran desde aquí.</p>" +
+        "<button type=\"button\" class=\"btn btn-danger\" data-cg-act=\"resetSystemLocalData\"><i class=\"fa-solid fa-trash-can\"></i> Limpiar almacenamiento local y reiniciar</button></div></div>";
     }
   };
 
@@ -19032,15 +19112,52 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   A.renderBodegasTableOnly = renderBodegasTableOnly;
 
   A.resetSystemLocalData = function () {
-    if (!confirm("Se borrarán todos los datos locales y se aplicará una instalación limpia. Deberá registrar de nuevo al administrador en el inicio de sesión. ¿Continuar?")) return;
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede limpiar el almacenamiento local.", "error");
+      return;
+    }
+    if (
+      !confirm(
+        "Se borrarán todos los datos de Conserjería en este navegador (localStorage y sessionStorage de la app). " +
+          "Deberá crear de nuevo el usuario administrador al recargar. " +
+          "¿Desea continuar?"
+      )
+    ) {
+      return;
+    }
+    if (
+      !confirm(
+        "Confirmación final: esta acción no se puede deshacer en este equipo. " +
+          "Los datos en Firestore no se eliminan automáticamente. ¿Proceder?"
+      )
+    ) {
+      return;
+    }
     try {
-      G.persist.localRemove(G.LS + "session");
-    } catch (eS0) {}
-    G.persist.eachLocalKeyWithPrefix(G.LS, function (k) {
-      G.persist.localRemove(k);
-    });
+      if (typeof G.stopCloudSyncListener === "function") G.stopCloudSyncListener();
+    } catch (eSync0) {}
+    try {
+      if (typeof G.cloudSyncAbortInFlight === "function") G.cloudSyncAbortInFlight();
+    } catch (eSync1) {}
+    try {
+      if (typeof G.persist.clearAllAppBrowserStorage === "function") {
+        G.persist.clearAllAppBrowserStorage();
+      } else {
+        try {
+          G.persist.localRemove(G.LS + "session");
+        } catch (eS0) {}
+        G.persist.eachLocalKeyWithPrefix(G.LS, function (k) {
+          G.persist.localRemove(k);
+        });
+      }
+    } catch (eClear) {
+      G.toast("No se pudo completar el borrado (consola F12).", "error");
+      return;
+    }
     G.ensureInit();
     if (typeof G.runStartupLocalMigrations === "function") G.runStartupLocalMigrations();
+    G.toast("Almacenamiento limpiado. Recargando…", "success");
     location.reload();
   };
 
