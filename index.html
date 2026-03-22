@@ -2403,7 +2403,7 @@
       border-radius: 10px;
       overflow: auto;
       max-height: 300px;
-      background: #e2e8f0;
+      background: #f4f4f5;
     }
     .email-html-preview .email-html-preview-inner {
       padding: 0;
@@ -2929,6 +2929,8 @@
       unsubscribe: null,
       periodicPushTimer: null,
       pushTimers: {},
+      /** Cadena Promise: evita saturar el stream de Firestore (resource-exhausted / cola de writes). */
+      writeSerialTail: null,
       listenerRetryTimer: null,
       listenerFailures: 0,
       initGeneration: 0,
@@ -3036,31 +3038,76 @@
 
     var __CG_PUSH_KEY_MAX = 5;
     var __CG_PUSH_KEY_BASE_MS = 700;
+    /** Pausa entre escrituras sueltas al stream (ms); reduce resource-exhausted en clientes lentos o muchas claves. */
+    var __CG_PUSH_SERIAL_GAP_MS = 90;
+    /** Tamaño de lote en push masivo (Firestore max 500; lotes pequeños + pausa alivian la cola interna). */
+    var __CG_CLOUD_BATCH_SIZE = 80;
+    var __CG_CLOUD_BATCH_PAUSE_MS = 200;
+
+    function __cgPushSerialDelay() {
+      return new Promise(function (r) {
+        setTimeout(r, __CG_PUSH_SERIAL_GAP_MS);
+      });
+    }
+
+    /**
+     * Encola fn() tras la escritura anterior; pausa breve entre operaciones para no llenar la cola del SDK.
+     * Devuelve la Promise del trabajo (fallos no detienen la cola).
+     */
+    function __cgSerialCloudWrite(fn) {
+      if (!CG_SYNC_STATE.writeSerialTail) CG_SYNC_STATE.writeSerialTail = Promise.resolve();
+      var userP = CG_SYNC_STATE.writeSerialTail.then(function () {
+        return fn();
+      });
+      CG_SYNC_STATE.writeSerialTail = userP
+        .then(
+          function () {
+            return __cgPushSerialDelay();
+          },
+          function (e) {
+            return __cgPushSerialDelay().then(function () {
+              throw e;
+            });
+          }
+        )
+        .catch(function () {
+          return Promise.resolve();
+        });
+      return userP;
+    }
 
     function __cgCloudPushKeyNow(shortKey) {
       if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB || !__cgFirestoreFieldValue()) return;
-      var full = LS + shortKey;
-      var raw = P.localGetRaw(full);
-      if (raw === null) return;
+      __cgSerialCloudWrite(function () {
+        var full = LS + shortKey;
 
-      function runAttempt(attemptIdx) {
-        __cgCloudPushSingleDoc(shortKey, raw)
-          .then(function () {
-            if (attemptIdx > 0) __cgSyncLog("info", "push_key_ok_after_retry", shortKey);
-          })
-          .catch(function (err) {
-            if (attemptIdx >= __CG_PUSH_KEY_MAX || !__cgIsRetriableFirestoreError(err)) {
-              __cgSyncLog("warn", "push_key_failed", shortKey + " " + (err && err.code ? err.code : err));
-              return;
+        function runAttempt(attemptIdx) {
+          var raw = P.localGetRaw(full);
+          if (raw === null) return Promise.resolve();
+          return __cgCloudPushSingleDoc(shortKey, raw).then(
+            function () {
+              if (attemptIdx > 0) __cgSyncLog("info", "push_key_ok_after_retry", shortKey);
+            },
+            function (err) {
+              if (attemptIdx >= __CG_PUSH_KEY_MAX || !__cgIsRetriableFirestoreError(err)) {
+                __cgSyncLog("warn", "push_key_failed", shortKey + " " + (err && err.code ? err.code : err));
+                return Promise.resolve();
+              }
+              var ms = Math.min(25000, __CG_PUSH_KEY_BASE_MS * Math.pow(2, attemptIdx));
+              if (err && err.code === "resource-exhausted") {
+                ms = Math.max(ms, 4000);
+              }
+              __cgSyncLog("info", "push_key_retry", shortKey + " " + (attemptIdx + 1) + "/" + __CG_PUSH_KEY_MAX + " +" + ms + "ms");
+              return new Promise(function (r) {
+                setTimeout(r, ms);
+              }).then(function () {
+                return runAttempt(attemptIdx + 1);
+              });
             }
-            var ms = Math.min(20000, __CG_PUSH_KEY_BASE_MS * Math.pow(2, attemptIdx));
-            __cgSyncLog("info", "push_key_retry", shortKey + " " + (attemptIdx + 1) + "/" + __CG_PUSH_KEY_MAX + " +" + ms + "ms");
-            setTimeout(function () {
-              runAttempt(attemptIdx + 1);
-            }, ms);
-          });
-      }
-      runAttempt(0);
+          );
+        }
+        return runAttempt(0);
+      });
     }
 
     /**
@@ -3074,22 +3121,33 @@
             resolve({ ok: true, skipped: true, reason: "no_cloud" });
             return;
           }
-          var full = LS + shortKey;
-          var raw = P.localGetRaw(full);
-          if (raw === null) {
-            resolve({ ok: false, reason: "missing_local" });
-            return;
-          }
-          __cgRetryPromise("pushLsKey:" + shortKey, function () {
-            return __cgCloudPushSingleDoc(shortKey, raw);
-          }, 3, 600)
-            .then(function () {
-              resolve({ ok: true, skipped: false });
-            })
-            .catch(function (err) {
-              __cgSyncLog("warn", "push_ls_key", shortKey + " " + (err && err.code ? err.code : err));
-              resolve({ ok: false, reason: "firestore_error", err: err });
-            });
+          __cgSerialCloudWrite(function () {
+            var full = LS + shortKey;
+            if (P.localGetRaw(full) === null) {
+              resolve({ ok: false, reason: "missing_local" });
+              return Promise.resolve();
+            }
+            return __cgRetryPromise(
+              "pushLsKey:" + shortKey,
+              function () {
+                var r = P.localGetRaw(full);
+                if (r === null) return Promise.reject({ code: "missing_local" });
+                return __cgCloudPushSingleDoc(shortKey, r);
+              },
+              4,
+              800
+            )
+              .then(function () {
+                resolve({ ok: true, skipped: false });
+              })
+              .catch(function (err) {
+                __cgSyncLog("warn", "push_ls_key", shortKey + " " + (err && err.code ? err.code : err));
+                resolve({ ok: false, reason: "firestore_error", err: err });
+              });
+          }).catch(function (ePush) {
+            __cgSyncLog("warn", "push_ls_key_exception", ePush);
+            resolve({ ok: false, reason: "exception", err: ePush });
+          });
         } catch (ePush) {
           __cgSyncLog("warn", "push_ls_key_exception", ePush);
           resolve({ ok: false, reason: "exception", err: ePush });
@@ -3307,37 +3365,46 @@
     function __cgCloudPushAllKeysInner() {
       var col = __cgCloudLsCol();
       if (!col) return Promise.resolve();
-      var db = window.firebaseDB;
-      var ops = [];
-      P.eachLocalKeyWithPrefix(LS, function (fk) {
-        var sk = fk.slice(LS.length);
-        var raw = P.localGetRaw(fk);
-        if (raw === null) return;
-        ops.push({ sk: sk, raw: raw });
-      });
-      function runChunk(start) {
-        if (start >= ops.length) return Promise.resolve();
-        var batch = db.batch();
-        var end = Math.min(start + 450, ops.length);
-        var j;
-        var FVb = __cgFirestoreFieldValue();
-        for (j = start; j < end; j++) {
-          var o = ops[j];
-          batch.set(
-            col.doc(__cgCloudSanitizeDocId(o.sk)),
-            {
-              key: o.sk,
-              value: o.raw,
-              updatedAt: FVb.serverTimestamp()
-            },
-            { merge: true }
-          );
-        }
-        return batch.commit().then(function () {
-          return runChunk(end);
+      return __cgSerialCloudWrite(function () {
+        var db = window.firebaseDB;
+        var ops = [];
+        P.eachLocalKeyWithPrefix(LS, function (fk) {
+          var sk = fk.slice(LS.length);
+          var raw = P.localGetRaw(fk);
+          if (raw === null) return;
+          ops.push({ sk: sk, raw: raw });
         });
-      }
-      return runChunk(0);
+        function runChunk(start) {
+          if (start >= ops.length) return Promise.resolve();
+          var batch = db.batch();
+          var end = Math.min(start + __CG_CLOUD_BATCH_SIZE, ops.length);
+          var j;
+          var FVb = __cgFirestoreFieldValue();
+          for (j = start; j < end; j++) {
+            var o = ops[j];
+            batch.set(
+              col.doc(__cgCloudSanitizeDocId(o.sk)),
+              {
+                key: o.sk,
+                value: o.raw,
+                updatedAt: FVb.serverTimestamp()
+              },
+              { merge: true }
+            );
+          }
+          return batch
+            .commit()
+            .then(function () {
+              return new Promise(function (r) {
+                setTimeout(r, __CG_CLOUD_BATCH_PAUSE_MS);
+              });
+            })
+            .then(function () {
+              return runChunk(end);
+            });
+        }
+        return runChunk(0);
+      });
     }
 
     function cloudPushAllKeysOnce() {
@@ -5258,6 +5325,7 @@
                     <input type="text" id="buildingMapFilter" class="form-input" placeholder="🔍 Filtrar por número, uso, residente, estacionamiento, bodega..." style="width: 100%; max-width: 400px; padding: 0.5rem 0.75rem; font-size: 0.875rem;">
                 </div>
                 <div class="building-map-edificio" id="buildingMap"></div>
+                <div id="buildingMapInlineDetail" class="cg-building-map-ficha-slot" hidden></div>
                 <div class="cg-dept-admin-only" style="margin-top: 15px; display: flex; justify-content: flex-end;">
                     <button type="button" class="btn btn-primary" data-cg-win="downloadPdfUnidadesConArrendatario" title="Solo unidades con propietario AssetPlan y arrendatarios agregados en las últimas 2 semanas" style="font-size: 0.8rem; padding: 6px 12px;">
                         📄 PDF AssetPlan — Arrendatarios 2 sem.
@@ -6400,6 +6468,37 @@
         #building .leyenda-mapa-edificio .leyenda-item span { font-weight: 500; color: #0f172a; }
         #building .leyenda-mapa-edificio .leyenda-item { display: flex; align-items: center; gap: 8px; }
         #building .leyenda-mapa-edificio .leyenda-cuadro { width: 14px; height: 14px; border-radius: 3px; }
+
+        #buildingMapInlineDetail { margin-top: 14px; }
+        #buildingMapInlineDetail[hidden] { display: none !important; }
+        .cg-building-map-ficha-card {
+            background: var(--card-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 12px 14px 14px;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+            max-height: min(72vh, 620px);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .cg-building-map-ficha-toolbar {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .cg-building-map-ficha-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            font-size: 0.875rem;
+        }
 
         .data-table .type-badge {
             display: inline-block;
@@ -9550,8 +9649,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
         // ===== EDITAR RESIDENTE DESDE FICHA DEL MAPA =====
         function closeMapModalAndEditResident(unitId, residentIndex) {
-            const modal = document.querySelector('.modal');
-            if (modal) modal.remove();
+            cgCloseBuildingUnitFichaOverlay();
             editUnit(unitId);
             setTimeout(() => {
                 const list = document.getElementById('residentsList');
@@ -9565,10 +9663,19 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             }, 150);
         }
 
-        // ===== MODAL DE DETALLE =====
+        function cgCloseBuildingUnitFichaOverlay() {
+            var slot = document.getElementById("buildingMapInlineDetail");
+            if (slot && !slot.hidden) {
+                slot.innerHTML = "";
+                slot.hidden = true;
+                return;
+            }
+            var m = document.querySelector(".modal.cg-building-unit-ficha-modal");
+            if (m) m.remove();
+        }
+
+        // ===== Ficha unidad: en el mismo panel del mapa si existe #buildingMapInlineDetail; si no, modal pantalla completa =====
         function showUnitDetailModal(unit) {
-            const modal = document.createElement('div');
-            modal.className = 'modal';
             let residentsHtml = '';
             if (unit.residents && unit.residents.length) {
                 residentsHtml = `<ul style="text-align:left; margin:2px 0 0 0; padding-left:12px; list-style: none;">` +
@@ -9640,10 +9747,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 storageList = [unit.storageNumber];
                 storageInfo = unit.storageNumber;
             }
-            
-            modal.innerHTML = `
-                <div class="modal-content" style="max-height: 90vh; overflow-y: auto; font-size: 0.875rem;">
-                    <h3 style="color: var(--accent-color); margin-bottom: 6px; font-size: 1.05rem;">Unidad ${unit.unitNumber}</h3>
+
+            var inlineSlot = document.getElementById("buildingMapInlineDetail");
+            var useInline = !!inlineSlot;
+
+            var detailCore = `
+                    <h3 id="cg-building-ficha-title" style="color: var(--accent-color); margin-bottom: 6px; font-size: 1.05rem;">Unidad ${unit.unitNumber}</h3>
                     
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px; margin-bottom: 6px;">
                         <div style="padding: 5px 6px; background: var(--card-color); border-radius: 6px; border: 1px solid var(--border-color);">
@@ -9652,7 +9761,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                         </div>
                         <div style="padding: 5px 6px; background: var(--card-color); border-radius: 6px; border: 1px solid var(--border-color);">
                             <div style="color: var(--secondary-text); font-size: 0.7rem; margin-bottom: 1px;">Residentes</div>
-                            <div style="color: var(--primary-text); font-weight: 600; font-size: 0.82rem;">${unit.residents.length}</div>
+                            <div style="color: var(--primary-text); font-weight: 600; font-size: 0.82rem;">${(unit.residents || []).length}</div>
                         </div>
                     </div>
                     
@@ -9724,20 +9833,48 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                     <button type="button" class="btn btn-primary" style="margin-top: 10px; width: 100%; padding: 6px; font-size: 0.8rem;" data-cg-win="downloadUnitModuleFichaHtml" data-cg-id="${unit.id || ''}" title="Imprimir la ficha del módulo (unidad y residentes)">
                         🖨️ Imprimir
                     </button>
-                    <button type="button" class="btn btn-secondary" style="margin-top: 8px; width: 100%; padding: 6px; font-size: 0.8rem;" data-cg-close-dept-modal>Cerrar</button>
-                </div>
+                    <button type="button" class="btn btn-secondary" style="margin-top: 8px; width: 100%; padding: 6px; font-size: 0.8rem;" data-cg-close-dept-modal>${useInline ? "Cerrar ficha" : "Cerrar"}</button>
             `;
-            document.body.appendChild(modal);
-            modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+            var overlayModal = null;
+            var rootEl;
+            if (useInline) {
+                inlineSlot.hidden = false;
+                inlineSlot.innerHTML =
+                    '<div class="cg-building-map-ficha-card" role="region" aria-labelledby="cg-building-ficha-title">' +
+                    '<div class="cg-building-map-ficha-toolbar">' +
+                    '<button type="button" class="btn btn-sm btn-secondary" data-cg-close-dept-modal>← Volver al mapa</button>' +
+                    "</div>" +
+                    '<div class="cg-building-map-ficha-body">' +
+                    detailCore +
+                    "</div></div>";
+                rootEl = inlineSlot;
+                requestAnimationFrame(function () {
+                    try {
+                        inlineSlot.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                    } catch (eScroll) {}
+                });
+            } else {
+                overlayModal = document.createElement("div");
+                overlayModal.className = "modal cg-building-unit-ficha-modal";
+                overlayModal.innerHTML =
+                    '<div class="modal-content" style="max-height: 90vh; overflow-y: auto; font-size: 0.875rem;">' +
+                    detailCore +
+                    "</div>";
+                document.body.appendChild(overlayModal);
+                overlayModal.onclick = function (e) {
+                    if (e.target === overlayModal) overlayModal.remove();
+                };
+                rootEl = overlayModal;
+            }
             // Lógica para editar/agregar/eliminar nota
-            const noteSectionDiv = modal.querySelector('#unitNoteSection');
+            const noteSectionDiv = rootEl.querySelector("#unitNoteSection");
             if (noteSectionDiv) {
                 const editBtn = noteSectionDiv.querySelector('#editNoteBtn');
                 const deleteBtn = noteSectionDiv.querySelector('#deleteNoteBtn');
                 const addBtn = noteSectionDiv.querySelector('#addNoteBtn');
                 if (editBtn) {
                     editBtn.onclick = () => {
-                        modal.remove();
+                        cgCloseBuildingUnitFichaOverlay();
                         showNoteModal(unit, true);
                     };
                 }
@@ -9781,7 +9918,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                                         await saveUnitNoteToCloud(unit);
                                         updateAllUI();
                                         confirmModal.remove();
-                                        modal.remove();
+                                        cgCloseBuildingUnitFichaOverlay();
                                         showUnitDetailModal(unit);
                                         showNotification('success', '✅ Nota eliminada de la nube');
                                     } catch (error) {
@@ -9803,7 +9940,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 }
                 if (addBtn) {
                     addBtn.onclick = () => {
-                        modal.remove();
+                        cgCloseBuildingUnitFichaOverlay();
                         showNoteModal(unit, false);
                     };
                 }
@@ -14605,11 +14742,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return G.escapeHtml(s == null ? "" : String(s));
   }
 
-  /** Plantilla correo: marca, logo, cabecera y pie refinados (estilos en línea para clientes). */
+  /** Plantilla correo: minimal (sin logo), tipografía sistema, acento discreto (inline para clientes). */
   function buildEmailShell(opts) {
     opts = opts || {};
     var C = typeof G.getEmailShellThemeColors === "function" ? G.getEmailShellThemeColors() : {};
-    var ribbon = opts.ribbonColor || C.ribbon || "#2563eb";
+    var accent = opts.ribbonColor || C.ribbon || "#2563eb";
     var brandLine = emailHtmlEscape(opts.brandLine != null ? opts.brandLine : G.APP_BRAND_NAME);
     var headTitle = emailHtmlEscape(opts.title != null ? opts.title : G.APP_BRAND_NAME);
     var subtitle = opts.subtitleHtml || "";
@@ -14618,134 +14755,119 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       opts.footer != null
         ? opts.footer
         : "Mensaje generado desde " + G.APP_BRAND_NAME + ".";
-    var logoUrl = G.MANUFACTURER_LOGO_URL || "";
-    var headG1 = C.headG1 || "#0c1e3d";
-    var headG2 = C.headG2 || "#1e3a5f";
-    var headG3 = C.headG3 || "#2563eb";
-    var outerBg =
-      "linear-gradient(180deg," +
-      (C.outerBg1 || "#e8eef5") +
-      " 0%," +
-      (C.outerBg2 || "#f1f5f9") +
-      " 48%," +
-      (C.outerBg3 || "#f8fafc") +
-      " 100%)";
-    var cardBorder = C.cardBorder || "#dce3ec";
-    var logoRowBg = C.logoRowBg || "#ffffff";
-    var logoRowBorder = C.logoRowBorder || "#e8edf4";
-    var innerText = C.innerText || "#1e293b";
-    var footerBg = C.footerBg || "#f8fafc";
-    var footerBorder = C.footerBorder || "#e2e8f0";
-    var footerMuted = C.footerMuted || "#475569";
-    var footerText = C.footerText || "#334155";
-    var accentTop =
-      '<tr><td style="height:4px;line-height:0;font-size:0;background:' +
-      ribbon +
-      ';">&nbsp;</td></tr>';
-    var logoRow = logoUrl
-      ? '<tr><td align="center" style="padding:12px 28px 10px 28px;line-height:0;background:' +
-        logoRowBg +
-        ";border-bottom:1px solid " +
-        logoRowBorder +
+    var cardBg = "#ffffff";
+    var cardBorder = "#e7e7ea";
+    var innerText = C.innerText || "#3f3f46";
+    var muted = "#71717a";
+    var titleCol = "#18181b";
+    var outerBg = "#f4f4f5";
+    var ff = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+    var ribbonTxt = emailHtmlEscape(opts.ribbonText || "");
+    var tagRow = ribbonTxt
+      ? '<tr><td style="padding:0 24px 14px 24px;background:' +
+        cardBg +
+        ';"><span style="display:inline-block;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:0.02em;color:' +
+        accent +
+        ";background:#fafafa;border:1px solid " +
+        cardBorder +
+        ";font-family:" +
+        ff +
         ';">' +
-        '<img src="' +
-        logoUrl.replace(/"/g, "") +
-        '" width="200" alt="" border="0" style="display:block;max-width:200px;width:100%;height:auto;margin:0 auto;" />' +
-        "</td></tr>"
+        ribbonTxt +
+        "</span></td></tr>"
       : "";
     return (
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:' +
       outerBg +
-      ';margin:0;">' +
-      '<tr><td align="center" style="padding:24px 14px;">' +
-      '<table role="presentation" width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;background:' +
-      logoRowBg +
-      ";border-radius:16px;overflow:hidden;border:1px solid " +
+      ';margin:0;padding:20px 12px;">' +
+      '<tr><td align="center">' +
+      '<table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;background:' +
+      cardBg +
+      ";border:1px solid " +
       cardBorder +
-      ';box-shadow:0 8px 32px rgba(12,30,61,0.1),0 2px 8px rgba(12,30,61,0.04);">' +
-      accentTop +
-      logoRow +
-      '<tr><td style="background:linear-gradient(145deg,' +
-      headG1 +
-      " 0%," +
-      headG2 +
-      " 55%," +
-      headG3 +
-      ' 100%);padding:26px 28px 24px 28px;">' +
-      '<div style="font-family:\'Nunito\',-apple-system,BlinkMacSystemFont,\'Segoe UI\',Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:rgba(255,255,255,0.9);line-height:1.4;">' +
+      ';border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06);">' +
+      '<tr><td style="height:3px;line-height:0;font-size:0;background:' +
+      accent +
+      ';">&nbsp;</td></tr>' +
+      '<tr><td style="padding:20px 24px 2px 24px;background:' +
+      cardBg +
+      ';">' +
+      '<div style="font-family:' +
+      ff +
+      ";font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:" +
+      muted +
+      ';line-height:1.4;">' +
       brandLine +
       "</div>" +
-      '<div style="font-family:\'Nunito\',-apple-system,BlinkMacSystemFont,\'Segoe UI\',Arial,sans-serif;font-size:24px;font-weight:700;color:#ffffff;margin-top:10px;line-height:1.2;letter-spacing:-0.02em;">' +
+      '<h1 style="font-family:' +
+      ff +
+      ";font-size:20px;font-weight:600;color:" +
+      titleCol +
+      ';margin:8px 0 0 0;line-height:1.3;">' +
       headTitle +
-      "</div>" +
+      "</h1>" +
       (subtitle
-        ? '<div style="font-family:\'Nunito\',-apple-system,BlinkMacSystemFont,\'Segoe UI\',Arial,sans-serif;font-size:15px;color:rgba(255,255,255,0.94);margin-top:12px;line-height:1.5;border-top:1px solid rgba(255,255,255,0.15);padding-top:12px;">' +
+        ? '<div style="font-family:' +
+          ff +
+          ";font-size:14px;color:" +
+          muted +
+          ';margin-top:8px;line-height:1.45;">' +
           subtitle +
           "</div>"
         : "") +
       "</td></tr>" +
-      '<tr><td align="center" style="padding:0 28px;">' +
-      '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:-16px;"><tr><td style="padding:10px 20px;border-radius:999px;font-family:\'Nunito\',-apple-system,BlinkMacSystemFont,\'Segoe UI\',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#ffffff;background:' +
-      ribbon +
-      ";box-shadow:0 4px 12px rgba(0,0,0,0.12);\">" +
-      emailHtmlEscape(opts.ribbonText || "") +
-      "</td></tr></table></td></tr>" +
-      '<tr><td style="padding:26px 28px 30px 28px;font-family:\'Nunito\',-apple-system,BlinkMacSystemFont,\'Segoe UI\',Arial,sans-serif;font-size:15px;line-height:1.6;color:' +
+      tagRow +
+      '<tr><td style="padding:18px 24px 22px 24px;font-family:' +
+      ff +
+      ";font-size:15px;line-height:1.55;color:" +
       innerText +
       ';">' +
       inner +
       "</td></tr>" +
-      '<tr><td style="padding:0;">' +
-      '<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:' +
-      footerBg +
-      ";border-top:1px solid " +
-      footerBorder +
-      ';">' +
-      '<tr><td style="padding:18px 28px 20px 28px;font-family:\'Nunito\',-apple-system,BlinkMacSystemFont,\'Segoe UI\',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:' +
-      footerMuted +
-      ';">' +
-      emailHtmlEscape(G.APP_BRAND_NAME) +
-      "</td></tr>" +
-      '<tr><td style="padding:0 28px 22px 28px;font-family:\'Nunito\',-apple-system,BlinkMacSystemFont,\'Segoe UI\',Arial,sans-serif;font-size:13px;color:' +
-      footerText +
-      ';line-height:1.55;border-top:none;">' +
+      '<tr><td style="padding:14px 24px 16px 24px;border-top:1px solid #f4f4f5;background:' +
+      cardBg +
+      ";font-family:" +
+      ff +
+      ";font-size:12px;color:" +
+      muted +
+      ';line-height:1.5;">' +
       emailHtmlEscape(footer) +
-      "</td></tr></table></td></tr></table></td></tr></table>"
+      "</td></tr></table></td></tr></table>"
     );
   }
 
   /** Fila de detalle en tablas de correo (última sin borde inferior). */
   function emailDetailRow(label, val, isLast) {
     var C = typeof G.getEmailShellThemeColors === "function" ? G.getEmailShellThemeColors() : {};
-    var labCol = C.footerMuted || "#475569";
-    var valCol = C.innerText || "#0f172a";
-    var bb = isLast ? "" : "border-bottom:1px solid #eef2f7;";
+    var labCol = C.footerMuted || "#71717a";
+    var valCol = C.innerText || "#18181b";
+    var bb = isLast ? "" : "border-bottom:1px solid #f4f4f5;";
     return (
-      '<tr><td style="padding:16px 22px;' +
+      '<tr><td style="padding:12px 18px;' +
       bb +
       'background:#ffffff;">' +
-      '<span style="display:block;font-size:10px;font-weight:700;color:' +
+      '<span style="display:block;font-size:10px;font-weight:600;color:' +
       labCol +
-      ';text-transform:uppercase;letter-spacing:0.09em;font-family:Arial,sans-serif;">' +
+      ';text-transform:uppercase;letter-spacing:0.06em;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;">' +
       label +
-      '</span><span style="display:block;margin-top:8px;font-size:16px;color:' +
+      '</span><span style="display:block;margin-top:6px;font-size:15px;color:' +
       valCol +
-      ';font-weight:600;line-height:1.4;font-family:Arial,sans-serif;">' +
+      ';font-weight:600;line-height:1.4;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;">' +
       emailHtmlEscape(val) +
       "</span></td></tr>"
     );
   }
 
-  function emailDetailTableOpen(headerTitle, headerBg) {
-    if (!headerBg && typeof G.getEmailShellThemeColors === "function") {
-      headerBg = G.getEmailShellThemeColors().headG1;
-    }
-    headerBg = headerBg || "#0c1e3d";
+  function emailDetailTableOpen(headerTitle, accentColor) {
+    var acc =
+      accentColor ||
+      (typeof G.getEmailShellThemeColors === "function" ? G.getEmailShellThemeColors().ribbon : "") ||
+      "#2563eb";
     return (
-      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;border-collapse:separate;box-shadow:0 4px 16px rgba(12,30,61,0.06);">' +
-      '<tr><td style="padding:14px 22px;background:' +
-      headerBg +
-      ';color:#ffffff;font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;">' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e7e7ea;border-radius:8px;overflow:hidden;border-collapse:separate;">' +
+      '<tr><td style="padding:10px 18px;background:#fafafa;color:#18181b;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;border-bottom:1px solid #e7e7ea;border-left:3px solid ' +
+      acc +
+      ';">' +
       emailHtmlEscape(headerTitle) +
       "</td></tr>"
     );
@@ -14760,8 +14882,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var accRibbon = C.ribbon || "#2563eb";
     var accDark = C.accentDark || "#1d4ed8";
     var headDark = C.headG1 || "#0c1e3d";
-    var tintBg = C.blue100 || "#eff6ff";
-    var tintBorder = C.blue400 || "#93c5fd";
     var dep = G.deptById(e.deptId);
     var depto = dep ? dep.number : "—";
     var resName = (e.destinatarioNombre && String(e.destinatarioNombre).trim()) || G.deptResidentDisplayName(e.deptId);
@@ -14800,22 +14920,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       })
       .join("");
     var inner =
-      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;border-radius:12px;background:' +
-      tintBg +
-      ";border:1px solid " +
-      tintBorder +
-      ';overflow:hidden;">' +
-      '<tr><td style="padding:18px 22px;border-left:4px solid ' +
-      accRibbon +
-      ';">' +
-      '<p style="margin:0;font-size:18px;font-weight:700;color:' +
+      "<p style=\"margin:0 0 16px 0;font-size:17px;font-weight:600;color:" +
       headDark +
-      ';line-height:1.35;font-family:Arial,sans-serif;">' +
+      ";line-height:1.35;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;border-left:3px solid " +
+      accRibbon +
+      ";padding-left:14px;\">" +
       emailHtmlEscape(saludo) +
-      "</p></td></tr></table>" +
-      '<p style="margin:0 0 26px;color:' +
-      (C.footerText || "#334155") +
-      ';font-size:15px;line-height:1.65;font-family:Arial,sans-serif;">' +
+      "</p>" +
+      "<p style=\"margin:0 0 22px;color:" +
+      (C.footerMuted || "#52525b") +
+      ";font-size:15px;line-height:1.6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;\">" +
       emailHtmlEscape(intro) +
       "</p>" +
       emailDetailTableOpen(detailHeaderTitle, detailHeaderBg) +
@@ -14825,7 +14939,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       title: kind === "llegada" ? "Aviso de encomienda" : "Confirmación de retiro",
       brandLine: G.APP_BRAND_NAME,
       subtitleHtml:
-        "Unidad <strong style=\"color:#fff;\">" +
+        "Unidad <strong style=\"color:#18181b;\">" +
         emailHtmlEscape(depto) +
         "</strong>" +
         (resName && resName !== "—" ? " · " + emailHtmlEscape(resName) : ""),
@@ -14845,7 +14959,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var resName = G.deptResidentDisplayName(v.deptId);
     var pv = (G.state.proveedores || []).find(function (p) { return p.id === v.proveedorId; });
     var sub =
-      "Depto <strong style=\"color:#fff;\">" +
+      "Depto <strong style=\"color:#18181b;\">" +
       emailHtmlEscape(depto) +
       "</strong>" +
       (resName && resName !== "—" ? " · " + emailHtmlEscape(resName) : "");
@@ -14880,27 +14994,20 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       })
       .join("");
     var avisoMultaHtml = excede5h
-      ? '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px 0;border-radius:12px;background:#fef2f2;border:1px solid #fecaca;overflow:hidden;">' +
-        '<tr><td style="padding:14px 20px;border-left:4px solid #dc2626;">' +
-        '<p style="margin:0;font-size:14px;color:#991b1b;line-height:1.55;font-family:Arial,sans-serif;"><strong>Exceso de tiempo (≥ 5 h).</strong> Tras 15 minutos de gracia procede la notificación de multa al residente y el parte para administración. Adjunte o reenvíe según normativa del edificio.</p></td></tr></table>'
+      ? '<div style="margin:0 0 14px 0;padding:12px 16px;border-radius:8px;background:#fef2f2;border:1px solid #fecdd3;border-left:3px solid #dc2626;">' +
+        '<p style="margin:0;font-size:14px;color:#991b1b;line-height:1.5;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;"><strong>Exceso de tiempo (≥ 5 h).</strong> Tras 15 minutos de gracia procede la notificación de multa al residente y el parte para administración. Adjunte o reenvíe según normativa del edificio.</p></div>'
       : "";
     var inner =
       avisoMultaHtml +
-      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;border-radius:12px;background:' +
-      (C.outerBg3 || "#f8fafc") +
-      ";border:1px solid " +
-      (C.footerBorder || "#e2e8f0") +
-      ';overflow:hidden;">' +
-      '<tr><td style="padding:16px 22px;border-left:4px solid ' +
+      '<p style="margin:0 0 20px 0;padding:0 0 0 14px;border-left:3px solid ' +
       headMid +
-      ';">' +
-      '<p style="margin:0;font-size:15px;color:' +
-      (C.innerText || "#1e293b") +
-      ';line-height:1.6;font-family:Arial,sans-serif;">Parte de visita vehicular emitido desde <strong style="color:' +
+      ";font-size:15px;color:" +
+      (C.innerText || "#3f3f46") +
+      ";line-height:1.55;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;\">Parte de visita vehicular emitido desde <strong style=\"color:" +
       headDark +
       ';">' +
       emailHtmlEscape(G.APP_BRAND_NAME) +
-      "</strong>. Conserve este registro para su trazabilidad.</p></td></tr></table>" +
+      "</strong>. Conserve este registro para su trazabilidad.</p>" +
       emailDetailTableOpen("Datos del registro", headDark) +
       parteTableBody +
       emailDetailTableClose();
@@ -18037,6 +18144,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var closeDept = t.closest("[data-cg-close-dept-modal]");
       if (closeDept) {
         e.preventDefault();
+        var inlineFicha = closeDept.closest("#buildingMapInlineDetail");
+        if (inlineFicha) {
+          inlineFicha.innerHTML = "";
+          inlineFicha.hidden = true;
+          return;
+        }
         var m = closeDept.closest(".modal");
         if (m) m.remove();
         return;
