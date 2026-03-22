@@ -2738,8 +2738,8 @@
     })();
   </script>
   <!-- Firebase compat: mismo efecto que import/initializeApp, sin módulos ES. Restrinja la API key en Firebase Console (referrers). -->
-  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore-compat.js"></script>
   <!-- Inicialización cliente Firebase (Firestore); flags CG_CLOUD_* consumidos en PART 1 -->
   <script>
     (function () {
@@ -3048,6 +3048,8 @@
       lastInitResult: null,
       /** Una sola promesa de pull global: dos col.get() concurrentes rompen el SDK 11.x ("Unexpected state"). */
       pullAllInFlight: null,
+      /** Evita registrar onSnapshot en el mismo tick que unsubscribe (otra fuente de "Unexpected state" en 11.x). */
+      listenerAttachGen: 0,
       /** Durante initCloudSync no encolar escrituras sueltas (evita carrera con pull/listener). */
       syncInitActive: false,
       pendingPushAfterInit: {}
@@ -3479,29 +3481,43 @@
       stopCloudSyncListener();
       var col = __cgCloudLsCol();
       if (!col) return;
-      CG_SYNC_STATE.unsubscribe = col.onSnapshot(
-        function (snapshot) {
-          CG_SYNC_STATE.listenerFailures = 0;
-          snapshot.docChanges().forEach(function (ch) {
-            if (ch.type === "removed") return;
-            __cgBeginRemoteApply();
-            try {
-              applyRemoteLsDoc(ch.doc);
-            } finally {
-              __cgEndRemoteApply();
+      if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return;
+      CG_SYNC_STATE.listenerAttachGen = (CG_SYNC_STATE.listenerAttachGen || 0) + 1;
+      var attachGen = CG_SYNC_STATE.listenerAttachGen;
+      setTimeout(function () {
+        if (attachGen !== CG_SYNC_STATE.listenerAttachGen) return;
+        if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return;
+        var colLive = __cgCloudLsCol();
+        if (!colLive) return;
+        try {
+          CG_SYNC_STATE.unsubscribe = colLive.onSnapshot(
+            function (snapshot) {
+              CG_SYNC_STATE.listenerFailures = 0;
+              snapshot.docChanges().forEach(function (ch) {
+                if (ch.type === "removed") return;
+                __cgBeginRemoteApply();
+                try {
+                  applyRemoteLsDoc(ch.doc);
+                } finally {
+                  __cgEndRemoteApply();
+                }
+              });
+            },
+            function (err) {
+              CG_SYNC_STATE.listenerFailures++;
+              __cgSyncLog("warn", "listener_error", err);
+              try {
+                if (typeof CG_SYNC_STATE.unsubscribe === "function") CG_SYNC_STATE.unsubscribe();
+              } catch (eD) {}
+              CG_SYNC_STATE.unsubscribe = null;
+              __cgScheduleListenerRestart();
             }
-          });
-        },
-        function (err) {
-          CG_SYNC_STATE.listenerFailures++;
-          __cgSyncLog("warn", "listener_error", err);
-          try {
-            if (typeof CG_SYNC_STATE.unsubscribe === "function") CG_SYNC_STATE.unsubscribe();
-          } catch (eD) {}
-          CG_SYNC_STATE.unsubscribe = null;
+          );
+        } catch (eSnap) {
+          __cgSyncLog("warn", "listener_attach_exception", eSnap);
           __cgScheduleListenerRestart();
         }
-      );
+      }, 0);
     }
 
     function __cgCloudPullAllInner() {
@@ -3622,7 +3638,9 @@
         } catch (eL) {
           __cgSyncLog("warn", "listener_start", eL);
         }
-        result.listenerStarted = typeof CG_SYNC_STATE.unsubscribe === "function";
+        /* onSnapshot se registra en setTimeout(0) dentro de startCloudSyncListener */
+        result.listenerStarted =
+          !!(CG_CLOUD_SYNC_ENABLED && window.firebaseDB && __cgCloudLsCol());
         result.ok = true;
         CG_SYNC_STATE.lastInitResult = result;
         try {
