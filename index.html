@@ -3425,39 +3425,29 @@
         return result;
       }
 
-      return cloudPushAllKeysOnce()
-        .then(function () {
-          if (alive()) result.phases.push1 = { ok: true };
-        })
-        .catch(function (e1) {
-          if (!alive()) return;
-          result.phases.push1 = { ok: false, err: e1 };
-          result.partial = true;
-          __cgSyncLog("warn", "phase_push1", e1);
-        })
-        .then(function () {
-          return alive() ? cloudPullAllOnce() : Promise.resolve();
-        })
+      /* Pull primero: un equipo nuevo tiene semilla local (demo); si empujáramos antes, pisaríamos Firestore.
+       * Luego un push sube el estado ya fusionado con la nube (claves solo locales, etc.). */
+      return cloudPullAllOnce()
         .then(function () {
           if (alive()) result.phases.pull = { ok: true };
         })
-        .catch(function (e2) {
+        .catch(function (ePull) {
           if (!alive()) return;
-          result.phases.pull = { ok: false, err: e2 };
+          result.phases.pull = { ok: false, err: ePull };
           result.partial = true;
-          __cgSyncLog("warn", "phase_pull", e2);
+          __cgSyncLog("warn", "phase_pull", ePull);
         })
         .then(function () {
           return alive() ? cloudPushAllKeysOnce() : Promise.resolve();
         })
         .then(function () {
-          if (alive()) result.phases.push2 = { ok: true };
+          if (alive()) result.phases.push = { ok: true };
         })
-        .catch(function (e3) {
+        .catch(function (ePush) {
           if (!alive()) return;
-          result.phases.push2 = { ok: false, err: e3 };
+          result.phases.push = { ok: false, err: ePush };
           result.partial = true;
-          __cgSyncLog("warn", "phase_push2", e3);
+          __cgSyncLog("warn", "phase_push", ePush);
         })
         .then(function () {
           return finishOk();
@@ -18160,7 +18150,31 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
     }
   } else {
-    UI.showLogin();
+    (function cgBootLoginPullCloudFirst() {
+      var btn = document.getElementById("login-submit");
+      var origLabel = btn ? btn.textContent : "";
+      var canPull =
+        window.CG_CLOUD_SYNC_ENABLED !== false &&
+        window.firebaseDB &&
+        typeof G.cloudPullAllOnce === "function";
+      if (!canPull) {
+        UI.showLogin();
+        return;
+      }
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Sincronizando con la nube…";
+      }
+      G.cloudPullAllOnce()
+        .catch(function () {})
+        .then(function () {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = origLabel;
+          }
+          UI.showLogin();
+        });
+    })();
   }
 })();
 
