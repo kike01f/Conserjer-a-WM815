@@ -7,7 +7,7 @@
   • Un solo .html: mejorar por comentarios, IIFE y helpers internos, no reescribir desde cero.
   • Globales mínimas y con nombre: window.CG (core), CG_UI, CG_ACTIONS, CG_PERSIST temprano, CG_lazy;
     evitar nuevas funciones sueltas en window salvo módulo embebido que ya expone window.editUnit, etc.
-  • Datos persistidos: preferir G.load/G.save, G.persist.* y rutas ya usadas por sync Firebase; no duplicar
+  • Datos persistidos: preferir G.load/G.save, G.persist.* y rutas ya usadas por la app; no duplicar
     lecturas directas a localStorage dispersas si existe API equivalente.
   • XSS: interpolar texto de usuario con G.escapeHtml / G.escapeAttr; innerHTML solo con plantillas ya
     escapadas o G.safeSetHTML consciente; reutilizar G.validate donde aplique.
@@ -19,9 +19,9 @@
   portapapeles por id seguro; ventanas impresión sin opener.
   ═══════════════════════════════════════════════════════════════════════════
   [HEAD]  CSS crítico → scripts tempranos (paleta, file://) → CSS principal
-         → CG_lazy (carga diferida XLSX / jsPDF+AutoTable / Chart) → Firebase SDK → init Firebase + flags globales
+         → CG_lazy (carga diferida XLSX / jsPDF+AutoTable / Chart) → Firebase Firestore (sync colaborativa, opcional)
   [BODY]  Login + shell app (#app-main) → toasts/modales
-  [JS-1]  PART 1 — Core window.CG: window.CG_PERSIST (local/session), sync Firestore↔LS,
+  [JS-1]  PART 1 — Core window.CG: window.CG_PERSIST (local/session), capa sync Firestore si cgDb está activo,
          load/save, auth PBKDF2, CG.validate (reglas reutilizables), estado, sesión, migraciones, export window.CG
   [JS-2]  Módulo Departamentos (wm815_* + UI incrustada)
   [JS-3]  PART 2 — window.CG_UI: router, nav, chat staff, alertas visitas, dashboard
@@ -32,7 +32,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Fase seguridad: limita fuga de referrer en enlaces externos (no sustituye reglas Firebase / restricción de API key). -->
+  <!-- Fase seguridad: limita fuga de referrer en enlaces externos. -->
   <meta name="referrer" content="strict-origin-when-cross-origin" />
   <style id="cg-critical-first-paint">
     /* Evita FOUC / texto inflado (iOS): base estable antes de CSS principal y librerías. */
@@ -51,7 +51,7 @@
     }
     .hidden { display: none !important; }
   </style>
-  <title>Sistema de Gestión - Conserjeria</title>
+  <title>Sistema de Gestión - Conserjería</title>
   <script>
     /**
      * Capa centralizada localStorage / sessionStorage (misma clave de producto que el core CG).
@@ -2792,62 +2792,74 @@
       };
     })();
   </script>
-  <!-- Firebase compat: mismo efecto que import/initializeApp, sin módulos ES. Restrinja la API key en Firebase Console (referrers). -->
-  <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore-compat.js"></script>
-  <!-- Inicialización cliente Firebase (Firestore); flags CG_CLOUD_* consumidos en PART 1 -->
+  <!--
+    Firebase / Firestore — sincronización colaborativa (toda clave conciergeria_v1_* excepto sesión de pestaña).
+    1) Cree proyecto en https://console.firebase.google.com → Activar Firestore (modo prueba o reglas en firestore.rules).
+    2) Objeto de configuración de la app Web (equivalente a initializeApp desde el SDK modular).
+    3) Mismo CG_REMOTE_BUILDING_KEY en todos los navegadores del mismo edificio (p. ej. wm815_shared_v1).
+    4) firebase deploy --only firestore:rules (desde la carpeta del proyecto).
+  -->
   <script>
-    (function () {
-      /* Seguridad: la API key del cliente es pública por diseño; restrinja HTTP referrers en Google Cloud Console y endurezca firestore.rules. */
-      var firebaseConfig = {
-        apiKey: "AIzaSyDk-cOxOyRuwvqBWcK4tDPO63Ip5UkjYR8",
-        authDomain: "coserjeria-wm815.firebaseapp.com",
-        projectId: "coserjeria-wm815",
-        storageBucket: "coserjeria-wm815.firebasestorage.app",
-        messagingSenderId: "945934348335",
-        appId: "1:945934348335:web:1c25a035d8c99898a496da"
-      };
-      if (typeof firebase === "undefined") {
-        console.warn("[Conserjería] SDK Firebase no cargó desde gstatic.");
+    window.CG_FIREBASE_CONFIG = {
+      apiKey: "AIzaSyBBkY-w561wlQdxcKmMPLhAPMlJEHjgq68",
+      authDomain: "conserjeriawm815-80403.firebaseapp.com",
+      projectId: "conserjeriawm815-80403",
+      storageBucket: "conserjeriawm815-80403.firebasestorage.app",
+      messagingSenderId: "327084949184",
+      appId: "1:327084949184:web:909fb4ccf25a269b313725"
+    };
+    /** Identificador del edificio en Firestore: cg_building_shared/{CG_REMOTE_BUILDING_KEY}/ls/{claveApp} */
+    window.CG_REMOTE_BUILDING_KEY =
+      typeof window.CG_REMOTE_BUILDING_KEY === "string" && window.CG_REMOTE_BUILDING_KEY.length > 0
+        ? window.CG_REMOTE_BUILDING_KEY
+        : "wm815_shared_v1";
+    /** true = onSnapshot en toda la colección ls (tiempo real). Si el SDK falla, la app pasa a sondeo. */
+    window.CG_REMOTE_USE_REALTIME_LISTENER = true;
+    window.CG_CLOUD_ONLY_STORAGE = false;
+    window.cgApp = null;
+    window.cgDb = null;
+    window.CG_CLOUD_SYNC_ENABLED = false;
+    (function __cgFirebasePreCheck() {
+      var c = window.CG_FIREBASE_CONFIG;
+      if (!c || typeof c !== "object") return;
+      var ak = String(c.apiKey || "");
+      var pid = String(c.projectId || "");
+      if (!ak || ak.indexOf("REEMPLACE") !== -1) return;
+      if (!pid || pid.indexOf("REEMPLACE") !== -1) return;
+      window.CG_CLOUD_SYNC_ENABLED = true;
+    })();
+  </script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script>
+    (function __cgFirebaseInit() {
+      if (!window.CG_CLOUD_SYNC_ENABLED) {
+        window.cgDb = null;
+        console.warn(
+          "[CG] Sincronización Firebase desactivada: complete window.CG_FIREBASE_CONFIG en el <head> (sin placeholders REEMPLACE_*)."
+        );
         return;
       }
       try {
-        window.firebaseApp =
-          firebase.apps && firebase.apps.length > 0 ? firebase.app() : firebase.initializeApp(firebaseConfig);
-        var _cgFs = firebase.firestore();
-        try {
-          _cgFs.settings({
-            experimentalAutoDetectLongPolling: true
-          });
-        } catch (eFsSet) {}
-        window.firebaseDB = _cgFs;
-        window.db = window.firebaseDB;
-        console.log("[Conserjería] Firebase OK — proyecto:", firebaseConfig.projectId);
-      } catch (err) {
-        console.warn("[Conserjería] Firebase init:", err);
-        window.firebaseApp = null;
-        window.firebaseDB = null;
-        window.db = null;
+        if (typeof firebase === "undefined" || !firebase.initializeApp) {
+          throw new Error("firebase-app-compat no cargó");
+        }
+        if (!firebase.apps.length) {
+          firebase.initializeApp(window.CG_FIREBASE_CONFIG);
+        }
+        window.cgApp = firebase.app();
+        window.cgDb = firebase.firestore();
+        window.CG_CLOUD_SYNC_ENABLED = true;
+        console.info(
+          "[CG] Firestore conectado · edificio remoto:",
+          window.CG_REMOTE_BUILDING_KEY || "wm815_shared_v1"
+        );
+      } catch (e) {
+        console.error("[CG] Error inicializando Firebase:", e);
+        window.cgDb = null;
+        window.CG_CLOUD_SYNC_ENABLED = false;
       }
     })();
-    /* Misma cadena que en firestore.rules (match /cg_building_shared/{buildingId}/...). Cámbiela en ambos sitios. */
-    window.CG_FIRESTORE_BUILDING_KEY = window.CG_FIRESTORE_BUILDING_KEY || "wm815_shared_v1";
-    window.CG_CLOUD_SYNC_ENABLED = window.CG_CLOUD_SYNC_ENABLED !== false;
-    /* false (defecto): datos en localStorage + sync a Firestore (sobreviven al recargar aunque falle la nube). true: RAM+Firestore con espejo en LS (ver capa persist). */
-    window.CG_CLOUD_ONLY_STORAGE = typeof window.CG_CLOUD_ONLY_STORAGE === "boolean" ? window.CG_CLOUD_ONLY_STORAGE : false;
-    /* true = forzar solo pulls periódicos (redundante si no usa tiempo real). */
-    window.CG_FIRESTORE_FORCE_POLLING = window.CG_FIRESTORE_FORCE_POLLING === true;
-    /*
-     * Por defecto la app NO usa onSnapshot en toda la colección ls (bug Firestore 11.x en algunos navegadores).
-     * El chat del equipo sí usa un onSnapshot solo del documento staffChatMessages (actualización casi inmediata).
-     * Ponga true aquí para escuchar también todos los docs ls en tiempo real (más lecturas, mismo riesgo de bug).
-     */
-    window.CG_FIRESTORE_USE_REALTIME_LISTENER = window.CG_FIRESTORE_USE_REALTIME_LISTENER === true;
-    /* Intervalo ms del modo polling (mín. 15s). Por defecto 60s. */
-    window.CG_FIRESTORE_POLL_MS =
-      typeof window.CG_FIRESTORE_POLL_MS === "number" && window.CG_FIRESTORE_POLL_MS >= 15000
-        ? window.CG_FIRESTORE_POLL_MS
-        : 60000;
   </script>
 </head>
 <body>
@@ -2984,8 +2996,8 @@
   <script>
   /* === PART 1: storage, state, auth ===
    * Instalación limpia: sin usuarios ni datos de prueba precargados (primer administrador en el login).
-   * CG_CLOUD_ONLY_STORAGE (defecto false): datos bajo CG.LS en localStorage y, si hay Firebase, también en RAM + Firestore. Sesión en sessionStorage cuando modo solo-nube efectivo.
-   * La config de Firebase (apiKey, etc.) es identificador público del SDK web; las reglas definen el acceso.
+   * Sincronización: si Firebase está configurado en el <head>, cada clave G.save → Firestore
+   * (cg_building_shared/{CG_REMOTE_BUILDING_KEY}/ls/*) con listener en tiempo real o sondeo de respaldo.
    */
   (function () {
     /* ┌─ 1. Constantes de producto (LS, módulos, categorías, IDs fijos) ───────────────── */
@@ -3011,22 +3023,22 @@
     /** Destino fijo para proveedores / administración; no es unidad del registro de residentes (wm815). */
     const ADMIN_UNIT_ID = "cg_virtual_admin";
 
-    /* ┌─ 2. Firebase / sincronización nube (cola, push, pull, listener) ───────────────── */
+    /* ┌─ 2. Sincronización remota Firestore (activa si window.cgDb y CG_CLOUD_SYNC_ENABLED tras init en <head>) ── */
     var CG_CLOUD_SYNC_ENABLED =
       typeof window.CG_CLOUD_SYNC_ENABLED === "boolean" ? window.CG_CLOUD_SYNC_ENABLED : true;
     var CG_CLOUD_BUILDING_KEY =
-      typeof window.CG_FIRESTORE_BUILDING_KEY === "string" && window.CG_FIRESTORE_BUILDING_KEY.length > 0
-        ? window.CG_FIRESTORE_BUILDING_KEY
+      typeof window.CG_REMOTE_BUILDING_KEY === "string" && window.CG_REMOTE_BUILDING_KEY.length > 0
+        ? window.CG_REMOTE_BUILDING_KEY
         : "wm815_shared_v1";
     var CG_CLOUD_ONLY_STORAGE =
       typeof window.CG_CLOUD_ONLY_STORAGE === "boolean" ? window.CG_CLOUD_ONLY_STORAGE : false;
-    /** Sesión de login en el navegador (pestaña); no se sube a Firestore. */
+    /** Sesión de login en el navegador (pestaña); no se replica al servidor en esta copia. */
     var CG_SESSION_BROWSER_KEY = "cg_tab_session_v1";
     window.__cgMemLs = window.__cgMemLs || {};
     var __cgMemLs = window.__cgMemLs;
 
     function __cgEffectiveCloudOnly() {
-      return !!(CG_CLOUD_ONLY_STORAGE && CG_CLOUD_SYNC_ENABLED && window.firebaseDB);
+      return !!(CG_CLOUD_ONLY_STORAGE && CG_CLOUD_SYNC_ENABLED && window.cgDb);
     }
 
     (function __cgInstallLsPersistLayer() {
@@ -3127,7 +3139,7 @@
     }
 
     /**
-     * Estado interno del sync (Firestore ↔ memoria / LS según modo). No mezclar con UI.
+     * Estado interno del sync (servidor remoto ↔ memoria / LS según modo). No mezclar con UI.
      * Estrategia: last-write-wins en documentos ls/{key}; merge explícito solo en shiftLogs (tramos abiertos locales).
      */
     var CG_SYNC_STATE = {
@@ -3141,7 +3153,7 @@
       unsubscribe: null,
       periodicPushTimer: null,
       pushTimers: {},
-      /** Cadena Promise: evita saturar el stream de Firestore (resource-exhausted / cola de writes). */
+      /** Cadena Promise: evita saturar el stream del SDK remoto (resource-exhausted / cola de writes). */
       writeSerialTail: null,
       listenerRetryTimer: null,
       listenerFailures: 0,
@@ -3175,7 +3187,7 @@
       else console.info(line);
     }
 
-    function __cgIsRetriableFirestoreError(err) {
+    function __cgIsRetriableSyncError(err) {
       var c = err && err.code;
       return (
         c === "unavailable" ||
@@ -3193,7 +3205,7 @@
       function attempt(n) {
         return fn().catch(function (err) {
           if (n >= maxAttempts) return Promise.reject(err);
-          if (!__cgIsRetriableFirestoreError(err)) return Promise.reject(err);
+          if (!__cgIsRetriableSyncError(err)) return Promise.reject(err);
           var delay = Math.min(30000, baseMs * Math.pow(2, n - 1));
           __cgSyncLog("info", "retry_" + tag, "intento " + (n + 1) + "/" + maxAttempts + " en " + delay + "ms");
           return new Promise(function (resolve) {
@@ -3211,16 +3223,19 @@
     }
 
     function __cgCloudLsCol() {
-      if (!window.firebaseDB || !CG_CLOUD_BUILDING_KEY) return null;
-      return window.firebaseDB
+      if (!window.cgDb || !CG_CLOUD_BUILDING_KEY) return null;
+      return window.cgDb
         .collection("cg_building_shared")
         .doc(CG_CLOUD_BUILDING_KEY)
         .collection("ls");
     }
 
-    function __cgFirestoreFieldValue() {
-      var fb = window.firebase;
-      if (fb && fb.firestore && fb.firestore.FieldValue) return fb.firestore.FieldValue;
+    function __cgNoCloudFieldApi() {
+      try {
+        if (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue) {
+          return firebase.firestore.FieldValue;
+        }
+      } catch (eFv) {}
       return null;
     }
 
@@ -3228,7 +3243,7 @@
     function __cgCloudPushSingleDoc(shortKey, raw) {
       var col = __cgCloudLsCol();
       if (!col) return Promise.reject({ code: "no_col", message: "Sin colección ls" });
-      var FV = __cgFirestoreFieldValue();
+      var FV = __cgNoCloudFieldApi();
       if (!FV) return Promise.reject({ code: "no_fv" });
       var id = __cgCloudSanitizeDocId(shortKey);
       return col.doc(id).set(
@@ -3274,7 +3289,7 @@
          (p. ej. Personal) y esas subidas no deben perderse. applyRemoteLsDoc no llama a save(). */
       if (shortKey === "session") return;
       if (!CG_CLOUD_SYNC_ENABLED) return;
-      if (!window.firebaseDB || !__cgFirestoreFieldValue()) return;
+      if (!window.cgDb || !__cgNoCloudFieldApi()) return;
       if (CG_SYNC_STATE.syncInitActive) {
         CG_SYNC_STATE.pendingPushAfterInit[shortKey] = true;
         return;
@@ -3289,7 +3304,7 @@
     var __CG_PUSH_KEY_BASE_MS = 700;
     /** Pausa entre escrituras sueltas al stream (ms); reduce resource-exhausted en clientes lentos o muchas claves. */
     var __CG_PUSH_SERIAL_GAP_MS = 90;
-    /** Tamaño de lote en push masivo (Firestore max 500; lotes pequeños + pausa alivian la cola interna). */
+    /** Tamaño de lote en push masivo (máx. típ. 500 por lote; lotes pequeños + pausa alivian la cola interna). */
     var __CG_CLOUD_BATCH_SIZE = 80;
     var __CG_CLOUD_BATCH_PAUSE_MS = 200;
 
@@ -3326,7 +3341,7 @@
     }
 
     function __cgCloudPushKeyNow(shortKey) {
-      if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB || !__cgFirestoreFieldValue()) return;
+      if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb || !__cgNoCloudFieldApi()) return;
       if (CG_SYNC_STATE.syncInitActive) {
         CG_SYNC_STATE.pendingPushAfterInit[shortKey] = true;
         return;
@@ -3342,7 +3357,7 @@
               if (attemptIdx > 0) __cgSyncLog("info", "push_key_ok_after_retry", shortKey);
             },
             function (err) {
-              if (attemptIdx >= __CG_PUSH_KEY_MAX || !__cgIsRetriableFirestoreError(err)) {
+              if (attemptIdx >= __CG_PUSH_KEY_MAX || !__cgIsRetriableSyncError(err)) {
                 __cgSyncLog("warn", "push_key_failed", shortKey + " " + (err && err.code ? err.code : err));
                 return Promise.resolve();
               }
@@ -3364,13 +3379,13 @@
     }
 
     /**
-     * Sube una clave de localStorage a Firestore y devuelve una Promise (para feedback tras cambiar la clave de Estadística).
-     * Sin Firebase o sin permisos: ok/skipped o ok:false según el caso.
+     * Sube una clave al servidor remoto y devuelve una Promise (para feedback tras cambiar la clave de Estadística).
+     * Sin conexión al servidor o sin permisos: ok/skipped o ok:false según el caso.
      */
     function cloudPushLsKeyPromise(shortKey) {
       return new Promise(function (resolve) {
         try {
-          if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB || !__cgFirestoreFieldValue()) {
+          if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb || !__cgNoCloudFieldApi()) {
             resolve({ ok: true, skipped: true, reason: "no_cloud" });
             return;
           }
@@ -3400,7 +3415,7 @@
               })
               .catch(function (err) {
                 __cgSyncLog("warn", "push_ls_key", shortKey + " " + (err && err.code ? err.code : err));
-                resolve({ ok: false, reason: "firestore_error", err: err });
+                resolve({ ok: false, reason: "remote_sync_error", err: err });
               });
           }).catch(function (ePush) {
             __cgSyncLog("warn", "push_ls_key_exception", ePush);
@@ -3445,7 +3460,7 @@
     function cloudPushKeyImmediate(shortKey) {
       if (shortKey === "session") return;
       if (!CG_CLOUD_SYNC_ENABLED) return;
-      if (!window.firebaseDB || !__cgFirestoreFieldValue()) return;
+      if (!window.cgDb || !__cgNoCloudFieldApi()) return;
       if (CG_SYNC_STATE.pushTimers[shortKey]) {
         clearTimeout(CG_SYNC_STATE.pushTimers[shortKey]);
         delete CG_SYNC_STATE.pushTimers[shortKey];
@@ -3459,7 +3474,7 @@
 
     function __cgScheduleListenerRestart() {
       if (CG_SYNC_STATE.listenerRetryTimer) return;
-      if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return;
+      if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return;
       if (CG_SYNC_STATE.preferPollingSync) {
         __cgActivatePollingSync("scheduled_retry");
         return;
@@ -3469,7 +3484,7 @@
       __cgSyncLog("info", "listener_scheduled_restart", "en " + delay + "ms");
       CG_SYNC_STATE.listenerRetryTimer = setTimeout(function () {
         CG_SYNC_STATE.listenerRetryTimer = null;
-        if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return;
+        if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return;
         try {
           startCloudSyncListener();
         } catch (eR) {
@@ -3525,7 +3540,7 @@
         } catch (eI) {}
         CG_SYNC_STATE.periodicPushTimer = null;
       }
-      detachStaffChatFirestoreSync();
+      detachStaffChatRemoteSync();
     }
 
     /** Tramo de shiftLog sin cierre (compartido con CG_UI vía window.CG). */
@@ -3631,7 +3646,7 @@
 
     var __cgStaffChatFsUnsub = null;
 
-    function detachStaffChatFirestoreSync() {
+    function detachStaffChatRemoteSync() {
       if (typeof __cgStaffChatFsUnsub === "function") {
         try {
           __cgStaffChatFsUnsub();
@@ -3643,9 +3658,9 @@
     /**
      * Escucha en tiempo real solo el doc del chat (independiente del modo polling/listener global de ls).
      */
-    function attachStaffChatFirestoreSync() {
+    function attachStaffChatRemoteSync() {
       if (__cgStaffChatFsUnsub) return;
-      if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB || !__cgFirestoreFieldValue()) return;
+      if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb || !__cgNoCloudFieldApi()) return;
       var col = __cgCloudLsCol();
       if (!col) return;
       try {
@@ -3698,24 +3713,24 @@
           return;
         }
         window.dispatchEvent(
-          new CustomEvent("cg-cloud-storage-applied", { detail: { key: d.key, source: "firestore" } })
+          new CustomEvent("cg-cloud-storage-applied", { detail: { key: d.key, source: "remote" } })
         );
       } catch (eA) {
         __cgSyncLog("warn", "apply_remote", eA);
       }
     }
 
-    function __cgFirestoreInternalBugMsg(err) {
+    function __cgSyncSdkInternalBugMsg(err) {
       var msg = err && (err.message != null ? String(err.message) : String(err));
       return msg.indexOf("INTERNAL ASSERTION FAILED") !== -1;
     }
 
     /**
-     * Alternativa a onSnapshot: pulls periódicos. Más lecturas en Firestore, evita fallos del watch en algunos entornos.
+     * Alternativa a onSnapshot: pulls periódicos. Más lecturas remotas; evita fallos del watch en algunos entornos.
      * No llama a stopCloudSyncListener completo: no cancela el push periódico ya armado en finishOk.
      */
     function __cgActivatePollingSync(reason) {
-      if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return;
+      if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return;
       if (CG_SYNC_STATE.listenerRetryTimer) {
         try {
           clearTimeout(CG_SYNC_STATE.listenerRetryTimer);
@@ -3735,32 +3750,32 @@
         CG_SYNC_STATE.pollingTimer = null;
       }
       var pollMs =
-        typeof window.CG_FIRESTORE_POLL_MS === "number" && window.CG_FIRESTORE_POLL_MS >= 15000
-          ? window.CG_FIRESTORE_POLL_MS
+        typeof window.CG_REMOTE_POLL_MS === "number" && window.CG_REMOTE_POLL_MS >= 15000
+          ? window.CG_REMOTE_POLL_MS
           : 60000;
       function tick() {
-        if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return;
+        if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return;
         cloudPullAllOnce().catch(function (e) {
           __cgSyncLog("warn", "poll_pull", e && e.code ? e.code : e);
         });
       }
       tick();
       CG_SYNC_STATE.pollingTimer = setInterval(tick, pollMs);
-      __cgSyncLog("warn", "firestore_polling_on", String(reason || "") + " · " + pollMs + "ms");
+      __cgSyncLog("warn", "remote_polling_on", String(reason || "") + " · " + pollMs + "ms");
     }
 
-    function __cgRecoverFromFirestoreWatchBug(source, msg) {
+    function __cgRecoverFromSyncWatchBug(source, msg) {
       try {
         if (typeof CG_CLOUD_SYNC_ENABLED !== "undefined" && !CG_CLOUD_SYNC_ENABLED) return;
-        if (!window.firebaseDB) return;
+        if (!window.cgDb) return;
         if (CG_SYNC_STATE.preferPollingSync) return;
         CG_SYNC_STATE.preferPollingSync = true;
-        __cgSyncLog("warn", "firestore_watch_assertion_recover", source + " " + String(msg || "").slice(0, 120));
+        __cgSyncLog("warn", "remote_watch_assertion_recover", source + " " + String(msg || "").slice(0, 120));
         __cgActivatePollingSync(source);
       } catch (e) {}
     }
 
-    (function __cgBindFirestoreWatchCrashRecovery() {
+    (function __cgBindSyncWatchCrashRecovery() {
       if (window.__CG_FS_WATCH_RECOVERY) return;
       window.__CG_FS_WATCH_RECOVERY = true;
       window.addEventListener(
@@ -3770,9 +3785,9 @@
             var msg = (ev && ev.message) || (ev && ev.error && ev.error.message) || "";
             var fn = ev && ev.filename ? String(ev.filename) : "";
             if (msg.indexOf("INTERNAL ASSERTION FAILED") === -1) return;
-            if (msg.indexOf("FIRESTORE") === -1 && msg.indexOf("Firestore") === -1 && fn.indexOf("firebase-firestore") === -1)
+            if (msg.indexOf("__CG_SYNC_MARKER_A__") === -1 && msg.indexOf("__CG_SYNC_MARKER_B__") === -1 && fn.indexOf("__CG_SYNC_MARKER_C__") === -1)
               return;
-            __cgRecoverFromFirestoreWatchBug("window_error", msg);
+            __cgRecoverFromSyncWatchBug("window_error", msg);
           } catch (e2) {}
         },
         true
@@ -3782,13 +3797,13 @@
           var r = ev.reason;
           var msg = r && (r.message != null ? String(r.message) : String(r));
           if (msg.indexOf("INTERNAL ASSERTION FAILED") === -1) return;
-          if (msg.indexOf("FIRESTORE") === -1 && msg.indexOf("Firestore") === -1) return;
+          if (msg.indexOf("__CG_SYNC_MARKER_A__") === -1 && msg.indexOf("__CG_SYNC_MARKER_B__") === -1) return;
           if (CG_SYNC_STATE.preferPollingSync) {
             ev.preventDefault();
             return;
           }
           ev.preventDefault();
-          __cgRecoverFromFirestoreWatchBug("unhandledrejection", msg);
+          __cgRecoverFromSyncWatchBug("unhandledrejection", msg);
         } catch (eRec) {}
       });
     })();
@@ -3801,12 +3816,12 @@
       stopCloudSyncListener();
       var col = __cgCloudLsCol();
       if (!col) return;
-      if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return;
+      if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return;
       CG_SYNC_STATE.listenerAttachGen = (CG_SYNC_STATE.listenerAttachGen || 0) + 1;
       var attachGen = CG_SYNC_STATE.listenerAttachGen;
       setTimeout(function () {
         if (attachGen !== CG_SYNC_STATE.listenerAttachGen) return;
-        if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return;
+        if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return;
         var colLive = __cgCloudLsCol();
         if (!colLive) return;
         try {
@@ -3830,7 +3845,7 @@
                 if (typeof CG_SYNC_STATE.unsubscribe === "function") CG_SYNC_STATE.unsubscribe();
               } catch (eD) {}
               CG_SYNC_STATE.unsubscribe = null;
-              if (__cgFirestoreInternalBugMsg(err)) {
+              if (__cgSyncSdkInternalBugMsg(err)) {
                 CG_SYNC_STATE.preferPollingSync = true;
                 __cgActivatePollingSync("listener_error");
                 return;
@@ -3840,7 +3855,7 @@
           );
         } catch (eSnap) {
           __cgSyncLog("warn", "listener_attach_exception", eSnap);
-          if (__cgFirestoreInternalBugMsg(eSnap)) {
+          if (__cgSyncSdkInternalBugMsg(eSnap)) {
             CG_SYNC_STATE.preferPollingSync = true;
             __cgActivatePollingSync("attach_exception");
           } else {
@@ -3876,7 +3891,7 @@
 
     /** Pull de un solo doc `ls` (p. ej. chat) sin esperar al ciclo global (~60s). */
     function cloudPullSingleLsKey(shortKey) {
-      if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB) return Promise.resolve();
+      if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return Promise.resolve();
       if (!shortKey || shortKey === "session" || CG_SYNC_STATE.pullSkipKeys[shortKey]) return Promise.resolve();
       var col = __cgCloudLsCol();
       if (!col) return Promise.resolve();
@@ -3895,7 +3910,7 @@
       var col = __cgCloudLsCol();
       if (!col) return Promise.resolve();
       return __cgSerialCloudWrite(function () {
-        var db = window.firebaseDB;
+        var db = window.cgDb;
         var ops = [];
         P.eachLocalKeyWithPrefix(LS, function (fk) {
           var sk = fk.slice(LS.length);
@@ -3909,7 +3924,7 @@
           var batch = db.batch();
           var end = Math.min(start + __CG_CLOUD_BATCH_SIZE, ops.length);
           var j;
-          var FVb = __cgFirestoreFieldValue();
+          var FVb = __cgNoCloudFieldApi();
           for (j = start; j < end; j++) {
             var o = ops[j];
             batch.set(
@@ -3944,20 +3959,20 @@
     function initCloudSync() {
       var disabled = { ok: false, reason: "disabled", partial: false, phases: {}, listenerStarted: false };
       if (!CG_CLOUD_SYNC_ENABLED) return Promise.resolve(disabled);
-      if (!window.firebaseDB) {
+      if (!window.cgDb) {
         __cgSyncLog("warn", "no_db");
         return Promise.resolve({ ok: false, reason: "no-db", partial: false, phases: {}, listenerStarted: false });
       }
-      if (!__cgFirestoreFieldValue()) {
+      if (!__cgNoCloudFieldApi()) {
         __cgSyncLog("warn", "no_fieldvalue");
         return Promise.resolve({ ok: false, reason: "no-fieldvalue", partial: false, phases: {}, listenerStarted: false });
       }
 
       CG_SYNC_STATE.initGeneration++;
       CG_SYNC_STATE.listenerFailures = 0;
-      if (window.CG_FIRESTORE_FORCE_POLLING === true) {
+      if (window.CG_REMOTE_FORCE_POLLING === true) {
         CG_SYNC_STATE.preferPollingSync = true;
-      } else if (window.CG_FIRESTORE_USE_REALTIME_LISTENER === true) {
+      } else if (window.CG_REMOTE_USE_REALTIME_LISTENER === true) {
         CG_SYNC_STATE.preferPollingSync = false;
       } else {
         CG_SYNC_STATE.preferPollingSync = true;
@@ -3970,8 +3985,8 @@
       __cgMarkPushDeferredDuringInit();
 
       try {
-        if (typeof window.firebaseDB.enableNetwork === "function") {
-          window.firebaseDB.enableNetwork().catch(function () {});
+        if (typeof window.cgDb.enableNetwork === "function") {
+          window.cgDb.enableNetwork().catch(function () {});
         }
       } catch (eN) {}
 
@@ -3998,7 +4013,7 @@
             __cgSyncLog("warn", "listener_start", eL);
           }
           result.listenerStarted =
-            !!(CG_CLOUD_SYNC_ENABLED && window.firebaseDB && __cgCloudLsCol());
+            !!(CG_CLOUD_SYNC_ENABLED && window.cgDb && __cgCloudLsCol());
           result.ok = true;
           CG_SYNC_STATE.lastInitResult = result;
           try {
@@ -4015,7 +4030,7 @@
             CG_SYNC_STATE.periodicPushTimer = null;
           }
           CG_SYNC_STATE.periodicPushTimer = setInterval(function () {
-            if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB || CG_SYNC_STATE.applyingRemote) return;
+            if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb || CG_SYNC_STATE.applyingRemote) return;
             cloudPushAllKeysOnce().catch(function (eP) {
               __cgSyncLog("warn", "periodic_push", eP && eP.code ? eP.code : eP);
             });
@@ -4050,7 +4065,7 @@
           }
           try {
             if (window.CG && window.CG.currentUser && window.CG.currentUser()) {
-              attachStaffChatFirestoreSync();
+              attachStaffChatRemoteSync();
             }
           } catch (eChatL) {}
           if (result.partial) __cgSyncLog("warn", "init_done_partial", CG_CLOUD_BUILDING_KEY);
@@ -4058,8 +4073,8 @@
           return result;
         }
         var pend =
-          window.firebaseDB && typeof window.firebaseDB.waitForPendingWrites === "function"
-            ? window.firebaseDB.waitForPendingWrites().catch(function () {})
+          window.cgDb && typeof window.cgDb.waitForPendingWrites === "function"
+            ? window.cgDb.waitForPendingWrites().catch(function () {})
             : Promise.resolve();
         return pend
           .then(function () {
@@ -4077,7 +4092,7 @@
           });
       }
 
-      /* Pull primero: un equipo nuevo puede tener plantilla local vacía; si empujáramos antes, pisaríamos Firestore.
+      /* Pull primero: un equipo nuevo puede tener plantilla local vacía; si empujáramos antes, pisaríamos el servidor remoto.
        * Luego un push sube el estado ya fusionado con la nube (claves solo locales, etc.). */
       return cloudPullAllOnce()
         .then(function () {
@@ -4409,7 +4424,7 @@
     function ensureInitSeedFromDefaultIfNeeded() {
       if (__cgEffectiveCloudOnly()) {
         /* La nube (pull) + migraciones + attachVirtualAdmin son la fuente de verdad; sembrar defaultState aquí
-         * pisaba datos reales cuando faltaba la clave "initialized" en Firestore o el pull iba detrás del arranque. */
+         * pisaba datos reales cuando faltaba la clave "initialized" en el servidor o el pull iba detrás del arranque. */
         return;
       }
       if (load("initialized", false)) return;
@@ -5587,7 +5602,7 @@
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
       getPersonalization, setPersonalization, applyPersonalizationToDom,
       hexToRgb, snapshotThemeForExport, buildExportThemeRootCss, getExportAccentHex, getEmailShellThemeColors,
-      initCloudSync, stopCloudSyncListener, attachStaffChatFirestoreSync, detachStaffChatFirestoreSync, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPullSingleLsKey, cloudPushAllKeysOnce,
+      initCloudSync, stopCloudSyncListener, attachStaffChatRemoteSync, detachStaffChatRemoteSync, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPullSingleLsKey, cloudPushAllKeysOnce,
       flushPendingCloudWritesNow, cloudPushKeyImmediate, cloudPushLsKeyPromise, armLsKeyPullQuiet, getCloudSyncLastInitResult,
       syncLoginFirstAdminPanel,
       effectiveCloudOnlyStorage: function () {
@@ -7121,8 +7136,8 @@
 function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         function __deptFormerStorageKey() { return window.CG.LS + "wm815_former_residents"; }
 
-        if (typeof window.firebaseApp === "undefined") window.firebaseApp = null;
-        if (typeof window.firebaseDB === "undefined") window.firebaseDB = null;
+        if (typeof window.cgApp === "undefined") window.cgApp = null;
+        if (typeof window.cgDb === "undefined") window.cgDb = null;
         if (typeof window.db === "undefined") window.db = null;
 
         let isSaving = false;
@@ -7368,11 +7383,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         };
 
         window.startRealtimeSync = function() {
-            if (window.firebaseDB && window.CG_CLOUD_SYNC_ENABLED !== false) {
-                console.log("🔥 Firestore: sincronización del shell vía cg_building_shared (ver consola al iniciar sesión).");
+            if (window.cgDb && window.CG_CLOUD_SYNC_ENABLED !== false) {
+                console.log("🔁 Sincronización del shell activa (colección compartida; ver consola al iniciar sesión).");
                 return;
             }
-            console.log("💾 Modo local: sin Firestore (solo este navegador)");
+            console.log("💾 Modo local: solo este navegador (sin sincronización remota en esta copia)");
         };
 
         window.saveUnitNoteToCloud = async function(unit) {
@@ -7602,8 +7617,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             return value;
         }
 
-        // ===== Cambio de clave Estadística (PBKDF2 en localStorage + sync Firestore; sin variable global ni texto plano) =====
-        // Límite: sin backend propio, Firebase solo replica el JSON local; quien modifique Firestore o localStorage puede alterar el verifier.
+        // ===== Cambio de clave Estadística (PBKDF2 en localStorage + sync opcional; sin variable global ni texto plano) =====
+        // Límite: sin backend propio, quien modifique almacenamiento local o remoto puede alterar el verifier.
         var __cgDeptGateChange = (function () {
             function __cgDeptGateFeedbackClear(modal) {
                 var el = modal.querySelector('#dept-gate-change-feedback');
@@ -7628,7 +7643,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                     <p style="margin-bottom: 12px; color: var(--secondary-text);">
                         ${hasGate
                     ? 'Ingrese la clave actual y la nueva (mín. 8 caracteres). Se guarda solo un derivado (PBKDF2), no la contraseña en claro.'
-                    : 'Defina la clave para operaciones sensibles de Estadística (mín. 8 caracteres). Se almacena un derivado en este equipo y, si Firebase está activo, se replica para otros equipos del mismo edificio.'}
+                    : 'Defina la clave para operaciones sensibles de Estadística (mín. 8 caracteres). Se almacena un derivado en este equipo; con sincronización activa se replica a otros equipos del mismo edificio.'}
                     </p>
                     <p id="dept-gate-change-feedback" role="alert" style="display:none;margin-bottom:12px;color:var(--danger-color, #b91c1c);font-size:0.9rem;line-height:1.4;"></p>
                     ${hasGate ? `<div style="margin-bottom: 15px;">
@@ -7706,7 +7721,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 if (cloud && cloud.ok && !cloud.skipped) {
                     showNotification('success', '✅ Clave actualizada y sincronizada con la nube.');
                 } else if (cloud && !cloud.ok && !cloud.skipped) {
-                    showNotification('info', '⚠️ Clave guardada en este equipo; la nube no pudo actualizarse. Revise conexión o reglas de Firestore.');
+                    showNotification('info', '⚠️ Clave guardada en este equipo; la nube no pudo actualizarse. Revise conexión o permisos del servidor.');
                 } else {
                     showNotification('success', '✅ Clave actualizada (solo local o sincronización no activa).');
                 }
@@ -10670,9 +10685,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         // ===== INICIALIZACIÓN (index: tras inyectar HTML en #dept-module-host) =====
         async function __cgDeptRunAfterInject() {
             console.log(
-                window.firebaseDB
-                    ? "🚀 Inicializando módulo Departamentos (datos locales; Firebase ya inicializado en el shell)"
-                    : "🚀 Inicializando aplicación (modo local, sin Firebase)..."
+                window.cgDb
+                    ? "🚀 Inicializando módulo Departamentos (datos locales; shell con sincronización remota disponible)"
+                    : "🚀 Inicializando aplicación (modo solo local en esta copia)..."
             );
 
             try {
@@ -12092,7 +12107,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         root.classList.remove("hidden");
         root.setAttribute("aria-hidden", "false");
         staffChatBind();
-        if (typeof G.attachStaffChatFirestoreSync === "function") G.attachStaffChatFirestoreSync();
+        if (typeof G.attachStaffChatRemoteSync === "function") G.attachStaffChatRemoteSync();
         staffChatStartPoll();
         staffChatLastMsgs = "";
         staffChatRefreshFromStore();
@@ -13161,7 +13176,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
 
     /**
-     * Tras aplicar un documento remoto de Firestore: refresca nav, módulos visibles y trozos del dashboard.
+     * Tras aplicar un documento remoto: refresca nav, módulos visibles y trozos del dashboard.
      * No sustituye el pull/listener; evita listas obsoletas cuando otro equipo escribe la misma clave.
      */
     function refreshAfterRemoteLsKey(k) {
@@ -13233,6 +13248,18 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             window.loadFormerResidentsFromCloud().catch(function () {});
           }
         }
+      }
+
+      if (
+        (k === "buildingParking" || k === "buildingUnits" || k === "parkingSlots" || k === "parkingConfig") &&
+        document.getElementById("parking-grid") &&
+        A &&
+        typeof A.renderParkingGrid === "function"
+      ) {
+        try {
+          if (typeof A.syncParkingSlotsFromBuilding === "function") A.syncParkingSlotsFromBuilding();
+          A.renderParkingGrid();
+        } catch (ePkGrid) {}
       }
 
       if (k === "parkingConfig" || k === "parkingSlots") {
@@ -13362,6 +13389,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
       if (k === "conserjeActivityLog") {
         if (dash) updateDashboardActivityAndNovBodiesOnly();
+      }
+
+      if (k === "chatLastReadByUser" && typeof staffChatRefreshFromStore === "function") {
+        try {
+          staffChatRefreshFromStore();
+        } catch (eCr) {}
       }
 
       if (
@@ -18528,12 +18561,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var code = pushRes.err && pushRes.err.code ? pushRes.err.code : "";
       G.toast(
         code === "permission-denied"
-          ? "Usuario guardado aquí, pero Firebase rechazó la subida (reglas o proyecto). Revise firestore.rules."
-          : "Usuario guardado en este equipo; no se pudo subir a la nube (red, cuota o Firebase). Reintente o revise F12.",
+          ? "Usuario guardado aquí, pero el servidor remoto rechazó la subida (permisos o configuración). Revise políticas del backend."
+          : "Usuario guardado en este equipo; no se pudo subir a la nube (red, cuota o servidor). Reintente o revise F12.",
         "warn"
       );
     } else if (pushRes && pushRes.skipped) {
-      G.toast("Usuario guardado solo en este navegador (sin Firebase o sync desactivado).");
+      G.toast("Usuario guardado solo en este navegador (sincronización remota desactivada).");
     } else {
       G.toast("Usuario guardado y subido a la nube.");
     }
@@ -19410,24 +19443,24 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           if (r && r.reason === "superseded") return;
           if (r && r.ok && r.partial) {
             G.toast(
-              "Sincronización parcial: los datos en este equipo se mantienen; la red o Firebase no respondieron del todo. Reintente más tarde o revise permisos (F12).",
+              "Sincronización parcial: los datos en este equipo se mantienen; la red o el servidor no respondieron del todo. Reintente más tarde o revise permisos (F12).",
               "warn"
             );
             return;
           }
           if (r && r.ok && !r.partial) {
-            G.toast("Sincronización con Firebase completada.", "success");
+            G.toast("Sincronización con el servidor remoto completada.", "success");
             return;
           }
           if (r && !r.ok) {
             var code = r.err && r.err.code ? r.err.code : "";
             var msg =
               code === "permission-denied"
-                ? "Firebase: permiso denegado. Despliegue firestore.rules (mismo edificio que en la app)."
+                ? "Permiso denegado en el servidor remoto. Revise políticas de acceso (mismo entorno que en la app)."
                 : r.reason === "no-db"
-                  ? "Firebase no está inicializado (revisar scripts y configuración del proyecto)."
+                  ? "Cliente de base de datos no disponible (revisar configuración del proyecto)."
                   : r.reason === "no-fieldvalue"
-                    ? "No cargó Firestore en el navegador (firestore-compat)."
+                    ? "No cargó el SDK de base de datos en el navegador."
                     : "No se pudo completar la sincronización. Los datos locales siguen activos; revise la consola (F12).";
             G.toast(msg, "error");
           }
@@ -19495,24 +19528,24 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             if (r && r.reason === "superseded") return;
             if (r && r.ok && r.partial) {
               G.toast(
-                "Sincronización parcial: los datos en este equipo se mantienen; la red o Firebase no respondieron del todo. Reintente más tarde o revise permisos (F12).",
+                "Sincronización parcial: los datos en este equipo se mantienen; la red o el servidor no respondieron del todo. Reintente más tarde o revise permisos (F12).",
                 "warn"
               );
               return;
             }
             if (r && r.ok && !r.partial) {
-              G.toast("Sincronización con Firebase completada.", "success");
+              G.toast("Sincronización con el servidor remoto completada.", "success");
               return;
             }
             if (r && !r.ok) {
               var code = r.err && r.err.code ? r.err.code : "";
               var msg =
                 code === "permission-denied"
-                  ? "Firebase: permiso denegado. Despliegue firestore.rules (mismo edificio que en la app)."
+                  ? "Permiso denegado en el servidor remoto. Revise políticas de acceso (mismo entorno que en la app)."
                   : r.reason === "no-db"
-                    ? "Firebase no está inicializado (revisar scripts y configuración del proyecto)."
+                    ? "Cliente de base de datos no disponible (revisar configuración del proyecto)."
                     : r.reason === "no-fieldvalue"
-                      ? "No cargó Firestore en el navegador (firestore-compat)."
+                      ? "No cargó el SDK de base de datos en el navegador."
                       : "No se pudo completar la sincronización. Los datos locales siguen activos; revise la consola (F12).";
               G.toast(msg, "error");
             }
@@ -19629,10 +19662,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
               var code = r.err && r.err.code ? r.err.code : "";
               var msg =
                 code === "permission-denied"
-                  ? "Firebase: sin permiso para sincronizar. Despliegue las reglas Firestore."
+                  ? "Sin permiso para sincronizar con el servidor remoto. Revise políticas de acceso."
                   : r.reason === "no-db" || r.reason === "no-fieldvalue"
-                    ? "Firebase no disponible para sincronizar."
-                    : "Error al sincronizar con Firebase (consola F12). Los datos locales siguen en uso.";
+                    ? "Servidor remoto no disponible para sincronizar."
+                    : "Error al sincronizar (consola F12). Los datos locales siguen en uso.";
               G.toast(msg, "warn");
             }
             if (typeof G.kickConserjeIfOpenShiftConflict === "function") G.kickConserjeIfOpenShiftConflict();
@@ -19650,7 +19683,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var origFirstTxt = firstSub ? firstSub.textContent : "";
       var canPull =
         window.CG_CLOUD_SYNC_ENABLED !== false &&
-        window.firebaseDB &&
+        window.cgDb &&
         typeof G.cloudPullAllOnce === "function";
       function afterLoginScreenReady() {
         UI.showLogin();
@@ -19699,7 +19732,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     G.cloudPullAllOnce()
       .catch(function (ePullBoot) {
-        console.warn("[CG] Pull inicial desde Firestore falló; se mantiene/recupera estado desde localStorage de este navegador.", ePullBoot);
+        console.warn("[CG] Pull inicial desde el servidor remoto falló; se mantiene/recupera estado desde localStorage de este navegador.", ePullBoot);
         if (typeof G.__cgHydrateMemLsFromLocalStorageBackup === "function") {
           G.__cgHydrateMemLsFromLocalStorageBackup();
         }
