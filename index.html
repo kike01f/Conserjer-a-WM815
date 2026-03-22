@@ -28,7 +28,7 @@
   [JS-4]  PART 3 — window.CG_ACTIONS: CRUD por módulo, renderAdmin segmentado, login
   ═══════════════════════════════════════════════════════════════════════════
 -->
-<html lang="es">
+<html lang="es" data-cg-palette="lima">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -161,9 +161,9 @@
     (function () {
       try {
         var P = window.CG_PERSIST;
-        var ok = ["azul", "bosque", "indigo", "vino", "pizarra", "aurora", "lima"];
+        var ok = ["lima", "azul", "bosque", "indigo", "vino", "pizarra", "aurora"];
         var raw = P.localGetRaw(P.LS + "personalization");
-        var pal = "azul";
+        var pal = "lima";
         if (raw) {
           var d = P.parseJson(raw, null);
           if (d && typeof d.palette === "string" && ok.indexOf(d.palette) >= 0) pal = d.palette;
@@ -219,8 +219,8 @@
         wrap.setAttribute("role", "alert");
         wrap.style.cssText =
           "position:fixed;left:0;right:0;top:0;z-index:2147483647;padding:12px 16px;font:14px/1.45 system-ui,sans-serif;" +
-          "background:#0c1e3d;color:#f8fafc;box-shadow:0 4px 20px rgba(0,0,0,.25);display:flex;flex-wrap:wrap;" +
-          "gap:12px;align-items:center;justify-content:center;text-align:center;border-bottom:2px solid #2563eb;";
+          "background:#1e3a0f;color:#f8fafc;box-shadow:0 4px 20px rgba(0,0,0,.25);display:flex;flex-wrap:wrap;" +
+          "gap:12px;align-items:center;justify-content:center;text-align:center;border-bottom:2px solid #74bd20;";
         var txt = document.createElement("span");
         txt.innerHTML =
           "<strong>Archivo local dentro de un marco (file://)</strong> — Chrome puede bloquear la navegación del formulario y mostrar «Unsafe attempt to load URL file://…» (especialmente si la carpeta tiene <strong>acentos</strong>: la misma ruta puede verse distinta en NFC/NFD). " +
@@ -230,7 +230,7 @@
         btnCopy.type = "button";
         btnCopy.textContent = "Copiar ruta del archivo";
         btnCopy.style.cssText =
-          "padding:8px 14px;border-radius:8px;border:none;cursor:pointer;background:#2563eb;color:#fff;font-weight:600;font-size:0.9rem;";
+          "padding:8px 14px;border-radius:8px;border:none;cursor:pointer;background:#74bd20;color:#fff;font-weight:600;font-size:0.9rem;";
         btnCopy.onclick = function () {
           var u = location.href;
           function ok() {
@@ -274,11 +274,12 @@
   <!-- ——— CSS aplicación (tokens, layout shell, módulos, impresión, modales) ——— -->
   <style>
     :root {
-      --blue-900: #0c1e3d;
-      --blue-700: #1e3a5f;
-      --blue-500: #2563eb;
-      --blue-400: #3b82f6;
-      --blue-100: #dbeafe;
+      /* Valores por defecto = paleta oficial Lima (#74BD20); html[data-cg-palette] puede sobreescribir. */
+      --blue-900: #1e3a0f;
+      --blue-700: #365f14;
+      --blue-500: #74bd20;
+      --blue-400: #8fd03a;
+      --blue-100: #ecfccb;
       --gray-50: #f8fafc;
       --gray-100: #f1f5f9;
       --gray-200: #e2e8f0;
@@ -296,9 +297,9 @@
       --border-color: var(--gray-200);
       --secondary-text: var(--gray-600);
       --accent-color: var(--blue-500);
-      --accent-dark: #1d4ed8;
+      --accent-dark: #5f9a18;
       --success-color: var(--success);
-      --info-color: #1d4ed8;
+      --info-color: #5f9a18;
       --on-accent: #ffffff;
       /* Mapas — paleta alineada con módulo Departamentos / dashboard */
       --map-fondo: #0a0a0a;
@@ -320,9 +321,9 @@
       --map-est-asig: #74BD20;
       --map-est-arriendo: #e67e22;
       /* Tipos de residente (módulo Departamentos + tablas) */
-      --resident-propietario: #1d4ed8;
-      --resident-propietario-bg: rgba(29, 78, 216, 0.1);
-      --resident-propietario-border: rgba(29, 78, 216, 0.42);
+      --resident-propietario: #5f9a18;
+      --resident-propietario-bg: rgba(116, 189, 32, 0.14);
+      --resident-propietario-border: rgba(95, 154, 24, 0.45);
       --resident-arrendatario: #0d9488;
       --resident-arrendatario-bg: rgba(13, 148, 136, 0.13);
       --resident-arrendatario-border: rgba(13, 148, 136, 0.45);
@@ -333,7 +334,7 @@
       --resident-visita-bg: rgba(194, 65, 12, 0.11);
       --resident-visita-border: rgba(194, 65, 12, 0.42);
       --radius: 12px;
-      --shadow: 0 4px 24px rgba(12, 30, 61, 0.08);
+      --shadow: 0 4px 24px rgba(30, 58, 15, 0.1);
       --sidebar-w: 260px;
       --topbar-h: 64px;
     }
@@ -425,12 +426,12 @@
       border-radius: 50%;
       border: 3px solid rgba(255, 255, 255, 0.95);
       cursor: pointer;
-      background: linear-gradient(155deg, #3b82f6 0%, #1d4ed8 45%, #1e3a8a 100%);
+      background: linear-gradient(155deg, #8fd03a 0%, #74bd20 45%, #1e3a0f 100%);
       color: #fff;
       box-shadow:
         0 0 0 1px rgba(15, 23, 42, 0.12),
         0 6px 0 rgba(15, 23, 42, 0.08),
-        0 10px 28px rgba(29, 78, 216, 0.55),
+        0 10px 28px rgba(95, 154, 24, 0.5),
         0 4px 14px rgba(15, 23, 42, 0.35);
       display: flex;
       align-items: center;
@@ -446,7 +447,7 @@
       box-shadow:
         0 0 0 1px rgba(15, 23, 42, 0.1),
         0 8px 0 rgba(15, 23, 42, 0.06),
-        0 14px 36px rgba(29, 78, 216, 0.6),
+        0 14px 36px rgba(95, 154, 24, 0.55),
         0 6px 18px rgba(15, 23, 42, 0.38);
     }
     .cg-chat-fab:focus-visible {
@@ -538,8 +539,8 @@
     }
     .cg-chat-bubble--me {
       align-self: flex-end;
-      background: #bfdbfe;
-      border: 1px solid #3b82f6;
+      background: #ecfccb;
+      border: 1px solid #8fd03a;
       color: #0f172a;
       box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
     }
@@ -565,7 +566,7 @@
       color: #7c2d12;
     }
     .cg-chat-bubble--conserje .cg-chat-bubble-meta strong {
-      color: #1e40af;
+      color: #365f14;
     }
     .cg-chat-empty {
       text-align: center;
@@ -601,18 +602,18 @@
       opacity: 1;
     }
     .cg-chat-form textarea:focus {
-      outline: 2px solid #2563eb;
+      outline: 2px solid #74bd20;
       outline-offset: 1px;
-      border-color: #2563eb;
+      border-color: #74bd20;
     }
     .cg-chat-bubble a {
-      color: #1d4ed8;
+      color: #5f9a18;
       font-weight: 600;
       text-decoration: underline;
       text-underline-offset: 2px;
     }
     .cg-chat-bubble a:hover {
-      color: #1e3a8a;
+      color: #365f14;
     }
     a { color: var(--blue-500); text-decoration: none; }
     a:hover { text-decoration: underline; }
@@ -2015,7 +2016,7 @@
       margin: 0 0 0.5rem;
       font-size: clamp(0.78rem, 2.4vw, 0.9rem);
       font-weight: 700;
-      color: var(--blue-900, #1e3a5f);
+      color: var(--blue-900, #1e3a0f);
       letter-spacing: 0.01em;
       line-height: 1.25;
     }
@@ -4827,22 +4828,27 @@
       );
     }
 
-    const PERSONALIZATION_PALETTE_IDS = ["azul", "bosque", "indigo", "vino", "pizarra", "aurora", "lima"];
+    const PERSONALIZATION_PALETTE_IDS = ["lima", "azul", "bosque", "indigo", "vino", "pizarra", "aurora"];
     const PERSONALIZATION_PALETTES = [
-      { id: "azul", label: "Azul clásico", desc: "Corporativo y legible", swatch: "#2563eb" },
-      { id: "bosque", label: "Bosque", desc: "Verde esmeralda sobrio", swatch: "#0d9488" },
-      { id: "indigo", label: "Índigo", desc: "Profundo y contemporáneo", swatch: "#6366f1" },
-      { id: "vino", label: "Vino", desc: "Borgoña elegante", swatch: "#be123c" },
-      { id: "pizarra", label: "Pizarra", desc: "Gris azulado minimal", swatch: "#475569" },
-      { id: "aurora", label: "Aurora", desc: "Violeta con carácter", swatch: "#7c3aed" },
-      { id: "lima", label: "Lima", desc: "Verde institucional (#74BD20)", swatch: "#74bd20" }
+      {
+        id: "lima",
+        label: "Lima (oficial)",
+        desc: "Verde institucional #74BD20 — color corporativo por defecto",
+        swatch: "#74bd20"
+      },
+      { id: "azul", label: "Azul clásico", desc: "Paleta secundaria — corporativo y legible", swatch: "#2563eb" },
+      { id: "bosque", label: "Bosque", desc: "Paleta secundaria — verde esmeralda sobrio", swatch: "#0d9488" },
+      { id: "indigo", label: "Índigo", desc: "Paleta secundaria — profundo y contemporáneo", swatch: "#6366f1" },
+      { id: "vino", label: "Vino", desc: "Paleta secundaria — borgoña elegante", swatch: "#be123c" },
+      { id: "pizarra", label: "Pizarra", desc: "Paleta secundaria — gris azulado minimal", swatch: "#475569" },
+      { id: "aurora", label: "Aurora", desc: "Paleta secundaria — violeta con carácter", swatch: "#7c3aed" }
     ];
 
     /* ┌─ 10. Personalización / temas (paleta, CSS export, email shell) ───────────────── */
     function getPersonalization() {
       var d = load("personalization", null);
       if (!d || typeof d !== "object") d = {};
-      var pal = PERSONALIZATION_PALETTE_IDS.indexOf(d.palette) >= 0 ? d.palette : "azul";
+      var pal = PERSONALIZATION_PALETTE_IDS.indexOf(d.palette) >= 0 ? d.palette : "lima";
       return { palette: pal };
     }
 
@@ -4851,7 +4857,7 @@
       var next = {
         palette: partial && partial.palette != null ? partial.palette : cur.palette
       };
-      if (PERSONALIZATION_PALETTE_IDS.indexOf(next.palette) < 0) next.palette = "azul";
+      if (PERSONALIZATION_PALETTE_IDS.indexOf(next.palette) < 0) next.palette = "lima";
       save("personalization", next);
       applyPersonalizationToDom();
     }
@@ -4870,7 +4876,7 @@
       if (h.length === 3) {
         h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
       }
-      if (h.length !== 6 || /[^0-9a-f]/i.test(h)) return [37, 99, 235];
+      if (h.length !== 6 || /[^0-9a-f]/i.test(h)) return [116, 189, 32];
       return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
     }
 
@@ -4882,10 +4888,10 @@
         gray300: "#cbd5e1",
         gray600: "#475569",
         gray800: "#1e293b",
-        blue500: "#2563eb",
-        blue900: "#0c1e3d",
-        blue400: "#3b82f6",
-        accentDark: "#1d4ed8",
+        blue500: "#74bd20",
+        blue900: "#1e3a0f",
+        blue400: "#8fd03a",
+        accentDark: "#5f9a18",
         white: "#ffffff",
         info: "#3742fa",
         fgDark: "#0f172a",
@@ -4910,8 +4916,8 @@
         d.white = v("--white", d.white);
         d.info = v("--info-color", v("--map-info", d.info));
         d.fgDark = d.gray800;
-        d.propBg = v("--resident-propietario-bg", "rgba(37, 99, 235, 0.1)");
-        d.propBorder = v("--resident-propietario-border", "rgba(37, 99, 235, 0.42)");
+        d.propBg = v("--resident-propietario-bg", "rgba(116, 189, 32, 0.14)");
+        d.propBorder = v("--resident-propietario-border", "rgba(95, 154, 24, 0.45)");
       } catch (e1) {}
       return d;
     }
@@ -4940,9 +4946,9 @@
 
     function getExportAccentHex() {
       try {
-        return (getComputedStyle(document.documentElement).getPropertyValue("--blue-500") || "#2563eb").trim();
+        return (getComputedStyle(document.documentElement).getPropertyValue("--blue-500") || "#74bd20").trim();
       } catch (e3) {
-        return "#2563eb";
+        return "#74bd20";
       }
     }
 
@@ -4953,13 +4959,13 @@
         return x || fb;
       }
       return {
-        ribbon: v("--blue-500", "#2563eb"),
-        headG1: v("--blue-900", "#0c1e3d"),
-        headG2: v("--blue-700", "#1e3a5f"),
-        headG3: v("--blue-500", "#2563eb"),
-        accentDark: v("--accent-dark", "#1d4ed8"),
-        blue100: v("--blue-100", "#dbeafe"),
-        blue400: v("--blue-400", "#3b82f6"),
+        ribbon: v("--blue-500", "#74bd20"),
+        headG1: v("--blue-900", "#1e3a0f"),
+        headG2: v("--blue-700", "#365f14"),
+        headG3: v("--blue-500", "#74bd20"),
+        accentDark: v("--accent-dark", "#5f9a18"),
+        blue100: v("--blue-100", "#ecfccb"),
+        blue400: v("--blue-400", "#8fd03a"),
         outerBg1: v("--gray-200", "#e8eef5"),
         outerBg2: v("--gray-100", "#f1f5f9"),
         outerBg3: v("--gray-50", "#f8fafc"),
@@ -5653,13 +5659,13 @@
             </section>
         </div>`;
   var CG_DEPT_CSS = `
-        /* Paleta alineada con Sistema de Gestión - Conserjeria (index.html) */
+        /* Paleta alineada con Sistema de Gestión - Conserjeria (index.html); oficial Lima #74BD20 */
         :root {
-            --blue-900: #0c1e3d;
-            --blue-700: #1e3a5f;
-            --blue-500: #2563eb;
-            --blue-400: #3b82f6;
-            --blue-100: #dbeafe;
+            --blue-900: #1e3a0f;
+            --blue-700: #365f14;
+            --blue-500: #74bd20;
+            --blue-400: #8fd03a;
+            --blue-100: #ecfccb;
             --gray-50: #f8fafc;
             --gray-100: #f1f5f9;
             --gray-200: #e2e8f0;
@@ -5675,15 +5681,15 @@
             --secondary-text: var(--gray-600);
             --primary-color: var(--blue-500);
             --accent-color: var(--blue-500);
-            --accent-dark: #1d4ed8;
+            --accent-dark: #5f9a18;
             --border-color: var(--gray-200);
             --danger-color: #dc2626;
             --success-color: #059669;
             --warning-color: #d97706;
-            --info-color: #1d4ed8;
+            --info-color: #5f9a18;
             --new-resident-color: #7c3aed;
             --on-accent: #ffffff;
-            --shadow: 0 4px 24px rgba(12, 30, 61, 0.08);
+            --shadow: 0 4px 24px rgba(30, 58, 15, 0.1);
             --radius: 12px;
             /* Mapas edificio / estacionamiento — dashboard oscuro */
             --map-fondo: #0a0a0a;
@@ -5704,9 +5710,9 @@
             --map-est-disp-bg: rgba(116, 189, 32, 0.1);
             --map-est-asig: #74BD20;
             --map-est-arriendo: #e67e22;
-            --resident-propietario: #1d4ed8;
-            --resident-propietario-bg: rgba(29, 78, 216, 0.1);
-            --resident-propietario-border: rgba(29, 78, 216, 0.42);
+            --resident-propietario: #5f9a18;
+            --resident-propietario-bg: rgba(116, 189, 32, 0.14);
+            --resident-propietario-border: rgba(95, 154, 24, 0.45);
             --resident-arrendatario: #0d9488;
             --resident-arrendatario-bg: rgba(13, 148, 136, 0.13);
             --resident-arrendatario-border: rgba(13, 148, 136, 0.45);
@@ -9475,8 +9481,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
             const T = (window.CG && typeof window.CG.snapshotThemeForExport === 'function' && window.CG.snapshotThemeForExport()) || {
                 gray50: '#f8fafc', gray100: '#f1f5f9', gray200: '#e2e8f0', gray300: '#cbd5e1', gray600: '#475569', gray800: '#1e293b', fgDark: '#0f172a',
-                blue500: '#2563eb', blue900: '#0c1e3d', accentDark: '#1d4ed8', white: '#ffffff', info: '#3742fa',
-                propBg: 'rgba(37, 99, 235, 0.1)', propBorder: 'rgba(37, 99, 235, 0.42)'
+                blue500: '#74bd20', blue900: '#1e3a0f', accentDark: '#5f9a18', white: '#ffffff', info: '#3742fa',
+                propBg: 'rgba(116, 189, 32, 0.14)', propBorder: 'rgba(95, 154, 24, 0.45)'
             };
             
             // Estilos igual que ficha del módulo: fondo oscuro, mismos bloques
@@ -9589,8 +9595,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             };
             const T = (window.CG && typeof window.CG.snapshotThemeForExport === 'function' && window.CG.snapshotThemeForExport()) || {
                 gray50: '#f8fafc', gray200: '#e2e8f0', gray600: '#475569', gray800: '#1e293b', fgDark: '#0f172a',
-                blue500: '#2563eb', blue900: '#0c1e3d', accentDark: '#1d4ed8', white: '#ffffff', info: '#3742fa',
-                propBg: 'rgba(37, 99, 235, 0.1)', propBorder: 'rgba(37, 99, 235, 0.42)'
+                blue500: '#74bd20', blue900: '#1e3a0f', accentDark: '#5f9a18', white: '#ffffff', info: '#3742fa',
+                propBg: 'rgba(116, 189, 32, 0.14)', propBorder: 'rgba(95, 154, 24, 0.45)'
             };
             let parkingHtml = 'N/A';
             if (unit.parkingNumbers && unit.parkingNumbers.length > 0) {
@@ -11886,7 +11892,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         destroyDashboardCharts();
         if (typeof Chart === "undefined") return;
 
-      var blue = "#2563eb";
+      var blue = "#74bd20";
       try {
         var st = getComputedStyle(document.documentElement);
         var b = st.getPropertyValue("--blue-500").trim();
@@ -14885,7 +14891,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   function buildEmailShell(opts) {
     opts = opts || {};
     var C = typeof G.getEmailShellThemeColors === "function" ? G.getEmailShellThemeColors() : {};
-    var accent = opts.ribbonColor || C.ribbon || "#2563eb";
+    var accent = opts.ribbonColor || C.ribbon || "#74bd20";
     var brandLine = emailHtmlEscape(opts.brandLine != null ? opts.brandLine : G.APP_BRAND_NAME);
     var headTitle = emailHtmlEscape(opts.title != null ? opts.title : G.APP_BRAND_NAME);
     var subtitle = opts.subtitleHtml || "";
@@ -15001,7 +15007,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var acc =
       accentColor ||
       (typeof G.getEmailShellThemeColors === "function" ? G.getEmailShellThemeColors().ribbon : "") ||
-      "#2563eb";
+      "#74bd20";
     return (
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e7e7ea;border-radius:8px;overflow:hidden;border-collapse:separate;">' +
       '<tr><td style="padding:10px 18px;background:#fafafa;color:#18181b;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;border-bottom:1px solid #e7e7ea;border-left:3px solid ' +
@@ -15018,9 +15024,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   function encomiendaBodyHtml(e, kind) {
     var C = typeof G.getEmailShellThemeColors === "function" ? G.getEmailShellThemeColors() : {};
-    var accRibbon = C.ribbon || "#2563eb";
-    var accDark = C.accentDark || "#1d4ed8";
-    var headDark = C.headG1 || "#0c1e3d";
+    var accRibbon = C.ribbon || "#74bd20";
+    var accDark = C.accentDark || "#5f9a18";
+    var headDark = C.headG1 || "#1e3a0f";
     var dep = G.deptById(e.deptId);
     var depto = dep ? dep.number : "—";
     var resName = (e.destinatarioNombre && String(e.destinatarioNombre).trim()) || G.deptResidentDisplayName(e.deptId);
@@ -15091,8 +15097,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   function visitParteBodyHtml(v, dep, estacionamientoVisita, hours) {
     var C = typeof G.getEmailShellThemeColors === "function" ? G.getEmailShellThemeColors() : {};
-    var headDark = C.headG1 || "#0c1e3d";
-    var headMid = C.headG2 || "#1e3a5f";
+    var headDark = C.headG1 || "#1e3a0f";
+    var headMid = C.headG2 || "#365f14";
     var accRibbon = C.ribbon || headMid;
     var depto = dep ? dep.number : "—";
     var resName = G.deptResidentDisplayName(v.deptId);
@@ -17620,7 +17626,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }).join("");
       p.innerHTML =
         "<div class=\"card\"><div class=\"card-h\"><h3>Personalización</h3></div><div class=\"card-b\">" +
-        "<p class=\"page-desc\" style=\"margin:0 0 1rem\">Paleta de color para toda la aplicación: pantalla de acceso, conserjería, módulo Departamentos, reportes HTML y fichas.</p>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 1rem\"><strong>Lima</strong> (verde institucional <code>#74BD20</code>) es la paleta oficial. Las demás son alternativas secundarias. Afecta a la pantalla de acceso, conserjería, módulo Departamentos, reportes HTML y fichas.</p>" +
         "<div style=\"max-width:28rem\">" +
         palCards +
         "</div></div></div>";
