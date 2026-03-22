@@ -2833,13 +2833,14 @@
     /* Misma cadena que en firestore.rules (match /cg_building_shared/{buildingId}/...). Cámbiela en ambos sitios. */
     window.CG_FIRESTORE_BUILDING_KEY = window.CG_FIRESTORE_BUILDING_KEY || "wm815_shared_v1";
     window.CG_CLOUD_SYNC_ENABLED = window.CG_CLOUD_SYNC_ENABLED !== false;
-    /* true (defecto): datos de negocio solo en RAM + Firestore; no localStorage persistente. false: modo clásico LS + sync. */
-    window.CG_CLOUD_ONLY_STORAGE = typeof window.CG_CLOUD_ONLY_STORAGE === "boolean" ? window.CG_CLOUD_ONLY_STORAGE : true;
+    /* false (defecto): datos en localStorage + sync a Firestore (sobreviven al recargar aunque falle la nube). true: RAM+Firestore con espejo en LS (ver capa persist). */
+    window.CG_CLOUD_ONLY_STORAGE = typeof window.CG_CLOUD_ONLY_STORAGE === "boolean" ? window.CG_CLOUD_ONLY_STORAGE : false;
     /* true = forzar solo pulls periódicos (redundante si no usa tiempo real). */
     window.CG_FIRESTORE_FORCE_POLLING = window.CG_FIRESTORE_FORCE_POLLING === true;
     /*
-     * Por defecto la app NO usa onSnapshot (bug Firestore 11.x "Unexpected state" ca9/b815 en watch).
-     * Solo si pone true aquí antes de cargar el body se activa escucha en tiempo real (más riesgo, menos lecturas).
+     * Por defecto la app NO usa onSnapshot en toda la colección ls (bug Firestore 11.x en algunos navegadores).
+     * El chat del equipo sí usa un onSnapshot solo del documento staffChatMessages (actualización casi inmediata).
+     * Ponga true aquí para escuchar también todos los docs ls en tiempo real (más lecturas, mismo riesgo de bug).
      */
     window.CG_FIRESTORE_USE_REALTIME_LISTENER = window.CG_FIRESTORE_USE_REALTIME_LISTENER === true;
     /* Intervalo ms del modo polling (mín. 15s). Por defecto 60s. */
@@ -2983,7 +2984,7 @@
   <script>
   /* === PART 1: storage, state, auth ===
    * Instalación limpia: sin usuarios ni datos de prueba precargados (primer administrador en el login).
-   * Con CG_CLOUD_ONLY_STORAGE (defecto true): datos bajo CG.LS viven en RAM + Firestore; la sesión de login solo en sessionStorage.
+   * CG_CLOUD_ONLY_STORAGE (defecto false): datos bajo CG.LS en localStorage y, si hay Firebase, también en RAM + Firestore. Sesión en sessionStorage cuando modo solo-nube efectivo.
    * La config de Firebase (apiKey, etc.) es identificador público del SDK web; las reglas definen el acceso.
    */
   (function () {
@@ -3018,7 +3019,7 @@
         ? window.CG_FIRESTORE_BUILDING_KEY
         : "wm815_shared_v1";
     var CG_CLOUD_ONLY_STORAGE =
-      typeof window.CG_CLOUD_ONLY_STORAGE === "boolean" ? window.CG_CLOUD_ONLY_STORAGE : true;
+      typeof window.CG_CLOUD_ONLY_STORAGE === "boolean" ? window.CG_CLOUD_ONLY_STORAGE : false;
     /** Sesión de login en el navegador (pestaña); no se sube a Firestore. */
     var CG_SESSION_BROWSER_KEY = "cg_tab_session_v1";
     window.__cgMemLs = window.__cgMemLs || {};
@@ -3057,6 +3058,9 @@
         if (!__cgEffectiveCloudOnly()) return origSet(fullKey, str);
         var sk = fullKey.slice(LS.length);
         __cgMemLs[sk] = str;
+        try {
+          origSet(fullKey, str);
+        } catch (eLsMirror) {}
         return true;
       };
 
@@ -3103,8 +3107,8 @@
     }
 
     /**
-     * Si el pull a Firestore falla, la RAM (__cgMemLs) queda vacía pero el navegador puede tener copia en localStorage.
-     * Sin esto, un recargo con red mala borraría todo al ignorar LS en modo cloud-only.
+     * Copia claves CG.LS desde localStorage a __cgMemLs cuando el modo solo-nube está activo.
+     * Se llama antes del pull inicial y si el pull falla; con espejo LS en localSetRaw los datos sobreviven al recargar.
      */
     function __cgHydrateMemLsFromLocalStorageBackup() {
       if (!__cgEffectiveCloudOnly()) return;
@@ -3521,6 +3525,7 @@
         } catch (eI) {}
         CG_SYNC_STATE.periodicPushTimer = null;
       }
+      detachStaffChatFirestoreSync();
     }
 
     /** Tramo de shiftLog sin cierre (compartido con CG_UI vía window.CG). */
@@ -3573,9 +3578,100 @@
       return JSON.stringify(merged);
     }
 
+    /** Clave estable para unir mensajes locales y remotos sin perder conversación (last-write-wins puro pisaba al otro equipo). */
+    function __cgStaffChatDedupeKey(m) {
+      if (m && typeof m === "object" && m.id) return "id:" + String(m.id);
+      var at = m && m.at ? String(m.at) : "";
+      var uid = m && m.userId ? String(m.userId) : "";
+      var tx = m && m.text != null ? String(m.text) : "";
+      return "leg:" + at + "\0" + uid + "\0" + tx.slice(0, 240);
+    }
+
+    /**
+     * Une mensajes de chat por id (o huella legada) para que dos equipos puedan escribir sin borrarse mutuamente.
+     * Si el remoto es [] se respeta (vaciar historial desde admin).
+     */
+    function __cgMergeStaffChatPull(curRaw, incomingRaw) {
+      var loc = [];
+      var rem = [];
+      try {
+        loc = JSON.parse(curRaw || "[]");
+      } catch (e1) {
+        loc = [];
+      }
+      try {
+        rem = JSON.parse(incomingRaw || "[]");
+      } catch (e2) {
+        return typeof incomingRaw === "string" ? incomingRaw : "[]";
+      }
+      if (!Array.isArray(loc)) loc = [];
+      if (!Array.isArray(rem)) return typeof incomingRaw === "string" ? incomingRaw : "[]";
+      if (rem.length === 0) return "[]";
+      var byId = Object.create(null);
+      var i;
+      for (i = 0; i < loc.length; i++) {
+        var a = loc[i];
+        if (!a || typeof a !== "object") continue;
+        byId[__cgStaffChatDedupeKey(a)] = a;
+      }
+      for (i = 0; i < rem.length; i++) {
+        var b = rem[i];
+        if (!b || typeof b !== "object") continue;
+        byId[__cgStaffChatDedupeKey(b)] = b;
+      }
+      var merged = [];
+      for (var k in byId) {
+        if (Object.prototype.hasOwnProperty.call(byId, k)) merged.push(byId[k]);
+      }
+      merged.sort(function (x, y) {
+        return new Date((x && x.at) || 0) - new Date((y && y.at) || 0);
+      });
+      return JSON.stringify(merged);
+    }
+
+    var __cgStaffChatFsUnsub = null;
+
+    function detachStaffChatFirestoreSync() {
+      if (typeof __cgStaffChatFsUnsub === "function") {
+        try {
+          __cgStaffChatFsUnsub();
+        } catch (eD) {}
+      }
+      __cgStaffChatFsUnsub = null;
+    }
+
+    /**
+     * Escucha en tiempo real solo el doc del chat (independiente del modo polling/listener global de ls).
+     */
+    function attachStaffChatFirestoreSync() {
+      if (__cgStaffChatFsUnsub) return;
+      if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB || !__cgFirestoreFieldValue()) return;
+      var col = __cgCloudLsCol();
+      if (!col) return;
+      try {
+        var docRef = col.doc(__cgCloudSanitizeDocId("staffChatMessages"));
+        __cgStaffChatFsUnsub = docRef.onSnapshot(
+          function (snap) {
+            if (!snap || !snap.exists) return;
+            __cgBeginRemoteApply();
+            try {
+              applyRemoteLsDoc(snap);
+            } finally {
+              __cgEndRemoteApply();
+            }
+          },
+          function (err) {
+            __cgSyncLog("warn", "staff_chat_fs_listener", err && err.code ? err.code : err);
+          }
+        );
+      } catch (eAtt) {
+        __cgSyncLog("warn", "staff_chat_fs_listener_attach", eAtt);
+      }
+    }
+
     /**
      * Aplica un documento remoto al almacén local. No inicia transacción remota.
-     * Política: valor remoto sustituye local salvo merge declarado (shiftLogs).
+     * Política: valor remoto sustituye local salvo merge declarado (shiftLogs, staffChatMessages).
      */
     function applyRemoteLsDoc(docSnap) {
       if (!docSnap || !docSnap.exists) return;
@@ -3593,6 +3689,8 @@
         var nextVal = d.value;
         if (d.key === "shiftLogs") {
           nextVal = __cgMergeShiftLogsPullPreserveLocalOpen(cur, d.value);
+        } else if (d.key === "staffChatMessages") {
+          nextVal = __cgMergeStaffChatPull(cur, d.value);
         }
         if (cur === nextVal) return;
         if (!P.localSetRaw(full, nextVal)) {
@@ -3950,6 +4048,11 @@
               });
             } catch (eEv) {}
           }
+          try {
+            if (window.CG && window.CG.currentUser && window.CG.currentUser()) {
+              attachStaffChatFirestoreSync();
+            }
+          } catch (eChatL) {}
           if (result.partial) __cgSyncLog("warn", "init_done_partial", CG_CLOUD_BUILDING_KEY);
           else __cgSyncLog("info", "init_done_ok", CG_CLOUD_BUILDING_KEY);
           return result;
@@ -5484,7 +5587,7 @@
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
       getPersonalization, setPersonalization, applyPersonalizationToDom,
       hexToRgb, snapshotThemeForExport, buildExportThemeRootCss, getExportAccentHex, getEmailShellThemeColors,
-      initCloudSync, stopCloudSyncListener, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPullSingleLsKey, cloudPushAllKeysOnce,
+      initCloudSync, stopCloudSyncListener, attachStaffChatFirestoreSync, detachStaffChatFirestoreSync, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPullSingleLsKey, cloudPushAllKeysOnce,
       flushPendingCloudWritesNow, cloudPushKeyImmediate, cloudPushLsKeyPromise, armLsKeyPullQuiet, getCloudSyncLastInitResult,
       syncLoginFirstAdminPanel,
       effectiveCloudOnlyStorage: function () {
@@ -11989,6 +12092,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         root.classList.remove("hidden");
         root.setAttribute("aria-hidden", "false");
         staffChatBind();
+        if (typeof G.attachStaffChatFirestoreSync === "function") G.attachStaffChatFirestoreSync();
         staffChatStartPoll();
         staffChatLastMsgs = "";
         staffChatRefreshFromStore();
@@ -19590,12 +19694,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
 
   if (typeof G.effectiveCloudOnlyStorage === "function" && G.effectiveCloudOnlyStorage() && typeof G.cloudPullAllOnce === "function") {
+    if (typeof G.__cgHydrateMemLsFromLocalStorageBackup === "function") {
+      G.__cgHydrateMemLsFromLocalStorageBackup();
+    }
     G.cloudPullAllOnce()
-      .then(function () {
-        cgStripLegacyIfCloudOnly();
-      })
       .catch(function (ePullBoot) {
-        console.warn("[CG] Pull inicial desde Firestore falló; se intenta recuperar datos desde localStorage de este navegador.", ePullBoot);
+        console.warn("[CG] Pull inicial desde Firestore falló; se mantiene/recupera estado desde localStorage de este navegador.", ePullBoot);
         if (typeof G.__cgHydrateMemLsFromLocalStorageBackup === "function") {
           G.__cgHydrateMemLsFromLocalStorageBackup();
         }
