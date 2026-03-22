@@ -2598,9 +2598,11 @@
       typeof window.CG_FIRESTORE_BUILDING_KEY === "string" && window.CG_FIRESTORE_BUILDING_KEY.length > 0
         ? window.CG_FIRESTORE_BUILDING_KEY
         : "wm815_shared_v1";
-    var __cgCloudExcludeKeys = { session: true, chatLastReadByUser: true };
+    /* session: solo en este dispositivo (evita pisar sesiones entre PCs). Resto de claves conciergeria_v1_* → nube. */
+    var __cgCloudExcludeKeys = { session: true };
     var __cgCloudApplyingRemote = false;
     var __cgCloudUnsubscribe = null;
+    var __cgCloudPeriodicPushTimer = null;
     var __cgCloudPushTimers = {};
 
     function __cgCloudSanitizeDocId(shortKey) {
@@ -2662,6 +2664,17 @@
       scheduleCloudWrite(shortKey);
     }
 
+    function flushPendingCloudWritesNow() {
+      var keys = Object.keys(__cgCloudPushTimers);
+      var i;
+      for (i = 0; i < keys.length; i++) {
+        var sk = keys[i];
+        clearTimeout(__cgCloudPushTimers[sk]);
+        delete __cgCloudPushTimers[sk];
+        __cgCloudPushKeyNow(sk);
+      }
+    }
+
     function stopCloudSyncListener() {
       if (typeof __cgCloudUnsubscribe === "function") {
         try {
@@ -2669,6 +2682,12 @@
         } catch (eU) {}
       }
       __cgCloudUnsubscribe = null;
+      if (__cgCloudPeriodicPushTimer !== null) {
+        try {
+          clearInterval(__cgCloudPeriodicPushTimer);
+        } catch (eI) {}
+        __cgCloudPeriodicPushTimer = null;
+      }
     }
 
     function applyRemoteLsDoc(docSnap) {
@@ -2797,6 +2816,34 @@
               window.CG_ACTIONS.syncDepartamentosModuleFromLocal();
             }
           } catch (eS) {}
+          /* Respaldo: reenvía todo localStorage con prefijo cada 2 min (por si falló un set puntual o se cerró la pestaña). */
+          if (__cgCloudPeriodicPushTimer !== null) {
+            try {
+              clearInterval(__cgCloudPeriodicPushTimer);
+            } catch (eC) {}
+            __cgCloudPeriodicPushTimer = null;
+          }
+          __cgCloudPeriodicPushTimer = setInterval(function () {
+            if (!CG_CLOUD_SYNC_ENABLED || !window.firebaseDB || __cgCloudApplyingRemote) return;
+            cloudPushAllKeysOnce().catch(function (eP) {
+              console.warn("[CloudSync] push periódico:", eP && eP.code ? eP.code : eP);
+            });
+          }, 120000);
+          if (!window.__CG_CLOUD_LIFECYCLE_BOUND) {
+            window.__CG_CLOUD_LIFECYCLE_BOUND = true;
+            try {
+              window.addEventListener(
+                "pagehide",
+                function () {
+                  flushPendingCloudWritesNow();
+                },
+                { capture: true }
+              );
+              document.addEventListener("visibilitychange", function () {
+                if (document.visibilityState === "hidden") flushPendingCloudWritesNow();
+              });
+            } catch (eEv) {}
+          }
           console.log("[CloudSync] activo — edificio:", CG_CLOUD_BUILDING_KEY);
           return { ok: true };
         })
@@ -3610,9 +3657,15 @@
       var of = "vinculacion_wm815_former_residents_local";
       if (!localStorage.getItem(nu) && localStorage.getItem(ou)) {
         localStorage.setItem(nu, localStorage.getItem(ou));
+        if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
+          window.CG.cloudSyncAfterDirectLocalStorageWrite("wm815_units");
+        }
       }
       if (!localStorage.getItem(nf) && localStorage.getItem(of)) {
         localStorage.setItem(nf, localStorage.getItem(of));
+        if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
+          window.CG.cloudSyncAfterDirectLocalStorageWrite("wm815_former_residents");
+        }
       }
     } catch (e1) {}
   }
@@ -10996,6 +11049,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     });
     var merged = kept.concat(importedUnits);
     localStorage.setItem(LS_U, JSON.stringify(merged));
+    if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
+      window.CG.cloudSyncAfterDirectLocalStorageWrite("wm815_units");
+    }
     A.syncDepartamentosModuleFromLocal();
     if (window.CG && typeof window.CG.mountDepartamentosModule === "function") {
       window.CG.mountDepartamentosModule();
