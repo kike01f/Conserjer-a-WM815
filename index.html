@@ -4136,10 +4136,15 @@
       }
 
       /* Pull primero: un equipo nuevo puede tener plantilla local vacía; si empujáramos antes, pisaríamos el servidor remoto.
-       * Luego un push sube el estado ya fusionado con la nube (claves solo locales, etc.). */
+       * Luego un push sube el estado ya fusionado con la nube (claves solo locales, etc.).
+       * Si el pull falla, NO hacer push en este init (evita borrar remoto con un snapshot local vacío). */
+      var pullOk = false;
       return cloudPullAllOnce()
         .then(function () {
-          if (alive()) result.phases.pull = { ok: true };
+          if (alive()) {
+            result.phases.pull = { ok: true };
+            pullOk = true;
+          }
         })
         .catch(function (ePull) {
           if (!alive()) return;
@@ -4149,10 +4154,16 @@
           __cgSyncLog("warn", "phase_pull", ePull);
         })
         .then(function () {
-          return alive() ? cloudPushAllKeysOnce() : Promise.resolve();
+          if (!alive()) return Promise.resolve();
+          if (!pullOk) {
+            result.phases.push = { ok: false, skipped: true, reason: "pull-failed" };
+            __cgSyncLog("warn", "phase_push_skipped_pull_failed");
+            return Promise.resolve();
+          }
+          return cloudPushAllKeysOnce();
         })
         .then(function () {
-          if (alive()) result.phases.push = { ok: true };
+          if (alive() && pullOk) result.phases.push = { ok: true };
         })
         .catch(function (ePush) {
           if (!alive()) return;
