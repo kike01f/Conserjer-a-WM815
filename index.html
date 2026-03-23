@@ -4024,7 +4024,16 @@
         }
       } catch (eN) {}
 
-      var result = { ok: false, partial: false, phases: {}, listenerStarted: false, reason: null, err: null };
+      var result = {
+        ok: false,
+        partial: false,
+        partialPullFailed: false,
+        partialPushFailed: false,
+        phases: {},
+        listenerStarted: false,
+        reason: null,
+        err: null
+      };
 
       function alive() {
         return gen === CG_SYNC_STATE.initGeneration;
@@ -4136,6 +4145,7 @@
           if (!alive()) return;
           result.phases.pull = { ok: false, err: ePull };
           result.partial = true;
+          result.partialPullFailed = true;
           __cgSyncLog("warn", "phase_pull", ePull);
         })
         .then(function () {
@@ -4148,6 +4158,7 @@
           if (!alive()) return;
           result.phases.push = { ok: false, err: ePush };
           result.partial = true;
+          result.partialPushFailed = true;
           __cgSyncLog("warn", "phase_push", ePush);
         })
         .then(function () {
@@ -19597,10 +19608,22 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           if (r && r.reason === "disabled") return;
           if (r && r.reason === "superseded") return;
           if (r && r.ok && r.partial) {
-            G.toast(
-              "Sincronización parcial: los datos en este equipo se mantienen; la red o el servidor no respondieron del todo. Reintente más tarde o revise permisos (F12).",
-              "warn"
-            );
+            if (r.partialPullFailed) {
+              G.toast(
+                "Sincronización parcial: no se pudieron traer todos los cambios remotos. Sus datos locales se mantienen; revise red/permisos y reintente.",
+                "warn"
+              );
+            } else if (r.partialPushFailed) {
+              G.toast(
+                "Sincronización parcial: se descargaron cambios remotos, pero algunos cambios locales no se pudieron subir aún. Se reintentará automáticamente.",
+                "warn"
+              );
+            } else {
+              G.toast(
+                "Sincronización parcial: hubo una incidencia temporal de red o permisos. Reintente en unos segundos.",
+                "warn"
+              );
+            }
             return;
           }
           if (r && r.ok && !r.partial) {
@@ -19682,10 +19705,22 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             if (r && r.reason === "disabled") return;
             if (r && r.reason === "superseded") return;
             if (r && r.ok && r.partial) {
-              G.toast(
-                "Sincronización parcial: los datos en este equipo se mantienen; la red o el servidor no respondieron del todo. Reintente más tarde o revise permisos (F12).",
-                "warn"
-              );
+              if (r.partialPullFailed) {
+                G.toast(
+                  "Sincronización parcial: no se pudieron traer todos los cambios remotos. Sus datos locales se mantienen; revise red/permisos y reintente.",
+                  "warn"
+                );
+              } else if (r.partialPushFailed) {
+                G.toast(
+                  "Sincronización parcial: se descargaron cambios remotos, pero algunos cambios locales no se pudieron subir aún. Se reintentará automáticamente.",
+                  "warn"
+                );
+              } else {
+                G.toast(
+                  "Sincronización parcial: hubo una incidencia temporal de red o permisos. Reintente en unos segundos.",
+                  "warn"
+                );
+              }
               return;
             }
             if (r && r.ok && !r.partial) {
@@ -19809,10 +19844,22 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           .then(function (r) {
             if (r && r.reason === "superseded") return;
             if (r && r.ok && r.partial) {
-              G.toast(
-                "Sincronización parcial tras restaurar sesión: datos locales conservados; revise red o permisos si no ve cambios de otros equipos.",
-                "warn"
-              );
+              if (r.partialPullFailed) {
+                G.toast(
+                  "Sincronización parcial tras restaurar sesión: no se pudieron descargar todos los cambios de otros equipos. Revise red/permisos y reintente.",
+                  "warn"
+                );
+              } else if (r.partialPushFailed) {
+                G.toast(
+                  "Sesión restaurada con descarga remota correcta. Algunos cambios locales pendientes no se pudieron subir todavía; se reintentará automáticamente.",
+                  "warn"
+                );
+              } else {
+                G.toast(
+                  "Sincronización parcial tras restaurar sesión por una incidencia temporal. Se mantendrán reintentos automáticos.",
+                  "warn"
+                );
+              }
             } else if (!(r && r.ok) && !(r && r.reason === "disabled") && r && !r.ok) {
               var code = r.err && r.err.code ? r.err.code : "";
               var msg =
