@@ -3678,6 +3678,44 @@
       return JSON.stringify(merged);
     }
 
+    /**
+     * Evita que un documento remoto vacío pise personal/permisos locales con datos (p. ej. push aún no llegó
+     * o doc `users`/`roleModules` nunca se escribió en Firestore). Sin esto, tras el pull el login queda sin cuentas.
+     */
+    function __cgShouldSkipEmptyRemoteUsers(curRaw, incRaw) {
+      var inc = [];
+      try {
+        inc = JSON.parse(incRaw || "[]");
+      } catch (eI) {
+        return false;
+      }
+      if (!Array.isArray(inc) || inc.length !== 0) return false;
+      var cur = [];
+      try {
+        cur = JSON.parse(curRaw || "[]");
+      } catch (eC) {
+        return false;
+      }
+      return Array.isArray(cur) && cur.length > 0;
+    }
+
+    function __cgShouldSkipEmptyRemoteRoleModules(curRaw, incRaw) {
+      var inc;
+      try {
+        inc = JSON.parse(incRaw || "{}");
+      } catch (eI2) {
+        return false;
+      }
+      if (!inc || typeof inc !== "object" || Array.isArray(inc) || Object.keys(inc).length > 0) return false;
+      var cur;
+      try {
+        cur = JSON.parse(curRaw || "{}");
+      } catch (eC2) {
+        return false;
+      }
+      return !!(cur && typeof cur === "object" && !Array.isArray(cur) && Object.keys(cur).length > 0);
+    }
+
     var __cgStaffChatFsUnsub = null;
 
     function detachStaffChatRemoteSync() {
@@ -3740,6 +3778,14 @@
           nextVal = __cgMergeShiftLogsPullPreserveLocalOpen(cur, d.value);
         } else if (d.key === "staffChatMessages") {
           nextVal = __cgMergeStaffChatPull(cur, d.value);
+        } else if (d.key === "users" && __cgShouldSkipEmptyRemoteUsers(cur, d.value)) {
+          __cgSyncLog("info", "skip_pull_empty_users_keeps_local");
+          scheduleCloudWrite("users");
+          return;
+        } else if (d.key === "roleModules" && __cgShouldSkipEmptyRemoteRoleModules(cur, d.value)) {
+          __cgSyncLog("info", "skip_pull_empty_roleModules_keeps_local");
+          scheduleCloudWrite("roleModules");
+          return;
         }
         if (cur === nextVal) return;
         if (!P.localSetRaw(full, nextVal)) {
