@@ -3678,27 +3678,6 @@
       return JSON.stringify(merged);
     }
 
-    /**
-     * Evita que un documento remoto vacío pise personal/permisos locales con datos (p. ej. push aún no llegó
-     * o doc `users`/`roleModules` nunca se escribió en Firestore). Sin esto, tras el pull el login queda sin cuentas.
-     */
-    function __cgShouldSkipEmptyRemoteUsers(curRaw, incRaw) {
-      var inc = [];
-      try {
-        inc = JSON.parse(incRaw || "[]");
-      } catch (eI) {
-        return false;
-      }
-      if (!Array.isArray(inc) || inc.length !== 0) return false;
-      var cur = [];
-      try {
-        cur = JSON.parse(curRaw || "[]");
-      } catch (eC) {
-        return false;
-      }
-      return Array.isArray(cur) && cur.length > 0;
-    }
-
     function __cgShouldSkipEmptyRemoteRoleModules(curRaw, incRaw) {
       var inc;
       try {
@@ -3714,6 +3693,178 @@
         return false;
       }
       return !!(cur && typeof cur === "object" && !Array.isArray(cur) && Object.keys(cur).length > 0);
+    }
+
+    /**
+     * Listas de negocio: al hacer pull, unir por `id` (el remoto gana en conflicto; se conservan filas solo locales).
+     * Evita que dos equipos se pisen mutuamente y reduce pérdida de datos frente a last-write-wins puro.
+     */
+    var __CG_LS_MERGE_ARRAY_BY_ID = {
+      departments: true,
+      parkingSlots: true,
+      bodegas: true,
+      visits: true,
+      reservas: true,
+      novedades: true,
+      encomiendas: true,
+      proveedores: true,
+      buildingUnits: true,
+      buildingResidents: true,
+      buildingFormerResidents: true,
+      buildingParking: true,
+      conserjeActivityLog: true,
+      wm815_units: true,
+      wm815_former_residents: true
+    };
+
+    /** Objetos JSON: no aplicar `{}` remoto si el local ya tiene claves (misma lógica que roleModules). */
+    var __CG_LS_PROTECT_EMPTY_OBJECT = {
+      config: true,
+      visitVehAlertLog: true,
+      chatLastReadByUser: true,
+      personalization: true,
+      parkingConfig: true,
+      deptAdminGateVerifier: true
+    };
+
+    function __cgMergeRemoteLsArrayById(curRaw, incRaw) {
+      var cur = [];
+      var inc = [];
+      try {
+        cur = JSON.parse(curRaw || "[]");
+      } catch (eC) {
+        cur = [];
+      }
+      try {
+        inc = JSON.parse(incRaw || "[]");
+      } catch (eI) {
+        return typeof incRaw === "string" ? incRaw : "[]";
+      }
+      if (!Array.isArray(cur) || !Array.isArray(inc)) return typeof incRaw === "string" ? incRaw : "[]";
+      if (inc.length === 0) return cur.length ? curRaw : incRaw;
+      if (cur.length === 0) return incRaw;
+      var byId = Object.create(null);
+      var i;
+      var u;
+      var k;
+      for (i = 0; i < inc.length; i++) {
+        u = inc[i];
+        if (u && u.id != null && u.id !== "") byId[String(u.id)] = u;
+      }
+      for (i = 0; i < cur.length; i++) {
+        u = cur[i];
+        if (!u || u.id == null || u.id === "") continue;
+        k = String(u.id);
+        if (!byId[k]) byId[k] = u;
+      }
+      var order = [];
+      var seen = Object.create(null);
+      for (i = 0; i < inc.length; i++) {
+        u = inc[i];
+        if (u && u.id != null && u.id !== "") {
+          k = String(u.id);
+          if (!seen[k]) {
+            order.push(byId[k]);
+            seen[k] = true;
+          }
+        }
+      }
+      for (i = 0; i < cur.length; i++) {
+        u = cur[i];
+        if (!u || u.id == null || u.id === "") continue;
+        k = String(u.id);
+        if (!seen[k]) {
+          order.push(byId[k]);
+          seen[k] = true;
+        }
+      }
+      var tail = [];
+      for (i = 0; i < inc.length; i++) {
+        u = inc[i];
+        if (u && (u.id == null || u.id === "")) tail.push(u);
+      }
+      for (i = 0; i < cur.length; i++) {
+        u = cur[i];
+        if (u && (u.id == null || u.id === "")) tail.push(u);
+      }
+      return JSON.stringify(order.concat(tail));
+    }
+
+    function __cgMergeUsersPull(curRaw, incRaw) {
+      var cur = [];
+      var inc = [];
+      try {
+        cur = JSON.parse(curRaw || "[]");
+      } catch (e1) {
+        return typeof incRaw === "string" ? incRaw : "[]";
+      }
+      try {
+        inc = JSON.parse(incRaw || "[]");
+      } catch (e2) {
+        return curRaw;
+      }
+      if (!Array.isArray(cur) || !Array.isArray(inc)) return typeof incRaw === "string" ? incRaw : "[]";
+      if (inc.length === 0) return cur.length ? curRaw : incRaw;
+      var byId = Object.create(null);
+      var i;
+      var u;
+      var k;
+      for (i = 0; i < inc.length; i++) {
+        u = inc[i];
+        if (u && u.id != null) byId[String(u.id)] = Object.assign({}, u);
+      }
+      for (i = 0; i < cur.length; i++) {
+        u = cur[i];
+        if (!u || u.id == null) continue;
+        k = String(u.id);
+        if (!byId[k]) byId[k] = Object.assign({}, u);
+        else {
+          var R = byId[k];
+          if (!R.passwordVerifier && u.passwordVerifier) {
+            byId[k] = Object.assign({}, R, { passwordVerifier: u.passwordVerifier });
+          }
+        }
+      }
+      var order = [];
+      var seen = Object.create(null);
+      for (i = 0; i < inc.length; i++) {
+        u = inc[i];
+        if (u && u.id != null) {
+          k = String(u.id);
+          if (!seen[k]) {
+            order.push(byId[k]);
+            seen[k] = true;
+          }
+        }
+      }
+      for (i = 0; i < cur.length; i++) {
+        u = cur[i];
+        if (!u || u.id == null) continue;
+        k = String(u.id);
+        if (!seen[k]) {
+          order.push(byId[k]);
+          seen[k] = true;
+        }
+      }
+      return JSON.stringify(order);
+    }
+
+    function __cgMergeRoleModulesPull(curRaw, incRaw) {
+      if (__cgShouldSkipEmptyRemoteRoleModules(curRaw, incRaw)) return curRaw;
+      var c = {};
+      var incObj = {};
+      try {
+        c = JSON.parse(curRaw || "{}");
+      } catch (eC) {
+        c = {};
+      }
+      try {
+        incObj = JSON.parse(incRaw || "{}");
+      } catch (eI) {
+        return curRaw;
+      }
+      if (!incObj || typeof incObj !== "object" || Array.isArray(incObj)) return typeof incRaw === "string" ? incRaw : "{}";
+      return JSON.stringify(Object.assign({}, c, incObj));
     }
 
     var __cgStaffChatFsUnsub = null;
@@ -3758,7 +3909,8 @@
 
     /**
      * Aplica un documento remoto al almacén local. No inicia transacción remota.
-     * Política: valor remoto sustituye local salvo merge declarado (shiftLogs, staffChatMessages).
+     * Política: merge en shiftLogs, staffChat, listas por id, users/roleModules; no aplicar remoto vacío
+     * que borraría datos locales; tras fusión se encola push para alinear el servidor.
      */
     function applyRemoteLsDoc(docSnap) {
       if (!docSnap || !docSnap.exists) return;
@@ -3774,17 +3926,30 @@
       try {
         var cur = P.localGetRaw(full);
         var nextVal = d.value;
+        var mergedUp = false;
         if (d.key === "shiftLogs") {
           nextVal = __cgMergeShiftLogsPullPreserveLocalOpen(cur, d.value);
+          mergedUp = true;
         } else if (d.key === "staffChatMessages") {
           nextVal = __cgMergeStaffChatPull(cur, d.value);
-        } else if (d.key === "users" && __cgShouldSkipEmptyRemoteUsers(cur, d.value)) {
-          __cgSyncLog("info", "skip_pull_empty_users_keeps_local");
-          scheduleCloudWrite("users");
-          return;
-        } else if (d.key === "roleModules" && __cgShouldSkipEmptyRemoteRoleModules(cur, d.value)) {
-          __cgSyncLog("info", "skip_pull_empty_roleModules_keeps_local");
-          scheduleCloudWrite("roleModules");
+          mergedUp = true;
+        } else if (d.key === "users") {
+          nextVal = __cgMergeUsersPull(cur, d.value);
+          mergedUp = true;
+        } else if (d.key === "roleModules") {
+          if (__cgShouldSkipEmptyRemoteRoleModules(cur, d.value)) {
+            __cgSyncLog("info", "skip_pull_empty_roleModules_keeps_local");
+            scheduleCloudWrite("roleModules");
+            return;
+          }
+          nextVal = __cgMergeRoleModulesPull(cur, d.value);
+          mergedUp = true;
+        } else if (__CG_LS_MERGE_ARRAY_BY_ID[d.key]) {
+          nextVal = __cgMergeRemoteLsArrayById(cur, d.value);
+          mergedUp = true;
+        } else if (__CG_LS_PROTECT_EMPTY_OBJECT[d.key] && __cgShouldSkipEmptyRemoteRoleModules(cur, d.value)) {
+          __cgSyncLog("info", "skip_pull_empty_object_keeps_local", d.key);
+          scheduleCloudWrite(d.key);
           return;
         }
         if (cur === nextVal) return;
@@ -3795,6 +3960,7 @@
         window.dispatchEvent(
           new CustomEvent("cg-cloud-storage-applied", { detail: { key: d.key, source: "remote" } })
         );
+        if (mergedUp) scheduleCloudWrite(d.key);
       } catch (eA) {
         __cgSyncLog("warn", "apply_remote", eA);
       }
@@ -4123,7 +4289,7 @@
             cloudPushAllKeysOnce().catch(function (eP) {
               __cgSyncLog("warn", "periodic_push", eP && eP.code ? eP.code : eP);
             });
-          }, 120000);
+          }, 60000);
           if (!window.__CG_CLOUD_LIFECYCLE_BOUND) {
             window.__CG_CLOUD_LIFECYCLE_BOUND = true;
             try {
@@ -4198,6 +4364,17 @@
           result.partial = true;
           result.partialPullFailed = true;
           __cgSyncLog("warn", "phase_pull", ePull);
+          try {
+            setTimeout(function () {
+              if (!alive()) return;
+              cloudPullAllOnce()
+                .then(function () {
+                  if (!alive()) return;
+                  return cloudPushAllKeysOnce();
+                })
+                .catch(function () {});
+            }, 7000);
+          } catch (eRetryPull) {}
         })
         .then(function () {
           if (!alive()) return Promise.resolve();
