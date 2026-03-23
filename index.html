@@ -4489,13 +4489,51 @@
       });
     }
 
-    /** Muestra formulario de primer administrador si no hay usuarios (p. ej. instalación limpia o tras sync sin staff). */
+    var __cgLoginUsersCloudCheckInFlight = false;
+    var __cgLoginUsersCloudCheckAttempted = false;
+    /**
+     * Muestra formulario de primer administrador solo cuando realmente no hay usuarios
+     * ni en local ni en el pull remoto inicial. Evita "falso vacío" al abrir en otro navegador.
+     */
     function syncLoginFirstAdminPanel() {
       var wrap = document.getElementById("cg-login-first-setup");
       var form = document.getElementById("login-form");
       if (!wrap || !form) return;
       var users = load("users", []);
       var empty = !Array.isArray(users) || users.length === 0;
+      if (!empty) {
+        wrap.classList.add("hidden");
+        form.classList.remove("hidden");
+        return;
+      }
+
+      var canPullUsers =
+        window.CG_CLOUD_SYNC_ENABLED !== false &&
+        window.cgDb &&
+        (
+          (typeof cloudPullSingleLsKey === "function") ||
+          (typeof cloudPullAllOnce === "function")
+        );
+
+      // Si aún no hay usuarios, intentar una lectura remota antes de mostrar "primer admin".
+      if (canPullUsers && !__cgLoginUsersCloudCheckInFlight && !__cgLoginUsersCloudCheckAttempted) {
+        __cgLoginUsersCloudCheckAttempted = true;
+        __cgLoginUsersCloudCheckInFlight = true;
+        wrap.classList.add("hidden");
+        form.classList.remove("hidden");
+        var pullPromise =
+          typeof cloudPullSingleLsKey === "function"
+            ? cloudPullSingleLsKey("users")
+            : cloudPullAllOnce();
+        Promise.resolve(pullPromise)
+          .catch(function () {})
+          .finally(function () {
+            __cgLoginUsersCloudCheckInFlight = false;
+            syncLoginFirstAdminPanel();
+          });
+        return;
+      }
+
       if (empty) {
         wrap.classList.remove("hidden");
         form.classList.add("hidden");
