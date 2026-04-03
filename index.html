@@ -150,8 +150,7 @@
         },
         /**
          * Borra del navegador todo lo guardado por esta app en este origen:
-         * todas las claves localStorage con prefijo del producto, sessionStorage usado por Conserjería
-         * y el espejo en memoria (__cgMemLs) del modo solo-nube.
+         * todas las claves localStorage con prefijo del producto y sessionStorage usado por Conserjería.
          * Solo afecta al almacenamiento de este navegador.
          */
         clearAllAppBrowserStorage: function () {
@@ -172,15 +171,6 @@
             sessionStorage.removeItem("cg_dash_act_month");
             sessionStorage.removeItem("cg_tab_session_v1");
           } catch (e2) {}
-          try {
-            if (window.__cgMemLs && typeof window.__cgMemLs === "object") {
-              for (k in window.__cgMemLs) {
-                if (Object.prototype.hasOwnProperty.call(window.__cgMemLs, k)) {
-                  delete window.__cgMemLs[k];
-                }
-              }
-            }
-          } catch (e3) {}
         },
         /** Copia valor crudo si destino vacío (migraciones legacy). */
         copyLocalRawIfMissing: function (targetFullKey, sourceFullKey) {
@@ -3001,73 +2991,10 @@
     window.__cgMemLs = window.__cgMemLs || {};
     var __cgMemLs = window.__cgMemLs;
 
+    /** Modo solo local: sin espejo en memoria; CG_PERSIST escribe directo a localStorage. */
     function __cgEffectiveCloudOnly() {
       return false;
     }
-
-    (function __cgInstallLsPersistLayer() {
-      var origGet = P.localGetRaw.bind(P);
-      var origSet = P.localSetRaw.bind(P);
-      var origRem = P.localRemove.bind(P);
-      var origEach = P.eachLocalKeyWithPrefix.bind(P);
-
-      P.localGetRaw = function (fullKey) {
-        if (typeof fullKey !== "string") return origGet(fullKey);
-        if (fullKey === LS + "session" && __cgEffectiveCloudOnly()) {
-          return P.sessionGetRaw(CG_SESSION_BROWSER_KEY);
-        }
-        if (fullKey.indexOf(LS) !== 0) return origGet(fullKey);
-        if (!__cgEffectiveCloudOnly()) return origGet(fullKey);
-        var sk = fullKey.slice(LS.length);
-        if (Object.prototype.hasOwnProperty.call(__cgMemLs, sk)) return __cgMemLs[sk];
-        return null;
-      };
-
-      P.localSetRaw = function (fullKey, str) {
-        if (typeof fullKey !== "string") return origSet(fullKey, str);
-        if (fullKey === LS + "session" && __cgEffectiveCloudOnly()) {
-          if (str == null || str === "") P.sessionRemove(CG_SESSION_BROWSER_KEY);
-          else P.sessionSetRaw(CG_SESSION_BROWSER_KEY, str);
-          return true;
-        }
-        if (fullKey.indexOf(LS) !== 0) return origSet(fullKey, str);
-        if (!__cgEffectiveCloudOnly()) return origSet(fullKey, str);
-        var sk = fullKey.slice(LS.length);
-        __cgMemLs[sk] = str;
-        try {
-          origSet(fullKey, str);
-        } catch (eLsMirror) {}
-        return true;
-      };
-
-      P.localRemove = function (fullKey) {
-        if (typeof fullKey === "string" && fullKey === LS + "session" && __cgEffectiveCloudOnly()) {
-          P.sessionRemove(CG_SESSION_BROWSER_KEY);
-          return;
-        }
-        if (typeof fullKey === "string" && fullKey.indexOf(LS) === 0 && __cgEffectiveCloudOnly()) {
-          var sk2 = fullKey.slice(LS.length);
-          delete __cgMemLs[sk2];
-          try {
-            origRem(fullKey);
-          } catch (eR) {}
-          return;
-        }
-        origRem(fullKey);
-      };
-
-      P.eachLocalKeyWithPrefix = function (prefix, fn) {
-        if (!prefix || typeof fn !== "function") return;
-        if (prefix === LS && __cgEffectiveCloudOnly()) {
-          var sk3;
-          for (sk3 in __cgMemLs) {
-            if (Object.prototype.hasOwnProperty.call(__cgMemLs, sk3)) fn(LS + sk3);
-          }
-          return;
-        }
-        origEach(prefix, fn);
-      };
-    })();
 
     function __cgStripLegacyLocalStorageIfCloudOnly() {}
 
@@ -3172,7 +3099,7 @@
     function initCloudSync() {
       return Promise.resolve({
         ok: false,
-        reason: "disabled",
+        reason: "local_only",
         partial: false,
         phases: {},
         listenerStarted: false
@@ -3216,24 +3143,40 @@
     }
     /* ┌─ 3. Persistencia local (clave corta → JSON en localStorage) ──────────────────── */
     function load(key, fallback) {
-      var raw = P.localGetRaw(LS + key);
-      if (raw == null || raw === "") return fallback;
-      var v = P.parseJson(raw, undefined);
-      return v === undefined ? fallback : v;
+      if (key == null || key === "" || typeof key !== "string") return fallback;
+      if (key.indexOf("/") >= 0 || key.indexOf("\\") >= 0) return fallback;
+      try {
+        var raw = P.localGetRaw(LS + key);
+        if (raw == null || raw === "") return fallback;
+        var v = P.parseJson(raw, undefined);
+        return v === undefined ? fallback : v;
+      } catch (eLoad) {
+        console.warn("[CG] load: lectura o JSON inválido para clave", key, eLoad);
+        return fallback;
+      }
     }
     function save(key, val) {
-      var str = P.stringifyForStorage(val);
-      if (str === null) {
-        console.warn("[CG] save: no se pudo serializar", key);
+      if (key == null || key === "" || typeof key !== "string") {
+        console.warn("[CG] save: clave inválida");
         return;
       }
-      if (!P.localSetRaw(LS + key, str)) {
-        console.warn("[CG] save: localSetRaw falló (¿cuota llena?)", key);
-        return;
-      }
-      if (key !== "session") {
-        __cgMarkLsKeyDirty(key);
-        scheduleCloudWrite(key);
+      if (key.indexOf("/") >= 0 || key.indexOf("\\") >= 0) return;
+      try {
+        var str = P.stringifyForStorage(val);
+        if (str === null) {
+          console.warn("[CG] save: no se pudo serializar", key);
+          return;
+        }
+        if (!P.localSetRaw(LS + key, str)) {
+          console.warn("[CG] save: localSetRaw falló (¿cuota llena o modo privado?)", key);
+          return;
+        }
+        if (key !== "session") {
+          __cgMarkLsKeyDirty(key);
+          scheduleCloudWrite(key);
+        }
+      } catch (eSave) {
+        console.warn("[CG] save: excepción al guardar", key, eSave);
       }
     }
 
@@ -3637,11 +3580,22 @@
 
     /* ┌─ 7. Sesión, permisos por módulo, bloqueo turno conserje ──────────────────────── */
     function currentUser() {
-      if (!state.session) return null;
-      return state.users.find(u => u.id === state.session.userId) || null;
+      if (!state.session || state.session.userId == null || state.session.userId === "") return null;
+      var users = state.users;
+      if (!Array.isArray(users)) return null;
+      var uid = state.session.userId;
+      var i;
+      for (i = 0; i < users.length; i++) {
+        if (users[i] && users[i].id === uid) return users[i];
+      }
+      return null;
     }
 
     function setSession(user) {
+      if (!user || user.id == null || user.id === "") {
+        console.warn("[CG] setSession: usuario inválido");
+        return;
+      }
       state.session = { userId: user.id, at: new Date().toISOString() };
       save("session", state.session);
     }
@@ -3651,6 +3605,11 @@
       if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function" && !__cgEffectiveCloudOnly()) {
         window.CG.cloudPushKeyImmediate("session");
       }
+    }
+
+    /** Tramo de turno abierto: sin endAt o cadena vacía (misma regla que shiftTramoAbiertoSeg en acciones). */
+    function shiftLogTramoIsOpen(s) {
+      return !!(s && (s.endAt == null || s.endAt === ""));
     }
 
     /**
@@ -3886,14 +3845,16 @@
     }
 
     function canSeeModule(modId) {
-      const u = currentUser();
+      var u = currentUser();
       if (!u) return false;
+      var rm = state.roleModules;
+      if (!rm || typeof rm !== "object") return false;
       if (u.role === "admin") {
-        const allowed = state.roleModules.admin || [];
-        return allowed.includes(modId);
+        var adm = rm.admin;
+        return Array.isArray(adm) && adm.indexOf(modId) >= 0;
       }
-      const allowed = state.roleModules.conserje || [];
-      return allowed.includes(modId);
+      var co = rm.conserje;
+      return Array.isArray(co) && co.indexOf(modId) >= 0;
     }
 
     /* ┌─ 8. Utilidades UI ligeras (toast, fechas, escape, dominio departamento/bodega) ─ */
@@ -10896,7 +10857,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         // Migrar residentes existentes sin fecha de registro
         function migrateResidentsWithoutRegistrationDate() {
             let migrated = false;
+            if (!appState || !Array.isArray(appState.units)) return;
             appState.units.forEach(unit => {
+                if (!unit || !Array.isArray(unit.residents)) return;
                 unit.residents.forEach(resident => {
                     if (!resident.registeredAt) {
                         // Asignar fecha de creación de la unidad como fecha de registro del residente
@@ -10922,7 +10885,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             console.error('❌ Archivo:', e.filename);
             console.error('❌ Línea:', e.lineno);
             console.error('❌ Columna:', e.column);
-            console.error('❌ Stack:', e.error?.stack);
+            console.error('❌ Stack:', e.error && e.error.stack ? e.error.stack : '(sin stack)');
         });
 
         // ===== MANEJADOR DE PROMESAS RECHAZADAS =====
@@ -18754,7 +18717,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (typeof G.initCloudSync === "function") {
       G.initCloudSync()
         .then(function (r) {
-          if (r && r.reason === "disabled") return;
+          if (r && (r.reason === "disabled" || r.reason === "local_only")) return;
           if (r && r.reason === "superseded") return;
           if (r && r.ok && r.partial) {
             if (r.partialPullFailed) {
@@ -18851,7 +18814,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (typeof G.initCloudSync === "function") {
         G.initCloudSync()
           .then(function (r) {
-            if (r && r.reason === "disabled") return;
+            if (r && (r.reason === "disabled" || r.reason === "local_only")) return;
             if (r && r.reason === "superseded") return;
             if (r && r.ok && r.partial) {
               if (r.partialPullFailed) {
@@ -19004,7 +18967,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                   "warn"
                 );
               }
-            } else if (!(r && r.ok) && !(r && r.reason === "disabled") && r && !r.ok) {
+            } else if (
+              !(r && r.ok) &&
+              !(r && (r.reason === "disabled" || r.reason === "local_only")) &&
+              r &&
+              !r.ok
+            ) {
               var code = r.err && r.err.code ? r.err.code : "";
               var msg =
                 code === "permission-denied"
