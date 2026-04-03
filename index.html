@@ -5630,6 +5630,61 @@
     }
 
     /**
+     * Una sola vez: elimina del libro las entradas #1 (22-03-26, texto «c») y #2 (23-03-26, Turno cerrado)
+     * solicitadas por el usuario; registra borrado pendiente para sync.
+     */
+    function migrateRemoveUserRequestedNovedades20260403() {
+      if (load("migrated_rm_user_nov_20260403", false)) return;
+      var list = load("novedades", []);
+      if (!Array.isArray(list) || !list.length) {
+        save("migrated_rm_user_nov_20260403", true);
+        return;
+      }
+      function dayKey(iso) {
+        try {
+          var d = new Date(iso);
+          if (isNaN(d.getTime())) return "";
+          var y = d.getFullYear();
+          var m = d.getMonth() + 1;
+          var day = d.getDate();
+          return y + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+        } catch (eD) {
+          return "";
+        }
+      }
+      var removedIds = [];
+      var next = list.filter(function (n) {
+        if (!n) return true;
+        var dk = dayKey(n.at);
+        var t = String(n.text || "").trim();
+        var seqN = Number(n.seq);
+        if (seqN === 1 && dk === "2026-03-22" && t === "c") {
+          if (n.id != null && String(n.id) !== "") removedIds.push(String(n.id));
+          return false;
+        }
+        if (
+          seqN === 2 &&
+          dk === "2026-03-23" &&
+          n.category === "Turno" &&
+          (t === "Turno cerrado." || t === "Turno cerrado")
+        ) {
+          if (n.id != null && String(n.id) !== "") removedIds.push(String(n.id));
+          return false;
+        }
+        return true;
+      });
+      if (next.length !== list.length) {
+        var ii;
+        for (ii = 0; ii < removedIds.length; ii++) {
+          __cgRegisterPendingDeletedLsKey("novedades", removedIds[ii]);
+        }
+        save("novedades", next);
+        scheduleCloudWrite("novedades");
+      }
+      save("migrated_rm_user_nov_20260403", true);
+    }
+
+    /**
      * Migraciones de datos locales (orden recomendado en ensureInit):
      * encomiendas → proveedores → visitorParking → shiftLogs → visitVehAlertLog → conserjeActivity → staff chat → proveedor visit admin → dept keys (CG_ACTIONS).
      */
@@ -5705,6 +5760,7 @@
     function runStartupLocalMigrations() {
       var steps = [
         ["novedadesSeq", migrateNovedadesSeq],
+        ["rmUserNov20260403", migrateRemoveUserRequestedNovedades20260403],
         ["encomiendas", migrateEncomiendasModule],
         ["proveedores", migrateProveedoresModule],
         ["visitorParking", migrateVisitorParkingCodes],
