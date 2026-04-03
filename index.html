@@ -325,6 +325,20 @@
         return false;
       }
 
+      /** Notifica a la UI (chat, módulos) tras aplicar datos remotos; también cubre cloudPullAllOnce. */
+      function cgDispatchCloudStorageApplied(shortKey, changeType) {
+        if (!shortKey || shortKey === "session" || shortKey === "__cgPendingDeleted") return;
+        try {
+          if (typeof window !== "undefined" && window.dispatchEvent) {
+            window.dispatchEvent(
+              new CustomEvent("cg-cloud-storage-applied", {
+                detail: { key: String(shortKey), changeType: changeType || "modified" }
+              })
+            );
+          }
+        } catch (eEv) {}
+      }
+
       window.cgFsBridge = {
         active: fsActive,
         kvCol: kvCol,
@@ -335,7 +349,8 @@
           if (t[shortKey]) clearTimeout(t[shortKey]);
           t[shortKey] = setTimeout(function () {
             delete t[shortKey];
-            window.cgFsBridge.pushImmediate(shortKey, jsonString);
+            var latest = window.__cgFsMem[shortKey];
+            if (typeof latest === "string") window.cgFsBridge.pushImmediate(shortKey, latest);
           }, 320);
         },
         flushPending: function () {
@@ -392,12 +407,19 @@
           var LS = window.CG_PERSIST.LS;
           var full = LS + shortKey;
           if (changeType === "removed" || jsonString == null) {
+            var had = Object.prototype.hasOwnProperty.call(window.__cgFsMem, shortKey);
             delete window.__cgFsMem[shortKey];
             if (window.__cgFsUseLocalCache) tryLocalStorageRemove(full);
+            if (had) cgDispatchCloudStorageApplied(shortKey, "removed");
             return;
           }
-          window.__cgFsMem[shortKey] = String(jsonString);
-          if (window.__cgFsUseLocalCache) tryLocalStorageSet(full, String(jsonString));
+          var next = String(jsonString);
+          if (window.__cgFsMem[shortKey] === next) {
+            return;
+          }
+          window.__cgFsMem[shortKey] = next;
+          if (window.__cgFsUseLocalCache) tryLocalStorageSet(full, next);
+          cgDispatchCloudStorageApplied(shortKey, "modified");
         }
       };
 
@@ -3553,11 +3575,6 @@
               var d = chg.doc.data();
               var js = d && d.json != null ? String(d.json) : null;
               window.cgFsBridge.applyRemoteDoc(id, js, chg.type);
-              if (typeof window.CG_UI !== "undefined" && window.CG_UI && typeof window.CG_UI.refreshAfterRemoteLsKey === "function") {
-                try {
-                  window.CG_UI.refreshAfterRemoteLsKey(id);
-                } catch (eRf) {}
-              }
             });
             window.__cgFsRemoteReady = true;
           },
@@ -4188,32 +4205,51 @@
     }
 
     /**
-     * Turno abierto = tramo en shiftLogs sin endAt, de un usuario con rol conserje.
-     * Si existe uno a nombre de otro conserje, no se permite que un segundo conserje inicie sesión
-     * (el administrador sí puede, para cerrar turnos en Administración → Turnos).
-     * El mismo conserje puede volver a entrar si su turno sigue abierto (p. ej. cerró el navegador).
+     * ¿Este tramo abierto cuenta como “turno de conserje” que bloquea a otros conserjes?
+     * Incluye tramos huérfanos (usuario borrado) si el segmento indica conserje o no hay rol (datos antiguos).
+     * Nunca bloquea tramos explícitamente de administrador.
      */
-    function loginBlockedByOpenConserjeShift(candidateUserId) {
+    function openShiftSegmentIsConserjeLock(s, byId) {
+      if (!s || !shiftLogTramoIsOpen(s)) return false;
+      if (s.role === "admin") return false;
+      var who = s.userId != null ? byId[s.userId] : null;
+      if (who) {
+        if (who.role === "admin") return false;
+        return who.role === "conserje";
+      }
+      if (s.role === "conserje") return true;
+      if (s.role && s.role !== "conserje") return false;
+      return true;
+    }
+
+    /**
+     * Si hay un turno abierto de OTRO conserje, devuelve { blockerName, blockerUserId }; si no, null.
+     * El mismo conserje puede iniciar sesión con su turno aún abierto. El administrador no se evalúa aquí
+     * (el login de admin no llama a esta función).
+     */
+    function conserjeShiftBlockerFor(candidateUserId) {
       var list = load("shiftLogs", []);
       if (!Array.isArray(list) || list.length === 0) return null;
       var users = load("users", []);
       var byId = {};
-      users.forEach(function (ux) {
+      (Array.isArray(users) ? users : []).forEach(function (ux) {
         if (ux && ux.id) byId[ux.id] = ux;
       });
       var i;
       for (i = 0; i < list.length; i++) {
         var s = list[i];
-        if (!s || !shiftLogTramoIsOpen(s)) continue;
-        var who = byId[s.userId];
-        if (!who || who.role !== "conserje") continue;
-        if (s.userId !== candidateUserId) {
-          return {
-            blockerName: String(s.userName || who.name || "otro conserje").trim() || "otro conserje"
-          };
-        }
+        if (!openShiftSegmentIsConserjeLock(s, byId)) continue;
+        if (s.userId === candidateUserId) continue;
+        return {
+          blockerName: String(s.userName || (byId[s.userId] && byId[s.userId].name) || "otro conserje").trim() || "otro conserje",
+          blockerUserId: s.userId
+        };
       }
       return null;
+    }
+
+    function loginBlockedByOpenConserjeShift(candidateUserId) {
+      return conserjeShiftBlockerFor(candidateUserId);
     }
 
     /**
@@ -4411,9 +4447,9 @@
         window.CG_UI.showLogin();
       }
       toast(
-        "Sesión finalizada: " +
+        "Sesión cerrada: hay un turno de conserjería abierto a nombre de " +
           bl.blockerName +
-          " tiene un turno abierto en Libro de novedades. No puede haber otro conserje en sesión hasta cerrar ese turno.",
+          ". Mientras ese turno no se cierre (Libro de novedades o un administrador en Turnos), ningún otro conserje puede usar el sistema.",
         "warn"
       );
       return true;
@@ -4926,6 +4962,7 @@
 
     function migrateStaffChat() {
       if (P.localGetRaw(LS + "staffChatMessages") === null) save("staffChatMessages", []);
+      if (P.localGetRaw(LS + "staffPresence") === null) save("staffPresence", { c: {} });
       if (load("migrated_staff_chat_unified_v1", false)) return;
       var oldMap = load("chatReadByUser", null);
       if (oldMap && typeof oldMap === "object") {
@@ -5303,6 +5340,7 @@
       attachVirtualAdminDepartment,
       authEnsureReady, authValidateDeptGateNewPassword, authVerifyLoginPassword, authCreatePasswordVerifier, authDeptGateExists, authVerifyDeptGate, authSetDeptGateFromPasswords, authSetDeptGateInitial,
       shiftLogTramoIsOpen,
+      conserjeShiftBlockerFor,
       currentUser, setSession, clearSession, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict,
       cleanupStaffDirectoryAndShiftOrphans,
       canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, normalizeActivityName, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
@@ -5315,6 +5353,7 @@
       initCloudSync, stopCloudSyncListener, attachStaffChatRemoteSync, detachStaffChatRemoteSync, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPullSingleLsKey, cloudPushAllKeysOnce,
       flushPendingCloudWritesNow, cloudPushKeyImmediate, cloudPushLsKeyPromise, armLsKeyPullQuiet, getCloudSyncLastInitResult,
       registerPendingDeletedLsKey: __cgRegisterPendingDeletedLsKey,
+      clearPendingDeletedBucket: __cgClearPendingDeletedLsKey,
       staffChatDedupeKeyForSync: __cgStaffChatDedupeKey,
       syncLoginFirstAdminPanel,
       effectiveCloudOnlyStorage: function () {
@@ -5325,6 +5364,27 @@
       validate: CG_VALIDATE
     };
     applyPersonalizationToDom();
+    (function cgBindCloudResyncOnFocus() {
+      if (window.__cgCloudResyncOnFocusBound) return;
+      window.__cgCloudResyncOnFocusBound = true;
+      var timer = null;
+      function resyncSoon() {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(function () {
+          timer = null;
+          try {
+            if (!window.CG || typeof window.CG.currentUser !== "function" || !window.CG.currentUser()) return;
+            if (!window.cgFsBridge || typeof window.cgFsBridge.active !== "function" || !window.cgFsBridge.active()) return;
+            if (typeof window.CG.flushPendingCloudWritesNow === "function") window.CG.flushPendingCloudWritesNow();
+            if (typeof window.CG.cloudPullAllOnce === "function") window.CG.cloudPullAllOnce();
+          } catch (eRe) {}
+        }, 550);
+      }
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") resyncSoon();
+      });
+      window.addEventListener("online", resyncSoon);
+    })();
   })();
   </script>
 
@@ -11560,6 +11620,129 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var staffChatPollId = null;
     var staffChatBound = false;
     var staffChatLastMsgs = "";
+    var staffChatSoundInited = false;
+    var staffChatLastSoundAtMs = 0;
+    var STAFF_CHAT_SOUND_COOLDOWN_MS = 2200;
+    var staffPresenceIntervalId = null;
+    var STAFF_PRESENCE_STALE_MS = 52000;
+    var STAFF_PRESENCE_HEARTBEAT_MS = 12000;
+
+    function staffPresenceGetClientId() {
+      try {
+        var k = "cg_staff_presence_tab";
+        var x = sessionStorage.getItem(k);
+        if (x && String(x).length > 4) return String(x);
+        x = "p_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
+        sessionStorage.setItem(k, x);
+        return x;
+      } catch (eCid) {
+        return "p_fb";
+      }
+    }
+    function staffPresenceStopInterval() {
+      if (staffPresenceIntervalId) {
+        clearInterval(staffPresenceIntervalId);
+        staffPresenceIntervalId = null;
+      }
+    }
+    function staffPresenceRemoveSelf() {
+      var cid = staffPresenceGetClientId();
+      var raw = G.load("staffPresence", null);
+      var o = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+      var base = o.c && typeof o.c === "object" && !Array.isArray(o.c) ? o.c : {};
+      if (!Object.prototype.hasOwnProperty.call(base, cid)) return;
+      var c = Object.assign({}, base);
+      delete c[cid];
+      G.save("staffPresence", { c: c });
+      if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffPresence");
+    }
+    function staffPresencePruneAndWriteSelf() {
+      var u = G.currentUser();
+      if (!u) return;
+      var now = Date.now();
+      var raw = G.load("staffPresence", null);
+      var o = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+      var prev = o.c && typeof o.c === "object" && !Array.isArray(o.c) ? o.c : {};
+      var c = {};
+      var sk = Object.keys(prev);
+      var i;
+      for (i = 0; i < sk.length; i++) {
+        var ent = prev[sk[i]];
+        if (!ent || typeof ent !== "object") continue;
+        var atMs = ent.at ? Date.parse(String(ent.at)) : 0;
+        if (atMs && now - atMs <= STAFF_PRESENCE_STALE_MS) c[sk[i]] = ent;
+      }
+      c[staffPresenceGetClientId()] = {
+        userId: u.id,
+        userName: u.name,
+        role: u.role,
+        at: new Date().toISOString()
+      };
+      G.save("staffPresence", { c: c });
+      if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffPresence");
+    }
+    function staffPresenceStop() {
+      staffPresenceStopInterval();
+      try {
+        staffPresenceRemoveSelf();
+      } catch (ePs) {}
+    }
+    function staffPresenceStart() {
+      staffPresenceStopInterval();
+      if (!G.currentUser()) return;
+      if (!window.__cgStaffPresencePageHideBound) {
+        window.__cgStaffPresencePageHideBound = true;
+        window.addEventListener("pagehide", function () {
+          try {
+            staffPresenceRemoveSelf();
+          } catch (ePh) {}
+        });
+      }
+      staffPresencePruneAndWriteSelf();
+      staffPresenceIntervalId = window.setInterval(function () {
+        if (!G.currentUser()) {
+          staffPresenceStop();
+          return;
+        }
+        staffPresencePruneAndWriteSelf();
+      }, STAFF_PRESENCE_HEARTBEAT_MS);
+    }
+    /** Línea de texto para el admin: qué conserjes tienen la app abierta (latidos recientes, sincronizado). */
+    function staffPresenceConserjesSummaryForAdmin() {
+      var now = Date.now();
+      var raw = G.load("staffPresence", null);
+      var o = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+      var c = o.c && typeof o.c === "object" ? o.c : {};
+      var byUser = {};
+      var keys = Object.keys(c);
+      var i;
+      for (i = 0; i < keys.length; i++) {
+        var ent = c[keys[i]];
+        if (!ent || typeof ent !== "object" || ent.role !== "conserje") continue;
+        var atMs = ent.at ? Date.parse(String(ent.at)) : 0;
+        if (!atMs || now - atMs > STAFF_PRESENCE_STALE_MS) continue;
+        var uid = String(ent.userId || "");
+        if (!uid) continue;
+        var nm = String(ent.userName || "Conserje").trim() || "Conserje";
+        if (!byUser[uid]) byUser[uid] = { name: nm, n: 1, at: atMs };
+        else {
+          byUser[uid].n += 1;
+          if (atMs > byUser[uid].at) {
+            byUser[uid].at = atMs;
+            byUser[uid].name = nm;
+          }
+        }
+      }
+      var uids = Object.keys(byUser);
+      if (!uids.length) {
+        return "Ningún conserje con sesión activa detectada (~1 min sin señal = desconectado).";
+      }
+      var parts = uids.map(function (id) {
+        var x = byUser[id];
+        return x.n > 1 ? x.name + " (" + x.n + " pestañas)" : x.name;
+      });
+      return "Conserjes en sesión: " + parts.join(", ") + ".";
+    }
 
     function staffChatLastReadMap() {
       var raw = G.load("chatLastReadByUser", {}) || {};
@@ -11620,6 +11803,119 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var p = document.getElementById("cg-chat-panel");
       return p && !p.classList.contains("hidden");
     }
+
+    function staffChatGetAudioContext() {
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        if (!window.__cgChatAudioCtx) window.__cgChatAudioCtx = new AC();
+        return window.__cgChatAudioCtx;
+      } catch (eCtx) {
+        return null;
+      }
+    }
+    (function staffChatBindAudioUnlockOnce() {
+      if (window.__cgChatAudioUnlockBound) return;
+      window.__cgChatAudioUnlockBound = true;
+      function unlock() {
+        var c = staffChatGetAudioContext();
+        if (c) c.resume().catch(function () {});
+        document.removeEventListener("click", unlock, true);
+        document.removeEventListener("keydown", unlock, true);
+        document.removeEventListener("touchstart", unlock, true);
+      }
+      document.addEventListener("click", unlock, true);
+      document.addEventListener("keydown", unlock, true);
+      document.addEventListener("touchstart", unlock, true);
+    })();
+    function staffChatPlayIncomingSound() {
+      var ctx = staffChatGetAudioContext();
+      if (!ctx) return;
+      try {
+        ctx.resume().catch(function () {});
+      } catch (eR) {}
+      var freqs = [659.25, 783.99];
+      var dur = 0.075;
+      var gap = 0.055;
+      var i;
+      for (i = 0; i < freqs.length; i++) {
+        var t0 = ctx.currentTime + i * (dur + gap);
+        var o = ctx.createOscillator();
+        var gn = ctx.createGain();
+        o.type = "sine";
+        o.frequency.setValueAtTime(freqs[i], t0);
+        o.connect(gn);
+        gn.connect(ctx.destination);
+        gn.gain.setValueAtTime(0.0001, t0);
+        gn.gain.exponentialRampToValueAtTime(0.085, t0 + 0.016);
+        gn.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        o.start(t0);
+        o.stop(t0 + dur + 0.02);
+      }
+    }
+    function staffChatFilterListForViewer(list, u) {
+      if (!u) return [];
+      var all = Array.isArray(list) ? list : [];
+      var sorted = all.slice().sort(function (a, b) {
+        return new Date((a && a.at) || 0) - new Date((b && b.at) || 0);
+      });
+      if (u.role === "admin") return sorted;
+      return sorted.filter(function (m) {
+        if (!m || typeof m !== "object") return false;
+        if (m.role === "admin") return true;
+        if (m.userId === u.id) return true;
+        return false;
+      });
+    }
+    function staffChatMessageDedupeKey(m) {
+      if (!m || typeof m !== "object") return "";
+      if (m.id) return "id:" + String(m.id);
+      return (
+        "leg:" +
+        String(m.at || "") +
+        "\0" +
+        String(m.userId || "") +
+        "\0" +
+        String(m.text == null ? "" : m.text).slice(0, 120)
+      );
+    }
+    function staffChatMaybePlayIncomingSound(prevJsonStr) {
+      if (staffChatPanelOpen()) return;
+      var u = G.currentUser();
+      if (!u) return;
+      var now = Date.now();
+      if (now - staffChatLastSoundAtMs < STAFF_CHAT_SOUND_COOLDOWN_MS) return;
+      var prev = [];
+      if (prevJsonStr && typeof prevJsonStr === "string" && prevJsonStr.length) {
+        try {
+          var parsed = JSON.parse(prevJsonStr);
+          if (Array.isArray(parsed)) prev = parsed;
+        } catch (eP) {}
+      }
+      var prevV = staffChatFilterListForViewer(prev, u);
+      var nextV = staffChatFilterListForViewer(staffChatMessagesSafe(), u);
+      var prevKeys = {};
+      var i;
+      for (i = 0; i < prevV.length; i++) {
+        var pk = staffChatMessageDedupeKey(prevV[i]);
+        if (pk) prevKeys[pk] = true;
+      }
+      var hasNewFromOther = false;
+      for (i = 0; i < nextV.length; i++) {
+        var m = nextV[i];
+        if (!m || typeof m !== "object") continue;
+        if (m.userId === u.id) continue;
+        var nk = staffChatMessageDedupeKey(m);
+        if (nk && !prevKeys[nk]) {
+          hasNewFromOther = true;
+          break;
+        }
+      }
+      if (!hasNewFromOther) return;
+      staffChatLastSoundAtMs = now;
+      staffChatPlayIncomingSound();
+    }
+
     function staffChatSyncClearButton() {
       var btn = document.getElementById("cg-chat-clear");
       if (!btn) return;
@@ -11633,7 +11929,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (!el || !u) return;
       if (u.role === "admin") {
         el.textContent =
-          "Vista completa del canal: mensajes de todos los conserjes y respuestas de administración (datos en este equipo).";
+          "Vista completa del canal (sincronizado entre equipos). " + staffPresenceConserjesSummaryForAdmin();
       } else {
         el.textContent =
           "Canal directo con administración: solo ve sus mensajes y los del admin; no ve mensajes de otros conserjes.";
@@ -11645,16 +11941,26 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         G.toast("Solo el administrador puede vaciar el chat", "warn");
         return;
       }
-      if (!confirm("¿Eliminar todos los mensajes del chat? Esta acción no se puede deshacer.")) return;
+      if (!confirm("¿Eliminar todos los mensajes del chat en todos los equipos? Esta acción no se puede deshacer.")) return;
+      if (typeof G.cloudSyncAbortInFlight === "function") G.cloudSyncAbortInFlight();
       var dedupe = G.staffChatDedupeKeyForSync;
       (G.state.staffChatMessages || []).forEach(function (m) {
         if (typeof G.registerPendingDeletedLsKey !== "function") return;
-        var k = typeof dedupe === "function" ? dedupe(m) : "";
-        if (k) G.registerPendingDeletedLsKey("staffChatMessages", k);
+        var dk = typeof dedupe === "function" ? dedupe(m) : "";
+        if (dk) G.registerPendingDeletedLsKey("staffChatMessages", dk);
       });
       G.state.staffChatMessages = [];
       staffChatLastMsgs = "[]";
-      if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffChatMessages");
+      if (typeof G.clearPendingDeletedBucket === "function") G.clearPendingDeletedBucket("staffChatMessages");
+      var pushChatP =
+        typeof G.cloudPushKeyImmediate === "function" ? G.cloudPushKeyImmediate("staffChatMessages") : null;
+      if (pushChatP && typeof pushChatP.finally === "function") {
+        pushChatP.finally(function () {
+          if (typeof G.flushPendingCloudWritesNow === "function") G.flushPendingCloudWritesNow();
+        });
+      } else if (typeof G.flushPendingCloudWritesNow === "function") {
+        G.flushPendingCloudWritesNow();
+      }
       staffChatRenderThread();
       staffChatUpdateBadge();
       G.toast("Conversación vaciada");
@@ -11714,19 +12020,30 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function staffChatRefreshFromStore() {
       var json = JSON.stringify(staffChatMessagesSafe());
       if (json !== staffChatLastMsgs) {
+        if (staffChatSoundInited) {
+          staffChatMaybePlayIncomingSound(staffChatLastMsgs);
+        }
         staffChatLastMsgs = json;
+        staffChatSoundInited = true;
         if (staffChatPanelOpen()) {
           staffChatRenderThread();
           staffChatMarkRead();
         }
+      } else if (!staffChatSoundInited) {
+        staffChatSoundInited = true;
       }
       staffChatUpdateBadge();
     }
     window.addEventListener("cg-cloud-storage-applied", function (ev) {
       var k = ev.detail && ev.detail.key;
       if (!k) return;
+      if (k === "staffPresence") {
+        try {
+          staffChatSyncPanelSub();
+        } catch (ePr) {}
+        return;
+      }
       if (k === "staffChatMessages") {
-        staffChatLastMsgs = "";
         staffChatRefreshFromStore();
         return;
       }
@@ -11795,13 +12112,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           staffChatSyncClearButton();
           staffChatSyncPanelSub();
           var finishOpen = function () {
+            staffChatSyncPanelSub();
             staffChatMarkRead();
             staffChatRenderThread();
             staffChatUpdateBadge();
             if (input) setTimeout(function () { input.focus(); }, 80);
           };
           if (typeof G.cloudPullSingleLsKey === "function") {
-            G.cloudPullSingleLsKey("staffChatMessages").finally(finishOpen);
+            var uOpen = G.currentUser();
+            var pulls = [G.cloudPullSingleLsKey("staffChatMessages")];
+            if (uOpen && uOpen.role === "admin") pulls.push(G.cloudPullSingleLsKey("staffPresence"));
+            Promise.all(pulls).finally(finishOpen);
           } else {
             finishOpen();
           }
@@ -11830,8 +12151,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
       window.addEventListener("storage", function (e) {
         if (!e.key || e.key.indexOf(G.LS) !== 0) return;
+        if (e.key === G.LS + "staffPresence") {
+          try {
+            staffChatSyncPanelSub();
+          } catch (eSt) {}
+          return;
+        }
         if (e.key !== G.LS + "staffChatMessages") return;
-        staffChatLastMsgs = "";
         staffChatRefreshFromStore();
       });
     }
@@ -11842,17 +12168,24 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (!G.currentUser()) return;
         var root = document.getElementById("cg-staff-chat-root");
         if (!root) return;
-        var p =
+        var cu = G.currentUser();
+        var pullChat =
           typeof G.cloudPullSingleLsKey === "function"
             ? G.cloudPullSingleLsKey("staffChatMessages")
             : Promise.resolve();
-        if (p && typeof p.finally === "function") {
-          p.finally(function () {
+        var pullPres =
+          cu && cu.role === "admin" && typeof G.cloudPullSingleLsKey === "function"
+            ? G.cloudPullSingleLsKey("staffPresence")
+            : Promise.resolve();
+        Promise.all([pullChat, pullPres])
+          .finally(function () {
             staffChatRefreshFromStore();
+            if (cu && cu.role === "admin") {
+              try {
+                staffChatSyncPanelSub();
+              } catch (eSub) {}
+            }
           });
-        } else {
-          staffChatRefreshFromStore();
-        }
       }, staffChatPollMs);
     }
     function staffChatStopPoll() {
@@ -11871,6 +12204,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (typeof G.attachStaffChatRemoteSync === "function") G.attachStaffChatRemoteSync();
         staffChatStartPoll();
         staffChatLastMsgs = "";
+        staffChatSoundInited = false;
         staffChatSyncPanelSub();
         staffChatRefreshFromStore();
         staffChatSyncClearButton();
@@ -11897,6 +12231,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       app.classList.add("hidden");
       ls.removeAttribute("aria-hidden");
       app.setAttribute("aria-hidden", "true");
+      staffPresenceStop();
       staffChatSetDockVisible(false);
       if (window.CG && typeof window.CG.syncLoginFirstAdminPanel === "function") window.CG.syncLoginFirstAdminPanel();
     }
@@ -11928,6 +12263,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       renderTopUser();
       navigate(currentView, true);
       staffChatSetDockVisible(true);
+      staffPresenceStart();
     }
 
     function renderNav() {
@@ -13163,6 +13499,22 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
       if (k === "conserjeActivityLog") {
         if (dash) updateDashboardActivityAndNovBodiesOnly();
+      }
+
+      if (k === "staffPresence") {
+        try {
+          staffChatSyncPanelSub();
+        } catch (eSpr) {}
+        return;
+      }
+
+      if (k === "staffChatMessages") {
+        if (typeof staffChatRefreshFromStore === "function") {
+          try {
+            staffChatRefreshFromStore();
+          } catch (eSc) {}
+        }
+        return;
       }
 
       if (k === "chatLastReadByUser" && typeof staffChatRefreshFromStore === "function") {
@@ -17726,19 +18078,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     var list = (G.state.shiftLogs || []).slice();
-    var userById = {};
-    (G.state.users || []).forEach(function (ux) {
-      if (ux && ux.id) userById[ux.id] = ux;
-    });
-    var ji;
-    for (ji = 0; ji < list.length; ji++) {
-      var oth = list[ji];
-      if (!shiftTramoAbiertoSeg(oth) || oth.userId === u.id) continue;
-      var otherUser = userById[oth.userId];
-      if (!otherUser || otherUser.role !== "conserje") continue;
+    var blOpen = typeof G.conserjeShiftBlockerFor === "function" ? G.conserjeShiftBlockerFor(u.id) : null;
+    if (blOpen) {
       G.toast(
         "No puede abrir turno: ya hay un tramo abierto a nombre de " +
-          (oth.userName || otherUser.name || "otro conserje") +
+          blOpen.blockerName +
           ". Debe cerrarse primero (Libro de novedades o un administrador en Turnos).",
         "error"
       );
@@ -19668,9 +20012,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var bl = G.loginBlockedByOpenConserjeShift(user.id);
       if (bl) {
         G.toast(
-          "No puede iniciar sesión: " +
+          "No puede iniciar sesión: hay un turno de conserjería abierto a nombre de " +
             bl.blockerName +
-            " tiene un turno abierto en Libro de novedades. Cierre ese turno antes de que otro conserje use el sistema (el administrador puede iniciar sesión para gestionarlo).",
+            ". Cierre ese turno en Libro de novedades o pida a un administrador que lo gestione en Turnos antes de que otro conserje use el sistema.",
           "error"
         );
         return;
@@ -19722,6 +20066,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         })
         .catch(function (eSync) {
           console.warn("[CG] initCloudSync rechazó inesperadamente:", eSync);
+        })
+        .finally(function () {
+          if (user.role === "conserje" && typeof G.kickConserjeIfOpenShiftConflict === "function") {
+            G.kickConserjeIfOpenShiftConflict();
+          }
         });
     }
   });
