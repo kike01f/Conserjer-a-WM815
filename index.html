@@ -3204,7 +3204,9 @@
       pollingTimer: null,
       /** Durante initCloudSync no encolar escrituras sueltas (evita carrera con pull/listener). */
       syncInitActive: false,
-      pendingPushAfterInit: {}
+      pendingPushAfterInit: {},
+      /** true = esta clave tiene cambios locales aún no confirmados en Firestore; el pull usa fusión. Si es false, el remoto sustituye al local (los borrados del admin no reaparecen al reiniciar). */
+      lsKeyDirty: {}
     };
 
     function __cgSyncLog(level, code, detail) {
@@ -3390,6 +3392,7 @@
           if (raw === null) return Promise.resolve();
           return __cgCloudPushSingleDoc(shortKey, raw).then(
             function () {
+              __cgClearLsKeyDirty(shortKey);
               if (attemptIdx > 0) __cgSyncLog("info", "push_key_ok_after_retry", shortKey);
             },
             function (err) {
@@ -3442,6 +3445,7 @@
               800
             )
               .then(function () {
+                __cgClearLsKeyDirty(shortKey);
                 if (shortKey === "users" || shortKey === "roleModules") {
                   CG_SYNC_STATE.lsPullQuietUntil = CG_SYNC_STATE.lsPullQuietUntil || {};
                   var prevQ = CG_SYNC_STATE.lsPullQuietUntil[shortKey] || 0;
@@ -3475,6 +3479,7 @@
     }
 
     function cloudSyncAfterDirectLocalStorageWrite(shortKey) {
+      __cgMarkLsKeyDirty(shortKey);
       scheduleCloudWrite(shortKey);
     }
 
@@ -3697,6 +3702,23 @@
       return !!(cur && typeof cur === "object" && !Array.isArray(cur) && Object.keys(cur).length > 0);
     }
 
+    function __cgShouldSkipEmptyRemoteArray(curRaw, incRaw) {
+      var inc = [];
+      try {
+        inc = JSON.parse(incRaw || "[]");
+      } catch (eIa) {
+        return false;
+      }
+      if (!Array.isArray(inc) || inc.length !== 0) return false;
+      var cur = [];
+      try {
+        cur = JSON.parse(curRaw || "[]");
+      } catch (eCa) {
+        return false;
+      }
+      return Array.isArray(cur) && cur.length > 0;
+    }
+
     /**
      * Listas de negocio: al hacer pull, unir por `id` (el remoto gana en conflicto; se conservan filas solo locales).
      * Evita que dos equipos se pisen mutuamente y reduce pérdida de datos frente a last-write-wins puro.
@@ -3718,6 +3740,17 @@
       wm815_units: true,
       wm815_former_residents: true
     };
+
+    function __cgMarkLsKeyDirty(shortKey) {
+      if (!shortKey || shortKey === "session") return;
+      if (shortKey !== "users" && shortKey !== "roleModules" && !__CG_LS_MERGE_ARRAY_BY_ID[shortKey]) return;
+      CG_SYNC_STATE.lsKeyDirty[shortKey] = true;
+    }
+
+    function __cgClearLsKeyDirty(shortKey) {
+      if (!shortKey || !CG_SYNC_STATE.lsKeyDirty) return;
+      delete CG_SYNC_STATE.lsKeyDirty[shortKey];
+    }
 
     /** Objetos JSON: no aplicar `{}` remoto si el local ya tiene claves (misma lógica que roleModules). */
     var __CG_LS_PROTECT_EMPTY_OBJECT = {
@@ -3911,8 +3944,9 @@
 
     /**
      * Aplica un documento remoto al almacén local. No inicia transacción remota.
-     * Política: merge en shiftLogs, staffChat, listas por id, users/roleModules; no aplicar remoto vacío
-     * que borraría datos locales; tras fusión se encola push para alinear el servidor.
+     * Si no hay cambios locales pendientes de subir (lsKeyDirty), listas y users/roleModules
+     * se sustituyen por el remoto → los borrados del administrador no reaparecen al reiniciar.
+     * Con dirty activo se fusiona por id hasta que un push confirme.
      */
     function applyRemoteLsDoc(docSnap) {
       if (!docSnap || !docSnap.exists) return;
@@ -3929,6 +3963,8 @@
         var cur = P.localGetRaw(full);
         var nextVal = d.value;
         var mergedUp = false;
+        var usedReplaceFromRemote = false;
+        var dirty = !!(CG_SYNC_STATE.lsKeyDirty && CG_SYNC_STATE.lsKeyDirty[d.key]);
         if (d.key === "shiftLogs") {
           nextVal = __cgMergeShiftLogsPullPreserveLocalOpen(cur, d.value);
           mergedUp = true;
@@ -3936,19 +3972,42 @@
           nextVal = __cgMergeStaffChatPull(cur, d.value);
           mergedUp = true;
         } else if (d.key === "users") {
-          nextVal = __cgMergeUsersPull(cur, d.value);
-          mergedUp = true;
+          if (dirty) {
+            nextVal = __cgMergeUsersPull(cur, d.value);
+            mergedUp = true;
+          } else {
+            if (__cgShouldSkipEmptyRemoteArray(cur, d.value)) {
+              scheduleCloudWrite("users");
+              return;
+            }
+            nextVal = d.value;
+            usedReplaceFromRemote = true;
+          }
         } else if (d.key === "roleModules") {
           if (__cgShouldSkipEmptyRemoteRoleModules(cur, d.value)) {
             __cgSyncLog("info", "skip_pull_empty_roleModules_keeps_local");
             scheduleCloudWrite("roleModules");
             return;
           }
-          nextVal = __cgMergeRoleModulesPull(cur, d.value);
-          mergedUp = true;
+          if (dirty) {
+            nextVal = __cgMergeRoleModulesPull(cur, d.value);
+            mergedUp = true;
+          } else {
+            nextVal = d.value;
+            usedReplaceFromRemote = true;
+          }
         } else if (__CG_LS_MERGE_ARRAY_BY_ID[d.key]) {
-          nextVal = __cgMergeRemoteLsArrayById(cur, d.value);
-          mergedUp = true;
+          if (dirty) {
+            nextVal = __cgMergeRemoteLsArrayById(cur, d.value);
+            mergedUp = true;
+          } else {
+            if (__cgShouldSkipEmptyRemoteArray(cur, d.value)) {
+              scheduleCloudWrite(d.key);
+              return;
+            }
+            nextVal = d.value;
+            usedReplaceFromRemote = true;
+          }
         } else if (__CG_LS_PROTECT_EMPTY_OBJECT[d.key] && __cgShouldSkipEmptyRemoteRoleModules(cur, d.value)) {
           __cgSyncLog("info", "skip_pull_empty_object_keeps_local", d.key);
           scheduleCloudWrite(d.key);
@@ -3962,6 +4021,7 @@
         window.dispatchEvent(
           new CustomEvent("cg-cloud-storage-applied", { detail: { key: d.key, source: "remote" } })
         );
+        if (usedReplaceFromRemote) __cgClearLsKeyDirty(d.key);
         if (mergedUp) scheduleCloudWrite(d.key);
       } catch (eA) {
         __cgSyncLog("warn", "apply_remote", eA);
@@ -4188,6 +4248,10 @@
           return batch
             .commit()
             .then(function () {
+              var ji;
+              for (ji = start; ji < end; ji++) {
+                __cgClearLsKeyDirty(ops[ji].sk);
+              }
               return new Promise(function (r) {
                 setTimeout(r, __CG_CLOUD_BATCH_PAUSE_MS);
               });
@@ -4439,7 +4503,10 @@
         console.warn("[CG] save: localSetRaw falló (¿cuota llena?)", key);
         return;
       }
-      if (key !== "session") scheduleCloudWrite(key);
+      if (key !== "session") {
+        __cgMarkLsKeyDirty(key);
+        scheduleCloudWrite(key);
+      }
     }
 
     function uid() {
