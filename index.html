@@ -12653,7 +12653,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         G.currentUser().role === "admin"
           ? "<div class=\"card cg-dept-toolbar\">" +
             "<div class=\"card-h\" style=\"align-items:center;flex-wrap:wrap;gap:0.5rem\">" +
-            "<h3 style=\"margin:0\">Importación masiva</h3>" +
+            "<h3 style=\"margin:0\">Importación masiva (Excel)</h3>" +
+            "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;width:100%;font-size:0.82rem\">Archivo <strong>.xlsx</strong>: se detectan columnas por nombre (Unidad, Depto, Nombre, Tipo, Email…). Prioriza la hoja «Residentes» si existe; vista previa antes de guardar.</p>" +
             "<div class=\"toolbar\" style=\"margin-left:auto\">" +
             "<input type=\"file\" id=\"input-dept-xlsx\" class=\"hidden\" accept=\".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\" />" +
             "<button type=\"button\" class=\"btn btn-primary btn-sm\" id=\"btn-import-dept-xlsx\"><i class=\"fa-solid fa-file-import\"></i> Importar Excel</button></div></div></div>"
@@ -13537,7 +13538,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return mapVincUnitUse(uuso) === "arriendo" ? "Arriendo" : "Habitacional";
   }
 
-  /** Definición de columnas esperadas en la plantilla de importación (solo metadatos). */
+  /** Plantilla detallada legacy (encabezados exactos en español). */
   function __deptImportColumnHeaderSpec() {
     return {
       HDR_PRIMARY: {
@@ -13562,22 +13563,61 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     };
   }
 
-  /** wb → matriz filas o mensaje de error (lectura / forma). */
-  function __deptImportParseWorkbookMatrix(wb) {
-    var sn = wb.SheetNames[0];
-    if (!sn) return { error: "El archivo no tiene hojas." };
-    var sheet = wb.Sheets[sn];
-    var matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
-    if (!matrix || matrix.length < 2) return { error: "El Excel no tiene filas de datos." };
-    return { matrix: matrix };
+  function __deptImportNormHeaderStr(h) {
+    var s = String(h == null ? "" : h).trim().toLowerCase();
+    try {
+      s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    } catch (eN) {}
+    return s.replace(/\s+/g, " ").replace(/[.:·]/g, " ").replace(/\s+/g, " ").trim();
   }
 
-  function __deptImportNormalizeHeaderRow(matrix) {
-    return matrix[0].map(function (h) { return String(h == null ? "" : h).trim(); });
+  function __deptImportFieldPatterns() {
+    return {
+      unidad: [
+        "unidad asignada",
+        "n unidad",
+        "numero unidad",
+        "n° unidad",
+        "nº unidad",
+        "unidad",
+        "depto",
+        "departamento",
+        "dept",
+        "apto",
+        "apartamento",
+        "unit",
+        "torre",
+        "vivienda",
+        "num depto"
+      ],
+      nombre: ["nombre del residente", "nombre residente", "nombre completo", "nombres", "nombre", "name", "residente", "titular"],
+      tipo: ["tipo de residente", "tipo residente", "tipo", "type", "rol", "categoria", "categoría"],
+      email: ["e-mail", "email", "correo", "mail"],
+      telefono: ["telefono", "teléfono", "tel", "phone", "celular", "movil", "móvil", "fono"],
+      rut: ["rut", "dni", "documento"],
+      uso: ["uso de la unidad", "uso unidad", "tipo uso", "uso"],
+      est: ["estacionamiento", "parking", "e-"],
+      bodega: ["bodega", "bod", "storage"],
+      bici: ["bicicletero", "bici", "bike"],
+      fecha: ["fecha de registro", "fecha registro", "fecha", "registro", "date"],
+      nota: ["nota de la unidad", "nota unidad", "observacion", "observación", "nota", "comentario"],
+      total: ["total residentes en unidad", "total residentes", "total"],
+      otros: ["otros residentes", "otros"]
+    };
   }
 
-  /** Validación de encabezados → índices de columna o error. */
-  function __deptImportResolveColumnIndices(head, HDR_PRIMARY, HDR_ALTERNATES) {
+  function __deptImportHeaderMatches(hNorm, pats) {
+    if (!hNorm) return false;
+    var j;
+    for (j = 0; j < pats.length; j++) {
+      var p = pats[j];
+      if (hNorm === p) return true;
+      if (hNorm.indexOf(p) >= 0) return true;
+    }
+    return false;
+  }
+
+  function __deptImportLegacyResolveColumnIndices(head, HDR_PRIMARY, HDR_ALTERNATES) {
     function colIndexForKey(k) {
       var p = HDR_PRIMARY[k];
       var i = head.indexOf(p);
@@ -13602,7 +13642,109 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return { ix: ix };
   }
 
-  /** Agrupa filas de datos por unidad normalizada (transformación). */
+  function __deptImportFlexibleResolveColumns(headRow) {
+    var headNorm = headRow.map(function (h) {
+      return __deptImportNormHeaderStr(h);
+    });
+    var used = {};
+    var ix = {};
+    var order = ["unidad", "nombre", "tipo", "email", "telefono", "rut", "uso", "est", "bodega", "bici", "fecha", "nota", "total", "otros"];
+    var patterns = __deptImportFieldPatterns();
+    var fi, ci;
+    for (fi = 0; fi < order.length; fi++) {
+      var field = order[fi];
+      ix[field] = -1;
+      var pats = patterns[field] || [];
+      for (ci = 0; ci < headNorm.length; ci++) {
+        if (used[ci]) continue;
+        if (__deptImportHeaderMatches(headNorm[ci], pats)) {
+          ix[field] = ci;
+          used[ci] = true;
+          break;
+        }
+      }
+    }
+    var missingFlex = [];
+    if (ix.unidad < 0) missingFlex.push("unidad / departamento");
+    if (ix.nombre < 0) missingFlex.push("nombre del residente");
+    if (!missingFlex.length) {
+      var parts = order
+        .filter(function (k) {
+          return ix[k] >= 0;
+        })
+        .map(function (k) {
+          return k + ": «" + String(headRow[ix[k]]).trim() + "»";
+        });
+      return { ix: ix, mapDesc: parts.join(" · "), usedCols: used };
+    }
+    var spec = __deptImportColumnHeaderSpec();
+    var leg = __deptImportLegacyResolveColumnIndices(
+      headRow.map(function (h) {
+        return String(h == null ? "" : h).trim();
+      }),
+      spec.HDR_PRIMARY,
+      spec.HDR_ALTERNATES
+    );
+    if (!leg.error) {
+      return { ix: leg.ix, mapDesc: "Plantilla detallada (encabezados exactos del sistema)", usedCols: used };
+    }
+    return {
+      error:
+        "No se detectaron columnas obligatorias (" +
+        missingFlex.join(", ") +
+        "). Use una fila de títulos con «Unidad»/«Depto» y «Nombre», o la plantilla con «Unidad Asignada», «Nombre del Residentes», etc."
+    };
+  }
+
+  function __deptImportPickSheetName(wb) {
+    var names = wb.SheetNames || [];
+    if (!names.length) return null;
+    var i;
+    var norm = names.map(function (n) {
+      return __deptImportNormHeaderStr(n).replace(/\s/g, "");
+    });
+    var prefer = ["residentes", "residents", "unidades", "units", "datos", "hoja1", "sheet1"];
+    for (i = 0; i < prefer.length; i++) {
+      var want = prefer[i];
+      var j;
+      for (j = 0; j < norm.length; j++) {
+        if (norm[j] === want || norm[j].indexOf(want) >= 0) return names[j];
+      }
+    }
+    for (i = 0; i < norm.length; i++) {
+      if (norm[i].indexOf("resident") >= 0) return names[i];
+    }
+    return names[0];
+  }
+
+  function __deptImportParseWorkbookToMatrix(wb) {
+    var sn = __deptImportPickSheetName(wb);
+    if (!sn) return { error: "El archivo no tiene hojas." };
+    var sheet = wb.Sheets[sn];
+    if (!sheet) return { error: "No se encontró la hoja «" + sn + "»." };
+    var matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
+    if (!matrix || matrix.length < 2) {
+      return { error: "La hoja «" + sn + "» no tiene datos bajo la fila de encabezados." };
+    }
+    return { matrix: matrix, sheetName: sn };
+  }
+
+  function __deptImportNormalizeHeaderRow(matrix) {
+    return matrix[0].map(function (h) {
+      return String(h == null ? "" : h).trim();
+    });
+  }
+
+  function __deptImportUsedColSet(ix) {
+    var o = {};
+    var k;
+    for (k in ix) {
+      if (Object.prototype.hasOwnProperty.call(ix, k) && ix[k] >= 0) o[ix[k]] = true;
+    }
+    return o;
+  }
+
+  /** Agrupa filas por unidad (columna detectada). */
   function __deptImportGroupRowsByUnit(matrix, ix) {
     var groups = {};
     var rowNum;
@@ -13624,41 +13766,39 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       groups[ukey].rows.push({ row: row, excelRow: rowNum + 1 });
     }
     var keys = Object.keys(groups);
-    if (!keys.length) return { error: "No hay filas con «Unidad Asignada»." };
+    if (!keys.length) {
+      return { error: "No hay filas con número de unidad/departamento reconocible en la columna mapeada." };
+    }
     return { groups: groups, keys: keys };
   }
 
-  A.processDepartamentosExcelArrayBuffer = function (arrayBuffer) {
-    function run() {
-    if (typeof XLSX === "undefined" || !XLSX.read) {
-      G.toast("No se cargó la librería SheetJS (XLSX).", "error");
-      return;
+  function __deptImportCountSkippedDataRows(matrix, ix) {
+    var n = 0;
+    var rowNum;
+    for (rowNum = 1; rowNum < matrix.length; rowNum++) {
+      var row = matrix[rowNum];
+      if (!row || !row.length) continue;
+      function cell(ci) {
+        if (ci < 0) return "";
+        var v = row[ci];
+        return v == null ? "" : v;
+      }
+      var u = String(cell(ix.unidad)).trim();
+      var nom = ix.nombre >= 0 ? String(cell(ix.nombre)).trim() : "";
+      if (u && !nom) n++;
     }
-    var LS_U = G.LS + "wm815_units";
-    var spec = __deptImportColumnHeaderSpec();
-    var wb = XLSX.read(arrayBuffer, { type: "array" });
-    var parsed = __deptImportParseWorkbookMatrix(wb);
-    if (parsed.error) {
-      G.toast(parsed.error, "error");
-      return;
-    }
-    var matrix = parsed.matrix;
-    var head = __deptImportNormalizeHeaderRow(matrix);
-    var col = __deptImportResolveColumnIndices(head, spec.HDR_PRIMARY, spec.HDR_ALTERNATES);
-    if (col.error) {
-      G.toast(col.error, "error");
-      return;
-    }
-    var ix = col.ix;
-    var grouped = __deptImportGroupRowsByUnit(matrix, ix);
-    if (grouped.error) {
-      G.toast(grouped.error, "warn");
-      return;
-    }
-    var keys = grouped.keys;
-    var groups = grouped.groups;
+    return n;
+  }
+
+  function __deptImportBuildImportedUnits(groups, keys, ix, head, LS_U) {
     var importedUnits = [];
     var warnings = [];
+    var previewHtml = [];
+    var previewCap = 45;
+    var usedIdx = __deptImportUsedColSet(ix);
+    var rawExist0 = G.persist.localGetRaw(LS_U);
+    var existingSnap = G.persist.parseJson(rawExist0 || "[]", []);
+    if (!Array.isArray(existingSnap)) existingSnap = [];
     keys.forEach(function (ukey) {
       var g = groups[ukey];
       var rows = g.rows;
@@ -13671,6 +13811,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var otrosTxt = "";
       var residents = [];
       var seenRes = {};
+      var metaExtras = [];
       rows.forEach(function (wrap) {
         var row = wrap.row;
         function c(ci) {
@@ -13678,6 +13819,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           var v = row[ci];
           return v == null ? "" : v;
         }
+        var extras = [];
+        var hi;
+        for (hi = 0; hi < head.length; hi++) {
+          if (usedIdx[hi]) continue;
+          var lab = String(head[hi] == null ? "" : head[hi]).trim();
+          if (!lab) continue;
+          var ev = row[hi];
+          if (ev == null || String(ev).trim() === "") continue;
+          extras.push(lab + ": " + String(ev).trim());
+        }
+        if (extras.length) metaExtras.push(extras.join(" | "));
         var uuso = String(c(ix.uso)).trim();
         if (uuso && !usoFirst) usoFirst = uuso;
         var n = String(c(ix.nota)).trim();
@@ -13702,9 +13854,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var email = String(c(ix.email)).trim();
         var tel = String(c(ix.telefono)).trim();
         var regIso = excelCellToIso(c(ix.fecha));
-        var rk = (email || "").toLowerCase() + "|" + nombre.toLowerCase() + "|" + rut.toLowerCase();
-        if (seenRes[rk]) return;
-        seenRes[rk] = true;
+        var rkUnitName = ukey + "\n" + nombre.toLowerCase().replace(/\s+/g, " ").trim();
+        if (seenRes[rkUnitName]) return;
+        seenRes[rkUnitName] = true;
         residents.push({
           name: nombre,
           rut: rut,
@@ -13713,30 +13865,54 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           type: residentTipoToVincLabel(tipoInt),
           registeredAt: regIso
         });
+        if (previewHtml.length < previewCap) {
+          previewHtml.push(
+            "<tr><td>" +
+              wrap.excelRow +
+              "</td><td>" +
+              G.escapeHtml(String(g.unitNumber).trim()) +
+              "</td><td>" +
+              G.escapeHtml(nombre) +
+              "</td><td>" +
+              G.escapeHtml(residentTipoToVincLabel(tipoInt)) +
+              "</td><td>" +
+              G.escapeHtml(email) +
+              "</td><td>" +
+              G.escapeHtml(tel) +
+              "</td></tr>"
+          );
+        }
       });
       if (!residents.length) {
-        warnings.push("Unidad " + g.unitNumber + ": sin residentes (nombre vacío); omitida.");
+        warnings.push("Unidad " + g.unitNumber + ": sin filas con nombre de residente; omitida.");
         return;
       }
-      var hasProp = residents.some(function (r) { return r.type === "Propietario"; });
+      var hasProp = residents.some(function (r) {
+        return r.type === "Propietario";
+      });
       if (!hasProp) {
         residents[0].type = "Propietario";
-        warnings.push("Unidad " + g.unitNumber + ": sin propietario explícito; se marcó el primer residente como Propietario.");
+        warnings.push("Unidad " + g.unitNumber + ": sin propietario explícito; primer residente como Propietario.");
       }
       var parkArr = Object.keys(parkSet);
-      var bodegaArr = Object.keys(bodegaSet).map(function (k) { return bodegaSet[k]; });
+      var bodegaArr = Object.keys(bodegaSet).map(function (k) {
+        return bodegaSet[k];
+      });
       var noteExtra = [];
       if (totalHint) noteExtra.push("Total residentes (Excel): " + totalHint);
       if (otrosTxt) noteExtra.push("Otros residentes: " + otrosTxt);
+      if (metaExtras.length) {
+        var uMeta = metaExtras.filter(function (x, i, a) {
+          return a.indexOf(x) === i;
+        });
+        noteExtra.push("Columnas extra (Excel): " + uMeta.slice(0, 6).join(" · "));
+        if (uMeta.length > 6) noteExtra.push("… +" + (uMeta.length - 6) + " bloque(s)");
+      }
       var unitNote = nota;
       if (noteExtra.length) {
         unitNote = (unitNote ? unitNote + "\n\n" : "") + noteExtra.join("\n");
       }
-      var existing = [];
-      var rawExist = G.persist.localGetRaw(LS_U);
-      existing = G.persist.parseJson(rawExist || "[]", []);
-      if (!Array.isArray(existing)) existing = [];
-      var prev = existing.find(function (u) {
+      var prev = existingSnap.find(function (u) {
         return u && G.normalizeUnitNumberKey(u.unitNumber) === ukey;
       });
       var uid = prev && prev.id ? prev.id : String(Date.now()) + "_" + Math.random().toString(36).slice(2, 8);
@@ -13750,8 +13926,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         parkingNumbers: parkArr,
         storageNumber: bodegaArr[0] || "",
         storageNumbers: bodegaArr,
-        bikeStorageNumbers: bikeList.slice(0, 3).map(function (b) { return b.numero; }),
-        bikeStorageDetails: bikeList.slice(0, 3).map(function (b) { return b.detalle; }),
+        bikeStorageNumbers: bikeList.slice(0, 3).map(function (b) {
+          return b.numero;
+        }),
+        bikeStorageDetails: bikeList.slice(0, 3).map(function (b) {
+          return b.detalle;
+        }),
         bikeStorageNumber: bikeList[0] ? bikeList[0].numero : "",
         bikeStorageDetail: bikeList[0] ? bikeList[0].detalle : "",
         unitNote: unitNote,
@@ -13760,10 +13940,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         residents: residents
       });
     });
-    if (!importedUnits.length) {
-      G.toast("No se importó ninguna unidad válida.", "warn");
+    return { importedUnits: importedUnits, warnings: warnings, previewHtml: previewHtml.join("") };
+  }
+
+  A.applyDepartamentosImportedUnits = function (importedUnits, warnings, stats) {
+    if (!importedUnits || !importedUnits.length) {
+      G.toast("No hay unidades para importar.", "warn");
       return;
     }
+    var LS_U = G.LS + "wm815_units";
     var rawAll = G.persist.localGetRaw(LS_U);
     var existingAll = G.persist.parseJson(rawAll || "[]", []);
     if (!Array.isArray(existingAll)) existingAll = [];
@@ -13777,7 +13962,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var merged = kept.concat(importedUnits);
     var strMerged = G.persist.stringifyForStorage(merged);
     if (!strMerged || !G.persist.localSetRaw(LS_U, strMerged)) {
-      G.toast("No se pudo guardar la importación en almacenamiento local.", "error");
+      G.toast("No se pudo guardar la importación.", "error");
       return;
     }
     if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
@@ -13787,11 +13972,129 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (window.CG && typeof window.CG.mountDepartamentosModule === "function") {
       window.CG.mountDepartamentosModule();
     }
-    G.toast("Importación: " + importedUnits.length + " unidad(es) actualizada(s) en registro de unidades y en toda la app.");
-    warnings.slice(0, 4).forEach(function (w) {
+    var s = stats || {};
+    G.toast(
+      "Importación lista: " +
+        (s.newUnits != null ? s.newUnits : "?") +
+        " nueva(s), " +
+        (s.updatedUnits != null ? s.updatedUnits : "?") +
+        " actualizada(s), " +
+        (s.skippedRows != null ? s.skippedRows : 0) +
+        " fila(s) sin nombre omitida(s).",
+      "success"
+    );
+    (warnings || []).slice(0, 4).forEach(function (w) {
       G.toast(w, "warn");
     });
-    if (warnings.length > 4) G.toast("…y " + (warnings.length - 4) + " aviso(s) más (consola).", "warn");
+    if (warnings && warnings.length > 4) G.toast("…y " + (warnings.length - 4) + " aviso(s) más.", "warn");
+  };
+
+  A.__deptImportRunFromArrayBuffer = function (arrayBuffer) {
+    if (typeof XLSX === "undefined" || !XLSX.read) {
+      return { error: "No se cargó la librería SheetJS (XLSX)." };
+    }
+    var wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+    var parsed = __deptImportParseWorkbookToMatrix(wb);
+    if (parsed.error) return { error: parsed.error };
+    var matrix = parsed.matrix;
+    var sheetName = parsed.sheetName;
+    var head = __deptImportNormalizeHeaderRow(matrix);
+    var col = __deptImportFlexibleResolveColumns(head);
+    if (col.error) return { error: col.error };
+    var ix = col.ix;
+    var grouped = __deptImportGroupRowsByUnit(matrix, ix);
+    if (grouped.error) return { error: grouped.error };
+    var LS_U = G.LS + "wm815_units";
+    var rawAll = G.persist.localGetRaw(LS_U);
+    var existingAll = G.persist.parseJson(rawAll || "[]", []);
+    if (!Array.isArray(existingAll)) existingAll = [];
+    var existingKey = {};
+    existingAll.forEach(function (u) {
+      if (u && u.unitNumber) existingKey[G.normalizeUnitNumberKey(u.unitNumber)] = true;
+    });
+    var built = __deptImportBuildImportedUnits(grouped.groups, grouped.keys, ix, head, LS_U);
+    var importedUnits = built.importedUnits;
+    if (!importedUnits.length) {
+      return { error: "No se obtuvo ninguna unidad con residentes válidos." };
+    }
+    var newUnits = 0;
+    var updatedUnits = 0;
+    importedUnits.forEach(function (u) {
+      var k = G.normalizeUnitNumberKey(u.unitNumber);
+      if (existingKey[k]) updatedUnits++;
+      else newUnits++;
+    });
+    var residentsTotal = 0;
+    importedUnits.forEach(function (u) {
+      residentsTotal += (u.residents && u.residents.length) || 0;
+    });
+    var stats = {
+      newUnits: newUnits,
+      updatedUnits: updatedUnits,
+      residentsTotal: residentsTotal,
+      skippedRows: __deptImportCountSkippedDataRows(matrix, ix),
+      unitsOut: importedUnits.length
+    };
+    return {
+      sheetName: sheetName,
+      mapDesc: col.mapDesc || "",
+      importedUnits: importedUnits,
+      warnings: built.warnings,
+      stats: stats,
+      previewRowsHtml: built.previewHtml
+    };
+  };
+
+  A.processDepartamentosExcelArrayBuffer = function (arrayBuffer, opt) {
+    opt = opt || {};
+    function run() {
+      var r = A.__deptImportRunFromArrayBuffer(arrayBuffer);
+      if (r.error) {
+        G.toast(r.error, "error");
+        return;
+      }
+      if (opt.skipPreview) {
+        A.applyDepartamentosImportedUnits(r.importedUnits, r.warnings, r.stats);
+        return;
+      }
+      window.__cgDeptExcelImportPending = r;
+      var html =
+        "<div class=\"modal pk-modal-dark\" style=\"max-width:min(920px,96vw)\">" +
+        "<div class=\"modal-h\"><h4>Vista previa — importar Excel</h4>" +
+        "<button type=\"button\" class=\"btn btn-sm btn-secondary\" data-cg-act=\"deptXlsxCancelImport\">Cancelar</button></div>" +
+        "<div class=\"modal-b\" style=\"max-height:70vh;overflow:auto\">" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.35rem\"><strong>Hoja usada:</strong> " +
+        G.escapeHtml(r.sheetName || "") +
+        "</p>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.8rem;line-height:1.35\">" +
+        G.escapeHtml(r.mapDesc || "") +
+        "</p>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.5rem\">" +
+        "<strong>Resumen:</strong> " +
+        r.stats.newUnits +
+        " unidad(es) nueva(s) · " +
+        r.stats.updatedUnits +
+        " a actualizar · " +
+        r.stats.residentsTotal +
+        " residente(s) · " +
+        r.stats.skippedRows +
+        " fila(s) con unidad pero sin nombre (omitidas)</p>" +
+        "<div class=\"data-table-wrap\" style=\"overflow:auto;max-height:260px;border:1px solid var(--gray-200);border-radius:8px;margin-bottom:0.5rem\">" +
+        "<table class=\"data-table\"><thead><tr><th>Fila Excel</th><th>Unidad</th><th>Nombre</th><th>Tipo</th><th>Email</th><th>Tel</th></tr></thead><tbody>" +
+        (r.previewRowsHtml || "") +
+        (r.stats.residentsTotal > 45 ? "<tr><td colspan=\"6\" style=\"text-align:center;opacity:0.85\">… máx. 45 filas en vista previa</td></tr>" : "") +
+        "</tbody></table></div>" +
+        (r.warnings && r.warnings.length
+          ? "<p class=\"page-desc\" style=\"margin:0;color:#b45309;font-size:0.88rem\">" +
+            G.escapeHtml(r.warnings.slice(0, 6).join(" · ")) +
+            "</p>"
+          : "") +
+        "</div>" +
+        "<div class=\"modal-f\" style=\"display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:flex-end;width:100%\">" +
+        "<button type=\"button\" class=\"btn btn-secondary\" data-cg-act=\"deptXlsxCancelImport\">Cerrar sin guardar</button>" +
+        "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"deptXlsxConfirmImport\"><i class=\"fa-solid fa-check\"></i> Confirmar importación</button>" +
+        "</div></div>";
+      UI.openModal(html);
     }
     if (window.CG_lazy && typeof window.CG_lazy.ensureXlsx === "function") {
       window.CG_lazy.ensureXlsx().then(run).catch(function () {
@@ -13800,6 +14103,22 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     run();
+  };
+
+  A.deptXlsxCancelImport = function () {
+    window.__cgDeptExcelImportPending = null;
+    UI.closeModal();
+  };
+
+  A.deptXlsxConfirmImport = function () {
+    var p = window.__cgDeptExcelImportPending;
+    window.__cgDeptExcelImportPending = null;
+    UI.closeModal();
+    if (!p || !p.importedUnits || !p.importedUnits.length) {
+      G.toast("No hay datos pendientes de importar.", "warn");
+      return;
+    }
+    A.applyDepartamentosImportedUnits(p.importedUnits, p.warnings, p.stats);
   };
 
   A.bindDepartamentosExcelImport = function () {
@@ -18937,6 +19256,66 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   window.CG_ACTIONS = A;
+
+  /**
+   * importExcel(file, options?) → Promise
+   * options.applyImmediately: si true, aplica sin modal (misma persistencia / Firestore que el CRUD).
+   * Si false (defecto): resultado incluye data + apply() para confirmar después.
+   */
+  window.importExcel = function (file, options) {
+    options = options || {};
+    return new Promise(function (resolve, reject) {
+      if (!file) {
+        resolve({ ok: false, error: "Sin archivo" });
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var p = window.CG_lazy && window.CG_lazy.ensureXlsx ? window.CG_lazy.ensureXlsx() : Promise.resolve();
+        p.then(function () {
+          if (typeof XLSX === "undefined" || !XLSX.read) {
+            resolve({ ok: false, error: "SheetJS (XLSX) no disponible" });
+            return;
+          }
+          if (!window.CG_ACTIONS || typeof window.CG_ACTIONS.__deptImportRunFromArrayBuffer !== "function") {
+            resolve({ ok: false, error: "CG_ACTIONS no inicializado" });
+            return;
+          }
+          var r = window.CG_ACTIONS.__deptImportRunFromArrayBuffer(e.target.result);
+          if (r.error) {
+            resolve({ ok: false, error: r.error });
+            return;
+          }
+          if (options.applyImmediately && window.CG_ACTIONS.applyDepartamentosImportedUnits) {
+            window.CG_ACTIONS.applyDepartamentosImportedUnits(r.importedUnits, r.warnings, r.stats);
+            resolve({
+              ok: true,
+              applied: true,
+              summary: r.stats,
+              warnings: r.warnings,
+              sheetName: r.sheetName,
+              mapDesc: r.mapDesc
+            });
+            return;
+          }
+          resolve({
+            ok: true,
+            applied: false,
+            data: r,
+            apply: function () {
+              if (window.CG_ACTIONS && window.CG_ACTIONS.applyDepartamentosImportedUnits) {
+                window.CG_ACTIONS.applyDepartamentosImportedUnits(r.importedUnits, r.warnings, r.stats);
+              }
+            }
+          });
+        }).catch(reject);
+      };
+      reader.onerror = function () {
+        resolve({ ok: false, error: "No se pudo leer el archivo" });
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  };
 
   (function cgInstallDelegatedUiOnce() {
     if (window.__cgDelegatedUiInstalled) return;
