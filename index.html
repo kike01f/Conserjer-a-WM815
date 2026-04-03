@@ -3206,7 +3206,9 @@
       syncInitActive: false,
       pendingPushAfterInit: {},
       /** true = esta clave tiene cambios locales aún no confirmados en Firestore; el pull usa fusión. Si es false, el remoto sustituye al local (los borrados del admin no reaparecen al reiniciar). */
-      lsKeyDirty: {}
+      lsKeyDirty: {},
+      /** Por clave LS: ids borrados aquí pero aún no reflejados en el remoto; se ignoran en el merge para que no vuelvan al instante. */
+      pendingDeletedIdsByKey: {}
     };
 
     function __cgSyncLog(level, code, detail) {
@@ -3393,6 +3395,7 @@
           return __cgCloudPushSingleDoc(shortKey, raw).then(
             function () {
               __cgClearLsKeyDirty(shortKey);
+              __cgClearPendingDeletedLsKey(shortKey);
               if (attemptIdx > 0) __cgSyncLog("info", "push_key_ok_after_retry", shortKey);
             },
             function (err) {
@@ -3446,6 +3449,7 @@
             )
               .then(function () {
                 __cgClearLsKeyDirty(shortKey);
+                __cgClearPendingDeletedLsKey(shortKey);
                 if (shortKey === "users" || shortKey === "roleModules") {
                   CG_SYNC_STATE.lsPullQuietUntil = CG_SYNC_STATE.lsPullQuietUntil || {};
                   var prevQ = CG_SYNC_STATE.lsPullQuietUntil[shortKey] || 0;
@@ -3607,6 +3611,7 @@
       } catch (e2) {
         return incomingJson;
       }
+      inc = __cgArrayFilterPendingDeleted("shiftLogs", inc);
       if (!Array.isArray(local) || !Array.isArray(inc)) return incomingJson;
 
       var incIds = {};
@@ -3663,16 +3668,23 @@
       if (!Array.isArray(loc)) loc = [];
       if (!Array.isArray(rem)) return typeof incomingRaw === "string" ? incomingRaw : "[]";
       if (rem.length === 0) return "[]";
+      var pd = CG_SYNC_STATE.pendingDeletedIdsByKey && CG_SYNC_STATE.pendingDeletedIdsByKey["staffChatMessages"];
+      function staffChatSkipPending(m) {
+        if (!m || !pd) return false;
+        return !!pd[__cgStaffChatDedupeKey(m)];
+      }
       var byId = Object.create(null);
       var i;
       for (i = 0; i < loc.length; i++) {
         var a = loc[i];
         if (!a || typeof a !== "object") continue;
+        if (staffChatSkipPending(a)) continue;
         byId[__cgStaffChatDedupeKey(a)] = a;
       }
       for (i = 0; i < rem.length; i++) {
         var b = rem[i];
         if (!b || typeof b !== "object") continue;
+        if (staffChatSkipPending(b)) continue;
         byId[__cgStaffChatDedupeKey(b)] = b;
       }
       var merged = [];
@@ -3743,13 +3755,72 @@
 
     function __cgMarkLsKeyDirty(shortKey) {
       if (!shortKey || shortKey === "session") return;
-      if (shortKey !== "users" && shortKey !== "roleModules" && !__CG_LS_MERGE_ARRAY_BY_ID[shortKey]) return;
+      if (
+        shortKey !== "users" &&
+        shortKey !== "roleModules" &&
+        shortKey !== "visitVehAlertLog" &&
+        !__CG_LS_MERGE_ARRAY_BY_ID[shortKey]
+      ) {
+        return;
+      }
       CG_SYNC_STATE.lsKeyDirty[shortKey] = true;
     }
 
     function __cgClearLsKeyDirty(shortKey) {
       if (!shortKey || !CG_SYNC_STATE.lsKeyDirty) return;
       delete CG_SYNC_STATE.lsKeyDirty[shortKey];
+    }
+
+    function __cgRegisterPendingDeletedLsKey(lsKey, itemId) {
+      if (!lsKey || itemId == null || String(itemId) === "") return;
+      CG_SYNC_STATE.pendingDeletedIdsByKey[lsKey] = CG_SYNC_STATE.pendingDeletedIdsByKey[lsKey] || {};
+      CG_SYNC_STATE.pendingDeletedIdsByKey[lsKey][String(itemId)] = true;
+    }
+
+    function __cgClearPendingDeletedLsKey(lsKey) {
+      if (!lsKey || !CG_SYNC_STATE.pendingDeletedIdsByKey) return;
+      delete CG_SYNC_STATE.pendingDeletedIdsByKey[lsKey];
+    }
+
+    function __cgArrayFilterPendingDeleted(lsKey, arr) {
+      var pd = CG_SYNC_STATE.pendingDeletedIdsByKey && CG_SYNC_STATE.pendingDeletedIdsByKey[lsKey];
+      if (!pd || !Array.isArray(arr) || !arr.length) return arr;
+      return arr.filter(function (u) {
+        if (!u || u.id == null || u.id === "") return true;
+        return !pd[String(u.id)];
+      });
+    }
+
+    /** Objetos mapa (p. ej. alertas por id de visita): unir remoto+local y eliminar claves marcadas como borradas pendientes de sync. */
+    function __cgMergeVisitVehAlertLogPull(curRaw, incRaw) {
+      var cur = {};
+      var inc = {};
+      try {
+        cur = JSON.parse(curRaw || "{}");
+      } catch (eC) {
+        cur = {};
+      }
+      try {
+        inc = JSON.parse(incRaw || "{}");
+      } catch (eI) {
+        return typeof incRaw === "string" ? incRaw : "{}";
+      }
+      if (!cur || typeof cur !== "object" || Array.isArray(cur)) cur = {};
+      if (!inc || typeof inc !== "object" || Array.isArray(inc)) return typeof incRaw === "string" ? incRaw : "{}";
+      var pend = CG_SYNC_STATE.pendingDeletedIdsByKey && CG_SYNC_STATE.pendingDeletedIdsByKey["visitVehAlertLog"];
+      var out = Object.create(null);
+      var k;
+      for (k in inc) {
+        if (!Object.prototype.hasOwnProperty.call(inc, k)) continue;
+        if (pend && pend[k]) continue;
+        out[k] = inc[k];
+      }
+      for (k in cur) {
+        if (!Object.prototype.hasOwnProperty.call(cur, k)) continue;
+        if (pend && pend[k]) continue;
+        out[k] = cur[k];
+      }
+      return JSON.stringify(out);
     }
 
     /** Objetos JSON: no aplicar `{}` remoto si el local ya tiene claves (misma lógica que roleModules). */
@@ -3762,7 +3833,7 @@
       deptAdminGateVerifier: true
     };
 
-    function __cgMergeRemoteLsArrayById(curRaw, incRaw) {
+    function __cgMergeRemoteLsArrayById(curRaw, incRaw, lsKeyOpt) {
       var cur = [];
       var inc = [];
       try {
@@ -3774,6 +3845,10 @@
         inc = JSON.parse(incRaw || "[]");
       } catch (eI) {
         return typeof incRaw === "string" ? incRaw : "[]";
+      }
+      if (lsKeyOpt) {
+        inc = __cgArrayFilterPendingDeleted(lsKeyOpt, inc);
+        cur = __cgArrayFilterPendingDeleted(lsKeyOpt, cur);
       }
       if (!Array.isArray(cur) || !Array.isArray(inc)) return typeof incRaw === "string" ? incRaw : "[]";
       if (inc.length === 0) return cur.length ? curRaw : incRaw;
@@ -3838,6 +3913,7 @@
       } catch (e2) {
         return curRaw;
       }
+      inc = __cgArrayFilterPendingDeleted("users", inc);
       if (!Array.isArray(cur) || !Array.isArray(inc)) return typeof incRaw === "string" ? incRaw : "[]";
       if (inc.length === 0) return cur.length ? curRaw : incRaw;
       var byId = Object.create(null);
@@ -3971,6 +4047,9 @@
         } else if (d.key === "staffChatMessages") {
           nextVal = __cgMergeStaffChatPull(cur, d.value);
           mergedUp = true;
+        } else if (d.key === "visitVehAlertLog") {
+          nextVal = __cgMergeVisitVehAlertLogPull(cur, d.value);
+          mergedUp = true;
         } else if (d.key === "users") {
           if (dirty) {
             nextVal = __cgMergeUsersPull(cur, d.value);
@@ -3998,7 +4077,7 @@
           }
         } else if (__CG_LS_MERGE_ARRAY_BY_ID[d.key]) {
           if (dirty) {
-            nextVal = __cgMergeRemoteLsArrayById(cur, d.value);
+            nextVal = __cgMergeRemoteLsArrayById(cur, d.value, d.key);
             mergedUp = true;
           } else {
             if (__cgShouldSkipEmptyRemoteArray(cur, d.value)) {
@@ -4021,7 +4100,10 @@
         window.dispatchEvent(
           new CustomEvent("cg-cloud-storage-applied", { detail: { key: d.key, source: "remote" } })
         );
-        if (usedReplaceFromRemote) __cgClearLsKeyDirty(d.key);
+        if (usedReplaceFromRemote) {
+          __cgClearLsKeyDirty(d.key);
+          __cgClearPendingDeletedLsKey(d.key);
+        }
         if (mergedUp) scheduleCloudWrite(d.key);
       } catch (eA) {
         __cgSyncLog("warn", "apply_remote", eA);
@@ -4251,6 +4333,7 @@
               var ji;
               for (ji = start; ji < end; ji++) {
                 __cgClearLsKeyDirty(ops[ji].sk);
+                __cgClearPendingDeletedLsKey(ops[ji].sk);
               }
               return new Promise(function (r) {
                 setTimeout(r, __CG_CLOUD_BATCH_PAUSE_MS);
@@ -5997,6 +6080,8 @@
       hexToRgb, snapshotThemeForExport, buildExportThemeRootCss, getExportAccentHex, getEmailShellThemeColors,
       initCloudSync, stopCloudSyncListener, attachStaffChatRemoteSync, detachStaffChatRemoteSync, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPullSingleLsKey, cloudPushAllKeysOnce,
       flushPendingCloudWritesNow, cloudPushKeyImmediate, cloudPushLsKeyPromise, armLsKeyPullQuiet, getCloudSyncLastInitResult,
+      registerPendingDeletedLsKey: __cgRegisterPendingDeletedLsKey,
+      staffChatDedupeKeyForSync: __cgStaffChatDedupeKey,
       syncLoginFirstAdminPanel,
       effectiveCloudOnlyStorage: function () {
         return __cgEffectiveCloudOnly();
@@ -7647,6 +7732,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
         window.deleteUnitFromCloud = async function(unitId) {
             try {
+                if (window.CG && typeof window.CG.registerPendingDeletedLsKey === "function") {
+                  window.CG.registerPendingDeletedLsKey("wm815_units", unitId);
+                }
                 const raw = window.CG_PERSIST.localGetRaw(__deptUnitsStorageKey());
                 if (!raw) return;
                 const parsed = window.CG_PERSIST.parseJson(raw, []);
@@ -7759,6 +7847,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
         window.deleteFormerResidentFromCloud = async function(residentId) {
             try {
+                if (window.CG && typeof window.CG.registerPendingDeletedLsKey === "function") {
+                  window.CG.registerPendingDeletedLsKey("wm815_former_residents", residentId);
+                }
                 const raw = window.CG_PERSIST.localGetRaw(__deptFormerStorageKey());
                 if (!raw) return;
                 const parsed = window.CG_PERSIST.parseJson(raw, []);
@@ -12326,6 +12417,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         return;
       }
       if (!confirm("¿Eliminar todos los mensajes del chat? Esta acción no se puede deshacer.")) return;
+      var dedupe = G.staffChatDedupeKeyForSync;
+      (G.state.staffChatMessages || []).forEach(function (m) {
+        if (typeof G.registerPendingDeletedLsKey !== "function") return;
+        var k = typeof dedupe === "function" ? dedupe(m) : "";
+        if (k) G.registerPendingDeletedLsKey("staffChatMessages", k);
+      });
       G.state.staffChatMessages = [];
       staffChatLastMsgs = "[]";
       if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffChatMessages");
@@ -14062,6 +14159,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   /** Elimina unidad extendida, residentes, estacionamientos del panel y referencias. */
   A.buildingPurgeUnit = function (id) {
+    var resIds = (G.state.buildingResidents || [])
+      .filter(function (r) { return r && r.unidadId === id && r.id; })
+      .map(function (r) { return r.id; });
+    if (typeof G.registerPendingDeletedLsKey === "function") {
+      G.registerPendingDeletedLsKey("buildingUnits", id);
+      resIds.forEach(function (rid) {
+        G.registerPendingDeletedLsKey("buildingResidents", rid);
+      });
+    }
     G.state.buildingUnits = G.state.buildingUnits.filter(function (u) { return u.id !== id; });
     G.state.buildingResidents = G.state.buildingResidents.filter(function (r) { return r.unidadId !== id; });
     G.state.buildingParking = G.state.buildingParking.map(function (s) {
@@ -14578,6 +14684,30 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       });
     });
 
+    var prevUnits = G.state.buildingUnits || [];
+    var prevResidents = G.state.buildingResidents || [];
+    var prevDepts = G.state.departments || [];
+    var newUnitIds = {};
+    var newResIds = {};
+    unitsOut.forEach(function (u) {
+      if (u && u.id) newUnitIds[u.id] = true;
+    });
+    residentsOut.forEach(function (r) {
+      if (r && r.id) newResIds[r.id] = true;
+    });
+    if (typeof G.registerPendingDeletedLsKey === "function") {
+      prevUnits.forEach(function (u) {
+        if (u && u.id && !newUnitIds[u.id]) G.registerPendingDeletedLsKey("buildingUnits", u.id);
+      });
+      prevResidents.forEach(function (r) {
+        if (r && r.id && !newResIds[r.id]) G.registerPendingDeletedLsKey("buildingResidents", r.id);
+      });
+      prevDepts.forEach(function (d) {
+        if (!d || !d.id || d.isVirtualAdmin || d.id === G.ADMIN_UNIT_ID) return;
+        if (!newUnitIds[d.id]) G.registerPendingDeletedLsKey("departments", d.id);
+      });
+    }
+
     G.state.buildingResidents = residentsOut;
     G.state.buildingUnits = unitsOut;
 
@@ -14608,10 +14738,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     });
     G.state.buildingUnits.forEach(function (un) { syncDepartmentFromBuildingUnit(un); });
 
+    var prevFormer = G.state.buildingFormerResidents || [];
     var rawF = G.persist.localGetRaw(LS_F);
     var formerVin = rawF ? G.persist.parseJson(rawF, []) : [];
     if (!Array.isArray(formerVin)) formerVin = [];
-    G.state.buildingFormerResidents = formerVin.map(function (fr) {
+    var formerOut = formerVin.map(function (fr) {
       return {
         id: fr.id || G.uid(),
         nombre: String(fr.name || "").trim(),
@@ -14620,6 +14751,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         fechaBaja: fr.exitDate || new Date().toISOString()
       };
     });
+    var newFormerIds = {};
+    formerOut.forEach(function (fr) {
+      if (fr && fr.id) newFormerIds[fr.id] = true;
+    });
+    if (typeof G.registerPendingDeletedLsKey === "function") {
+      prevFormer.forEach(function (fr) {
+        if (fr && fr.id && !newFormerIds[fr.id]) G.registerPendingDeletedLsKey("buildingFormerResidents", fr.id);
+      });
+    }
+    G.state.buildingFormerResidents = formerOut;
 
     syncBodegasFromBuilding();
     A.syncParkingSlotsFromBuilding();
@@ -14690,6 +14831,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (!confirm("¿Eliminar este espacio del mapa del edificio? Se quitará de la unidad si estaba asignado.")) return;
     var s = G.state.buildingParking.find(function (x) { return x.id === sid; });
     if (!s) return;
+    if (typeof G.registerPendingDeletedLsKey === "function") {
+      G.registerPendingDeletedLsKey("buildingParking", sid);
+      G.registerPendingDeletedLsKey("parkingSlots", sid);
+    }
     var unid = s.unidadId;
     G.state.buildingParking = G.state.buildingParking.filter(function (x) { return x.id !== sid; });
     G.state.buildingUnits = G.state.buildingUnits.map(function (u) {
@@ -15542,6 +15687,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   A.bodegaDel = function (id) {
     if (!confirm("¿Eliminar bodega? Se quitará también de la ficha de la unidad en Departamentos.")) return;
+    if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("bodegas", id);
     var b = G.state.bodegas.find(function (x) { return x.id === id; });
     var k = b ? G.normalizeBodegaCodeKey(b.code) : "";
     if (k) {
@@ -16869,6 +17015,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     if (!confirm("¿Eliminar este registro de encomienda?")) return;
     var encX = (G.state.encomiendas || []).find(function (x) { return x.id === id; });
+    if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("encomiendas", id);
     G.state.encomiendas = (G.state.encomiendas || []).filter(function (x) { return x.id !== id; });
     if (encX) {
       var dX = G.deptById(encX.deptId);
@@ -17084,6 +17231,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   A.proveedorDel = function (id) {
     if (!confirm("¿Eliminar este proveedor del registro?")) return;
+    if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("proveedores", id);
     var cur = Array.isArray(G.state.proveedores) ? G.state.proveedores : [];
     G.state.proveedores = cur.filter(function (x) { return x.id !== id; });
     if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("proveedores");
@@ -17574,6 +17722,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     if (!confirm("¿Eliminar este registro de visita? No se puede deshacer.")) return;
     var vDel = (G.state.visits || []).find(function (v) { return v.id === id; });
+    if (typeof G.registerPendingDeletedLsKey === "function") {
+      G.registerPendingDeletedLsKey("visits", id);
+      G.registerPendingDeletedLsKey("visitVehAlertLog", id);
+    }
     G.state.visits = (G.state.visits || []).filter(function (v) { return v.id !== id; });
     if (vDel) {
       var dD = G.deptById(vDel.deptId);
@@ -17828,6 +17980,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (!confirm("¿Eliminar reserva?")) return;
     var curRes = Array.isArray(G.state.reservas) ? G.state.reservas : [];
     var rDel = curRes.find(function (r) { return r.id === id; });
+    if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("reservas", id);
     G.state.reservas = curRes.filter(function (r) { return r.id !== id; });
     if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("reservas");
     if (rDel) {
@@ -18120,6 +18273,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     if (!confirm("¿Eliminar este registro de control de horario? No se puede deshacer.")) return;
+    if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("shiftLogs", id);
     var list = (G.state.shiftLogs || []).filter(function (x) { return x.id !== id; });
     if (list.length === (G.state.shiftLogs || []).length) {
       G.toast("Registro no encontrado", "warn");
@@ -18590,6 +18744,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     if (!confirm("¿Eliminar esta entrada del libro?")) return;
+    if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("novedades", id);
     G.state.novedades = (Array.isArray(G.state.novedades) ? G.state.novedades : []).filter(function (n) { return n.id !== id; });
     if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("novedades");
     G.toast("Eliminada");
@@ -19062,6 +19217,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     if (!confirm("¿Eliminar usuario?")) return;
+    if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("users", id);
     G.state.users = (Array.isArray(G.state.users) ? G.state.users : []).filter(function (x) { return x.id !== id; });
     if (typeof G.armLsKeyPullQuiet === "function") G.armLsKeyPullQuiet("users", 35000);
     var delRes = null;
