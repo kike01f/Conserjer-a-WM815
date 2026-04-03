@@ -3178,8 +3178,10 @@
      * Estado interno del sync (servidor remoto ↔ memoria / LS según modo). No mezclar con UI.
      * Estrategia: last-write-wins en documentos ls/{key}; merge explícito solo en shiftLogs (tramos abiertos locales).
      */
+    /** Metadato local: ids borrados aún no confirmados en Firestore; no se sube como doc `ls`. */
+    var __CG_LS_KEY_PENDING_DELETED = "__cgPendingDeleted";
     var CG_SYNC_STATE = {
-      pullSkipKeys: { session: true },
+      pullSkipKeys: { session: true, __cgPendingDeleted: true },
       /** Tras subir users/roleModules: ignorar pulls remotos de esa clave hasta este timestamp (evita que el polling pise altas recientes). */
       lsPullQuietUntil: {},
       /** Anti-rafaga: último cloudPullAllOnce al volver a la pestaña (visibility). */
@@ -3210,6 +3212,58 @@
       /** Por clave LS: ids borrados aquí pero aún no reflejados en el remoto; se ignoran en el merge para que no vuelvan al instante. */
       pendingDeletedIdsByKey: {}
     };
+
+    function __cgReadRawPendingDeletedStorage() {
+      var k = LS + __CG_LS_KEY_PENDING_DELETED;
+      try {
+        if (typeof localStorage !== "undefined" && localStorage != null) {
+          var direct = localStorage.getItem(k);
+          if (direct != null && direct !== "") return direct;
+        }
+      } catch (e0) {}
+      try {
+        return P.localGetRaw(k);
+      } catch (e1) {
+        return null;
+      }
+    }
+
+    function __cgPersistPendingDeletedToStorage() {
+      try {
+        var s = JSON.stringify(CG_SYNC_STATE.pendingDeletedIdsByKey || {});
+        P.localSetRaw(LS + __CG_LS_KEY_PENDING_DELETED, s);
+      } catch (eP) {}
+    }
+
+    function __cgLoadPendingDeletedFromStorage() {
+      try {
+        var raw = __cgReadRawPendingDeletedStorage();
+        if (raw == null || raw === "") return;
+        var o = JSON.parse(raw);
+        if (!o || typeof o !== "object" || Array.isArray(o)) return;
+        var out = {};
+        var lsKey;
+        for (lsKey in o) {
+          if (!Object.prototype.hasOwnProperty.call(o, lsKey)) continue;
+          var bucket = o[lsKey];
+          if (!bucket || typeof bucket !== "object" || Array.isArray(bucket)) continue;
+          var nb = {};
+          var idk;
+          for (idk in bucket) {
+            if (Object.prototype.hasOwnProperty.call(bucket, idk) && bucket[idk]) nb[String(idk)] = true;
+          }
+          if (Object.keys(nb).length) out[lsKey] = nb;
+        }
+        CG_SYNC_STATE.pendingDeletedIdsByKey = out;
+      } catch (eL) {}
+    }
+
+    function __cgHasPendingDeletedFor(lsKey) {
+      var p = CG_SYNC_STATE.pendingDeletedIdsByKey && CG_SYNC_STATE.pendingDeletedIdsByKey[lsKey];
+      return !!(p && typeof p === "object" && Object.keys(p).length > 0);
+    }
+
+    __cgLoadPendingDeletedFromStorage();
 
     function __cgSyncLog(level, code, detail) {
       var verbose = typeof window.CG_SYNC_VERBOSE === "boolean" && window.CG_SYNC_VERBOSE;
@@ -3775,11 +3829,13 @@
       if (!lsKey || itemId == null || String(itemId) === "") return;
       CG_SYNC_STATE.pendingDeletedIdsByKey[lsKey] = CG_SYNC_STATE.pendingDeletedIdsByKey[lsKey] || {};
       CG_SYNC_STATE.pendingDeletedIdsByKey[lsKey][String(itemId)] = true;
+      __cgPersistPendingDeletedToStorage();
     }
 
     function __cgClearPendingDeletedLsKey(lsKey) {
       if (!lsKey || !CG_SYNC_STATE.pendingDeletedIdsByKey) return;
       delete CG_SYNC_STATE.pendingDeletedIdsByKey[lsKey];
+      __cgPersistPendingDeletedToStorage();
     }
 
     function __cgArrayFilterPendingDeleted(lsKey, arr) {
@@ -3851,8 +3907,8 @@
         cur = __cgArrayFilterPendingDeleted(lsKeyOpt, cur);
       }
       if (!Array.isArray(cur) || !Array.isArray(inc)) return typeof incRaw === "string" ? incRaw : "[]";
-      if (inc.length === 0) return cur.length ? curRaw : incRaw;
-      if (cur.length === 0) return incRaw;
+      if (inc.length === 0) return cur.length ? JSON.stringify(cur) : typeof incRaw === "string" ? incRaw : "[]";
+      if (cur.length === 0) return JSON.stringify(inc);
       var byId = Object.create(null);
       var i;
       var u;
@@ -3913,9 +3969,10 @@
       } catch (e2) {
         return curRaw;
       }
+      cur = __cgArrayFilterPendingDeleted("users", cur);
       inc = __cgArrayFilterPendingDeleted("users", inc);
       if (!Array.isArray(cur) || !Array.isArray(inc)) return typeof incRaw === "string" ? incRaw : "[]";
-      if (inc.length === 0) return cur.length ? curRaw : incRaw;
+      if (inc.length === 0) return cur.length ? JSON.stringify(cur) : typeof incRaw === "string" ? incRaw : "[]";
       var byId = Object.create(null);
       var i;
       var u;
@@ -4051,7 +4108,7 @@
           nextVal = __cgMergeVisitVehAlertLogPull(cur, d.value);
           mergedUp = true;
         } else if (d.key === "users") {
-          if (dirty) {
+          if (dirty || __cgHasPendingDeletedFor("users")) {
             nextVal = __cgMergeUsersPull(cur, d.value);
             mergedUp = true;
           } else {
@@ -4076,7 +4133,7 @@
             usedReplaceFromRemote = true;
           }
         } else if (__CG_LS_MERGE_ARRAY_BY_ID[d.key]) {
-          if (dirty) {
+          if (dirty || __cgHasPendingDeletedFor(d.key)) {
             nextVal = __cgMergeRemoteLsArrayById(cur, d.value, d.key);
             mergedUp = true;
           } else {
@@ -4304,7 +4361,7 @@
         var ops = [];
         P.eachLocalKeyWithPrefix(LS, function (fk) {
           var sk = fk.slice(LS.length);
-          if (sk === "session") return;
+          if (sk === "session" || sk === __CG_LS_KEY_PENDING_DELETED) return;
           var raw = P.localGetRaw(fk);
           if (raw === null) return;
           ops.push({ sk: sk, raw: raw });
