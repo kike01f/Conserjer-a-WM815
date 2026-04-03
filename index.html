@@ -883,55 +883,96 @@
       .cg-skip-link { transition: none; }
     }
 
-    /* Chat interno flotante (todos los módulos) */
+    /* Chat interno flotante (todos los módulos) — posición por defecto esquina; arrastrable */
     .cg-staff-chat-root {
       position: fixed;
       right: max(1rem, env(safe-area-inset-right, 0px));
       bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+      left: auto;
+      top: auto;
       z-index: 950;
       display: flex;
       flex-direction: column;
       align-items: flex-end;
       gap: 0.65rem;
       pointer-events: none;
+      touch-action: none;
+    }
+    .cg-staff-chat-root.cg-staff-chat-root--custom {
+      right: auto !important;
+      bottom: auto !important;
+    }
+    .cg-staff-chat-root.cg-staff-chat-root--panel-up {
+      flex-direction: column-reverse;
     }
     .cg-staff-chat-root > * {
       pointer-events: auto;
+      touch-action: auto;
     }
     .cg-chat-fab {
       position: relative;
-      width: 4.35rem;
-      height: 4.35rem;
-      border-radius: 50%;
-      border: 3px solid rgba(255, 255, 255, 0.95);
-      cursor: pointer;
-      background: linear-gradient(155deg, #8fd03a 0%, #74bd20 45%, #1e3a0f 100%);
+      width: 3.65rem;
+      height: 3.65rem;
+      border-radius: 1.05rem;
+      border: 2px solid rgba(255, 255, 255, 0.45);
+      cursor: grab;
+      background: linear-gradient(152deg, #d9f99d 0%, #84cc16 38%, #4d7c0f 72%, #1a2e05 100%);
       color: #fff;
       box-shadow:
-        0 0 0 1px rgba(15, 23, 42, 0.12),
-        0 6px 0 rgba(15, 23, 42, 0.08),
-        0 10px 28px rgba(95, 154, 24, 0.5),
-        0 4px 14px rgba(15, 23, 42, 0.35);
+        0 0 0 1px rgba(15, 23, 42, 0.1),
+        0 4px 0 rgba(21, 61, 12, 0.22),
+        0 12px 28px rgba(63, 98, 18, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.45);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.85rem;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      font-size: 1.45rem;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-radius 0.18s ease;
+    }
+    .cg-chat-fab:active {
+      cursor: grabbing;
+    }
+    .cg-staff-chat-root .cg-chat-fab.cg-chat-fab--dragging {
+      cursor: grabbing;
+      transform: scale(1.04);
+      border-radius: 1.2rem;
+      box-shadow:
+        0 0 0 2px rgba(116, 189, 32, 0.55),
+        0 16px 40px rgba(15, 23, 42, 0.35);
+      transition: none;
+    }
+    .cg-chat-fab::before {
+      content: "";
+      position: absolute;
+      inset: 4px;
+      border-radius: 0.72rem;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      pointer-events: none;
     }
     .cg-chat-fab i {
-      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+      position: relative;
+      z-index: 1;
+      filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
     }
     .cg-chat-fab:hover {
-      transform: scale(1.06);
+      transform: translateY(-2px) scale(1.03);
       box-shadow:
-        0 0 0 1px rgba(15, 23, 42, 0.1),
-        0 8px 0 rgba(15, 23, 42, 0.06),
-        0 14px 36px rgba(95, 154, 24, 0.55),
-        0 6px 18px rgba(15, 23, 42, 0.38);
+        0 0 0 1px rgba(15, 23, 42, 0.08),
+        0 6px 0 rgba(21, 61, 12, 0.18),
+        0 16px 36px rgba(63, 98, 18, 0.48),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5);
     }
     .cg-chat-fab:focus-visible {
       outline: 3px solid #fbbf24;
       outline-offset: 4px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cg-chat-fab {
+        transition: none;
+      }
+      .cg-chat-fab:hover {
+        transform: none;
+      }
     }
     .cg-chat-badge {
       position: absolute;
@@ -2566,6 +2607,66 @@
     }
     .cg-vis-type-opt-inner strong { display: block; font-size: 0.92rem; color: var(--blue-900); }
     .cg-vis-type-opt-inner small { display: block; font-size: 0.72rem; color: var(--gray-600); margin-top: 0.2rem; line-height: 1.3; }
+    /* Registro de visitas: formulario más compacto */
+    #f-visit.cg-visit-form {
+      padding: 0.5rem 0.6rem !important;
+      gap: 0;
+    }
+    .cg-page-compact .card.cg-card-accent--visit:has(#f-visit) .card-b {
+      padding: 0.55rem 0.72rem;
+    }
+    #f-visit .cg-form-block {
+      margin-bottom: 0.4rem;
+      padding-bottom: 0.35rem;
+    }
+    #f-visit .cg-form-block:last-of-type {
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+    #f-visit .cg-form-block-title {
+      margin: 0 0 0.3rem;
+      font-size: calc(0.65rem * 0.93);
+    }
+    #f-visit .form-group {
+      margin-bottom: 0.4rem;
+    }
+    #f-visit .form-group:last-child {
+      margin-bottom: 0;
+    }
+    #f-visit .form-group label {
+      margin-bottom: 0.2rem;
+      font-size: calc(0.75rem * 0.93);
+    }
+    #f-visit .form-group input,
+    #f-visit .form-group select,
+    #f-visit .form-group textarea {
+      padding: 0.45rem 0.58rem;
+      font-size: calc(0.92rem * 0.93);
+      line-height: 1.32;
+    }
+    #f-visit .cg-form-grid-2 {
+      gap: 0.32rem 0.5rem;
+    }
+    #f-visit .cg-vis-type-pick {
+      gap: 0.38rem;
+      margin-top: 0.05rem;
+    }
+    #f-visit .cg-vis-type-opt-inner {
+      padding: 0.42rem 0.55rem;
+    }
+    #f-visit .cg-vis-type-opt-inner small {
+      margin-top: 0.1rem;
+      line-height: 1.25;
+    }
+    #f-visit > .btn.btn-primary {
+      margin-top: 0.3rem;
+    }
+    #f-visit .page-desc {
+      margin-top: 0.2rem !important;
+    }
+    #f-visit #veh-extra .page-desc {
+      margin-top: 0.15rem !important;
+    }
     .cg-vis-open-card {
       border: 1px solid var(--gray-200);
       border-radius: 10px;
@@ -3503,8 +3604,8 @@
       <main class="content" id="main-content" tabindex="-1"></main>
     </div>
     <div id="cg-staff-chat-root" class="cg-staff-chat-root hidden" aria-hidden="true">
-      <button type="button" id="cg-chat-toggle" class="cg-chat-fab" aria-expanded="false" aria-controls="cg-chat-panel" title="Canal con administración (tiempo real)" aria-label="Abrir o cerrar canal con administración">
-        <i class="fa-solid fa-comments" aria-hidden="true"></i>
+      <button type="button" id="cg-chat-toggle" class="cg-chat-fab" aria-expanded="false" aria-controls="cg-chat-panel" title="Canal con administración — clic para abrir; arrastre para mover el botón" aria-label="Abrir o cerrar canal con administración">
+        <i class="fa-solid fa-headset" aria-hidden="true"></i>
         <span id="cg-chat-badge" class="cg-chat-badge hidden" aria-live="polite">0</span>
       </button>
       <div id="cg-chat-panel" class="cg-chat-panel hidden" role="dialog" aria-modal="false" aria-label="Canal con administración">
@@ -12555,6 +12656,144 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       staffChatRenderThread();
       staffChatUpdateBadge();
     }
+    function staffChatFabClampApply(root, left, top) {
+      if (!root) return { left: 0, top: 0 };
+      var pad = 8;
+      var rw = root.offsetWidth || 72;
+      var rh = root.offsetHeight || 72;
+      var vw = window.innerWidth;
+      var vh = window.innerHeight;
+      var maxL = Math.max(pad, vw - rw - pad);
+      var maxT = Math.max(pad, vh - rh - pad);
+      var l = Math.min(maxL, Math.max(pad, left));
+      var t = Math.min(maxT, Math.max(pad, top));
+      root.classList.add("cg-staff-chat-root--custom");
+      root.style.left = Math.round(l) + "px";
+      root.style.top = Math.round(t) + "px";
+      root.style.right = "auto";
+      root.style.bottom = "auto";
+      return { left: l, top: t };
+    }
+    function staffChatFabPosStorageKey() {
+      return (G.LS || "") + "staffChatFabPos";
+    }
+    function staffChatFabReadSavedPosition() {
+      try {
+        var raw = localStorage.getItem(staffChatFabPosStorageKey());
+        if (!raw) return null;
+        var pos = JSON.parse(raw);
+        if (!pos || typeof pos.left !== "number" || typeof pos.top !== "number") return null;
+        return pos;
+      } catch (eR) {
+        return null;
+      }
+    }
+    function staffChatFabWriteSavedPosition(obj) {
+      try {
+        localStorage.setItem(staffChatFabPosStorageKey(), JSON.stringify(obj));
+      } catch (eW) {}
+    }
+    function staffChatFabRestoreSavedPosition() {
+      var root = document.getElementById("cg-staff-chat-root");
+      if (!root) return;
+      var pos = staffChatFabReadSavedPosition();
+      if (!pos) {
+        root.classList.remove("cg-staff-chat-root--custom");
+        root.style.left = "";
+        root.style.top = "";
+        root.style.right = "";
+        root.style.bottom = "";
+        return;
+      }
+      staffChatFabClampApply(root, pos.left, pos.top);
+    }
+    function staffChatFabUpdatePanelPlacement() {
+      var root = document.getElementById("cg-staff-chat-root");
+      var panel = document.getElementById("cg-chat-panel");
+      if (!root || !panel) return;
+      if (panel.classList.contains("hidden")) {
+        root.classList.remove("cg-staff-chat-root--panel-up");
+        return;
+      }
+      var estPanelH = Math.min(520, window.innerHeight * 0.72);
+      var r = root.getBoundingClientRect();
+      var spaceBelow = window.innerHeight - r.bottom - 10;
+      var spaceAbove = r.top - 10;
+      if (spaceBelow < estPanelH && spaceAbove > spaceBelow) {
+        root.classList.add("cg-staff-chat-root--panel-up");
+      } else {
+        root.classList.remove("cg-staff-chat-root--panel-up");
+      }
+    }
+    function staffChatFabBindDrag() {
+      if (window.__cgStaffChatFabDragBound) return;
+      var toggle = document.getElementById("cg-chat-toggle");
+      var root = document.getElementById("cg-staff-chat-root");
+      if (!toggle || !root) return;
+      window.__cgStaffChatFabDragBound = true;
+      var state = null;
+      var THRESH = 9;
+      function onDown(e) {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        state = {
+          pid: e.pointerId,
+          sx: e.clientX,
+          sy: e.clientY,
+          origL: root.getBoundingClientRect().left,
+          origT: root.getBoundingClientRect().top,
+          dragged: false
+        };
+        try {
+          toggle.setPointerCapture(e.pointerId);
+        } catch (ex) {}
+      }
+      function onMove(e) {
+        if (!state || e.pointerId !== state.pid) return;
+        var dx = e.clientX - state.sx;
+        var dy = e.clientY - state.sy;
+        if (!state.dragged && (Math.abs(dx) > THRESH || Math.abs(dy) > THRESH)) {
+          state.dragged = true;
+          toggle.classList.add("cg-chat-fab--dragging");
+        }
+        if (state.dragged) {
+          e.preventDefault();
+          staffChatFabClampApply(root, state.origL + dx, state.origT + dy);
+        }
+      }
+      function onUp(e) {
+        if (!state || e.pointerId !== state.pid) return;
+        if (state.dragged) {
+          window.__cgStaffChatFabSkipToggleClick = true;
+          var fin = staffChatFabClampApply(
+            root,
+            state.origL + (e.clientX - state.sx),
+            state.origT + (e.clientY - state.sy)
+          );
+          staffChatFabWriteSavedPosition(fin);
+          staffChatFabUpdatePanelPlacement();
+        }
+        try {
+          toggle.releasePointerCapture(e.pointerId);
+        } catch (ex2) {}
+        toggle.classList.remove("cg-chat-fab--dragging");
+        state = null;
+      }
+      toggle.addEventListener("pointerdown", onDown);
+      toggle.addEventListener("pointermove", onMove, { passive: false });
+      toggle.addEventListener("pointerup", onUp);
+      toggle.addEventListener("pointercancel", onUp);
+      var resizeT = null;
+      window.addEventListener("resize", function () {
+        if (!root.classList.contains("cg-staff-chat-root--custom")) return;
+        window.clearTimeout(resizeT);
+        resizeT = window.setTimeout(function () {
+          var b = root.getBoundingClientRect();
+          var o = staffChatFabClampApply(root, b.left, b.top);
+          staffChatFabWriteSavedPosition(o);
+          staffChatFabUpdatePanelPlacement();
+        }, 100);
+      });
+    }
     function staffChatBind() {
       if (staffChatBound) return;
       var toggle = document.getElementById("cg-chat-toggle");
@@ -12571,6 +12810,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         });
       }
       toggle.addEventListener("click", function () {
+        if (window.__cgStaffChatFabSkipToggleClick) {
+          window.__cgStaffChatFabSkipToggleClick = false;
+          return;
+        }
         var open = panel.classList.contains("hidden");
         if (open) {
           panel.classList.remove("hidden");
@@ -12582,6 +12825,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             staffChatMarkRead();
             staffChatRenderThread();
             staffChatUpdateBadge();
+            staffChatFabUpdatePanelPlacement();
             if (input) setTimeout(function () { input.focus(); }, 80);
           };
           if (typeof G.cloudPullSingleLsKey === "function") {
@@ -12596,6 +12840,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           panel.classList.add("hidden");
           toggle.setAttribute("aria-expanded", "false");
           staffChatSetEmojiPopover(false);
+          staffChatFabUpdatePanelPlacement();
           staffChatUpdateBadge();
         }
       });
@@ -12604,6 +12849,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           panel.classList.add("hidden");
           toggle.setAttribute("aria-expanded", "false");
           staffChatSetEmojiPopover(false);
+          staffChatFabUpdatePanelPlacement();
           staffChatUpdateBadge();
         });
       }
@@ -12675,6 +12921,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (e.key !== G.LS + "staffChatMessages") return;
         staffChatRefreshFromStore();
       });
+      staffChatFabBindDrag();
     }
     function staffChatStartPoll() {
       if (staffChatPollId) return;
@@ -12723,6 +12970,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         staffChatSyncPanelSub();
         staffChatRefreshFromStore();
         staffChatSyncClearButton();
+        staffChatFabRestoreSavedPosition();
+        staffChatFabUpdatePanelPlacement();
       } else {
         root.classList.add("hidden");
         root.setAttribute("aria-hidden", "true");
@@ -13596,8 +13845,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var nProv = (G.state.proveedores || []).length;
       var provHint =
         nProv > 0
-          ? "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;font-size:0.78rem\">Proveedores: elija la empresa registrada o cargue una nueva en el módulo <strong>Proveedores</strong>.</p>"
-          : "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;font-size:0.78rem\">Aún no hay empresas registradas. " +
+          ? "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.76rem;line-height:1.35\">Proveedores: elija la empresa registrada o cargue una nueva en el módulo <strong>Proveedores</strong>.</p>"
+          : "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.76rem;line-height:1.35\">Aún no hay empresas registradas. " +
             "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"proveedores\"><i class=\"fa-solid fa-truck\"></i> Ir a Proveedores</button></p>";
       return (
         "<div class=\"cg-page-compact\">" +
@@ -13612,7 +13861,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"cg-form-block\">" +
         "<p class=\"cg-form-block-title\">Tipo de ingreso</p>" +
         "<div class=\"form-group\">" +
-        "<span class=\"page-desc\" style=\"display:block;margin-bottom:0.35rem\">¿Quién ingresa?</span>" +
+        "<span class=\"page-desc\" style=\"display:block;margin-bottom:0.2rem;font-size:0.8rem\">¿Quién ingresa?</span>" +
         "<div class=\"cg-vis-type-pick\" role=\"radiogroup\" aria-label=\"Tipo de ingreso\">" +
         "<label class=\"cg-vis-type-opt\">" +
         "<input type=\"radio\" name=\"visitIngreso\" value=\"persona\" checked id=\"v-ing-persona\" />" +
@@ -13641,8 +13890,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<label for=\"f-visit-dept\">Unidad destino</label>" +
         "<select name=\"deptId\" id=\"f-visit-dept\" required><option value=\"\">—</option></select>" +
         "</div></div>" +
-        "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;font-size:0.78rem\">Escriba el número para acotar la lista. Las unidades se muestran en orden creciente (1, 2, 10…).</p></div>" +
-        "<div class=\"form-group\" id=\"vis-row-visit-depto-prov\" style=\"display:none\"><label>Unidad destino (proveedores)</label><p class=\"page-desc\" style=\"margin:0;font-size:0.82rem\">Asignación fija a la unidad <strong>Admin</strong> (conserjería / administración).</p></div></div>" +
+        "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.75rem;line-height:1.35\">Escriba el número para acotar la lista. Las unidades se muestran en orden creciente (1, 2, 10…).</p></div>" +
+        "<div class=\"form-group\" id=\"vis-row-visit-depto-prov\" style=\"display:none\"><label>Unidad destino (proveedores)</label><p class=\"page-desc\" style=\"margin:0;font-size:0.78rem;line-height:1.35\">Asignación fija a la unidad <strong>Admin</strong> (conserjería / administración).</p></div></div>" +
         "<div class=\"cg-form-block\">" +
         "<p class=\"cg-form-block-title\">Ingreso</p>" +
         "<div class=\"form-group\"><label>Fecha y hora</label><input name=\"at\" type=\"datetime-local\" required /></div></div>" +
@@ -13655,7 +13904,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"form-group\"><label>Estacionamiento (visita)</label>" +
         "<input type=\"text\" name=\"visitorParkingCode\" list=\"visitor-parking-suggest\" placeholder=\"Ej: V-2, visitas 5…\" autocomplete=\"off\" /></div></div>" +
         "<datalist id=\"visitor-parking-suggest\">" + vpDatalist + "</datalist>" +
-        "<p class=\"page-desc\" style=\"margin:0.25rem 0 0;font-size:0.78rem\">Texto libre; si configuró sugerencias en Administración, aparecerán al escribir.</p></div></div>" +
+        "<p class=\"page-desc\" style=\"margin:0.15rem 0 0;font-size:0.75rem;line-height:1.35\">Texto libre; si configuró sugerencias en Administración, aparecerán al escribir.</p></div></div>" +
         "<button type=\"submit\" class=\"btn btn-primary\"><i class=\"fa-solid fa-right-to-bracket\"></i> Registrar ingreso</button></form></div></div>" +
         "<div class=\"card cg-card-accent--visit\"><div class=\"card-h\"><h3>Historial</h3>" +
         "<div class=\"toolbar\" style=\"flex:1;justify-content:flex-end;flex-wrap:wrap\">" +
