@@ -4028,6 +4028,32 @@
       });
     }
 
+    /**
+     * Firestore: sin semilla local, el primer admin solo guardaba `users` y `roleModules` quedaba vacío
+     * → canSeeModule ocultaba todo el menú. Si ya hay usuarios pero faltan permisos o departamento base,
+     * aplica el mismo núcleo que defaultState() (sin borrar datos existentes).
+     */
+    function ensureCloudInstallBaseline() {
+      if (!__cgFsCoreActive()) return;
+      var users = load("users", []);
+      if (!Array.isArray(users) || users.length === 0) return;
+      var rm = load("roleModules", { admin: [], conserje: [] });
+      var adminEmpty = !Array.isArray(rm.admin) || rm.admin.length === 0;
+      var conEmpty = !Array.isArray(rm.conserje) || rm.conserje.length === 0;
+      if (adminEmpty && conEmpty) {
+        save("roleModules", defaultState().roleModules);
+      }
+      var deps = load("departments", []);
+      if (!Array.isArray(deps) || deps.length === 0) {
+        var d = defaultState();
+        save("departments", d.departments);
+        save("buildingUnits", d.buildingUnits);
+        save("buildingResidents", d.buildingResidents);
+        save("buildingFormerResidents", d.buildingFormerResidents);
+        save("buildingParking", d.buildingParking);
+      }
+    }
+
     var __cgLoginUsersCloudCheckInFlight = false;
     var __cgLoginUsersCloudCheckAttempted = false;
     /**
@@ -5274,7 +5300,7 @@
     /* ┌─ 11. API pública (único objeto global del core) ─────────────────────────────── */
     window.CG = {
       APP_BRAND_NAME, MANUFACTURER_LOGO_URL,
-      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateProveedoresModule, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
+      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureCloudInstallBaseline, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateProveedoresModule, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
       attachVirtualAdminDepartment,
       authEnsureReady, authValidateDeptGateNewPassword, authVerifyLoginPassword, authCreatePasswordVerifier, authDeptGateExists, authVerifyDeptGate, authSetDeptGateFromPasswords, authSetDeptGateInitial,
       shiftLogTramoIsOpen,
@@ -11893,6 +11919,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         G.toast("Sesión no válida o usuario inexistente. Inicie sesión de nuevo.", "warn");
         return;
       }
+      if (typeof G.ensureCloudInstallBaseline === "function") {
+        try {
+          G.ensureCloudInstallBaseline();
+        } catch (eBl) {
+          console.warn("[CG] ensureCloudInstallBaseline:", eBl);
+        }
+      }
       renderTopUser();
       navigate(currentView, true);
       staffChatSetDockVisible(true);
@@ -12012,6 +12045,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       destroyDashboardCharts();
       currentView = view;
       var main = document.getElementById("main-content");
+      if (!main) {
+        console.warn("[CG_UI] navigate: falta #main-content");
+        return;
+      }
       main.innerHTML = cgMainContentHtmlForView(view);
       bindPageEvents(view);
       runVisitAlerts();
