@@ -20087,17 +20087,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           .then(function (r) {
             if (r && r.reason === "superseded") return;
             if (r && r.ok && r.partial) {
-              if (r.partialPullFailed) {
-                G.toast(
-                  "Sincronización parcial tras restaurar sesión: no se pudieron descargar todos los cambios de otros equipos. Revise red/permisos y reintente.",
-                  "warn"
-                );
-              } else if (r.partialPushFailed) {
+              if (r.partialPushFailed) {
                 G.toast(
                   "Sesión restaurada con descarga remota correcta. Algunos cambios locales pendientes no se pudieron subir todavía; se reintentará automáticamente.",
                   "warn"
                 );
-              } else {
+              } else if (!r.partialPullFailed) {
                 G.toast(
                   "Sincronización parcial tras restaurar sesión por una incidencia temporal. Se mantendrán reintentos automáticos.",
                   "warn"
