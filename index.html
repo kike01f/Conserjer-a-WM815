@@ -883,7 +883,7 @@
       .cg-skip-link { transition: none; }
     }
 
-    /* Chat interno flotante (todos los módulos) — posición por defecto esquina; arrastrable */
+    /* Chat interno flotante — esquina fija; botón tipo cristal translúcido */
     .cg-staff-chat-root {
       position: fixed;
       right: max(1rem, env(safe-area-inset-right, 0px));
@@ -896,71 +896,53 @@
       align-items: flex-end;
       gap: 0.65rem;
       pointer-events: none;
-      touch-action: none;
-    }
-    .cg-staff-chat-root.cg-staff-chat-root--custom {
-      right: auto !important;
-      bottom: auto !important;
     }
     .cg-staff-chat-root.cg-staff-chat-root--panel-up {
       flex-direction: column-reverse;
     }
     .cg-staff-chat-root > * {
       pointer-events: auto;
-      touch-action: auto;
     }
     .cg-chat-fab {
       position: relative;
-      width: 3.65rem;
-      height: 3.65rem;
-      border-radius: 1.05rem;
-      border: 2px solid rgba(255, 255, 255, 0.45);
-      cursor: grab;
-      background: linear-gradient(152deg, #d9f99d 0%, #84cc16 38%, #4d7c0f 72%, #1a2e05 100%);
-      color: #fff;
+      width: 3.55rem;
+      height: 3.55rem;
+      border-radius: 1rem;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      background: rgba(22, 48, 12, 0.38);
+      backdrop-filter: blur(14px) saturate(1.25);
+      -webkit-backdrop-filter: blur(14px) saturate(1.25);
+      color: #ecfccb;
       box-shadow:
-        0 0 0 1px rgba(15, 23, 42, 0.1),
-        0 4px 0 rgba(21, 61, 12, 0.22),
-        0 12px 28px rgba(63, 98, 18, 0.42),
-        inset 0 1px 0 rgba(255, 255, 255, 0.45);
+        0 4px 22px rgba(15, 23, 42, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.45rem;
-      transition: transform 0.18s ease, box-shadow 0.18s ease, border-radius 0.18s ease;
+      font-size: 1.38rem;
+      transition: background 0.2s ease, transform 0.18s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     }
-    .cg-chat-fab:active {
-      cursor: grabbing;
-    }
-    .cg-staff-chat-root .cg-chat-fab.cg-chat-fab--dragging {
-      cursor: grabbing;
-      transform: scale(1.04);
-      border-radius: 1.2rem;
-      box-shadow:
-        0 0 0 2px rgba(116, 189, 32, 0.55),
-        0 16px 40px rgba(15, 23, 42, 0.35);
-      transition: none;
-    }
-    .cg-chat-fab::before {
-      content: "";
-      position: absolute;
-      inset: 4px;
-      border-radius: 0.72rem;
-      border: 1px solid rgba(255, 255, 255, 0.22);
-      pointer-events: none;
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+      .cg-chat-fab {
+        background: rgba(47, 80, 22, 0.9);
+      }
     }
     .cg-chat-fab i {
       position: relative;
       z-index: 1;
-      filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
     }
     .cg-chat-fab:hover {
-      transform: translateY(-2px) scale(1.03);
+      background: rgba(34, 70, 18, 0.52);
+      border-color: rgba(255, 255, 255, 0.62);
+      transform: translateY(-2px);
       box-shadow:
-        0 0 0 1px rgba(15, 23, 42, 0.08),
-        0 6px 0 rgba(21, 61, 12, 0.18),
-        0 16px 36px rgba(63, 98, 18, 0.48),
-        inset 0 1px 0 rgba(255, 255, 255, 0.5);
+        0 10px 32px rgba(15, 23, 42, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.48);
+    }
+    .cg-chat-fab:active {
+      transform: translateY(0);
     }
     .cg-chat-fab:focus-visible {
       outline: 3px solid #fbbf24;
@@ -970,7 +952,8 @@
       .cg-chat-fab {
         transition: none;
       }
-      .cg-chat-fab:hover {
+      .cg-chat-fab:hover,
+      .cg-chat-fab:active {
         transform: none;
       }
     }
@@ -3604,7 +3587,7 @@
       <main class="content" id="main-content" tabindex="-1"></main>
     </div>
     <div id="cg-staff-chat-root" class="cg-staff-chat-root hidden" aria-hidden="true">
-      <button type="button" id="cg-chat-toggle" class="cg-chat-fab" aria-expanded="false" aria-controls="cg-chat-panel" title="Canal con administración — clic para abrir; arrastre para mover el botón" aria-label="Abrir o cerrar canal con administración">
+      <button type="button" id="cg-chat-toggle" class="cg-chat-fab" aria-expanded="false" aria-controls="cg-chat-panel" title="Canal con administración (tiempo real)" aria-label="Abrir o cerrar canal con administración">
         <i class="fa-solid fa-headset" aria-hidden="true"></i>
         <span id="cg-chat-badge" class="cg-chat-badge hidden" aria-live="polite">0</span>
       </button>
@@ -12656,56 +12639,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       staffChatRenderThread();
       staffChatUpdateBadge();
     }
-    function staffChatFabClampApply(root, left, top) {
-      if (!root) return { left: 0, top: 0 };
-      var pad = 8;
-      var rw = root.offsetWidth || 72;
-      var rh = root.offsetHeight || 72;
-      var vw = window.innerWidth;
-      var vh = window.innerHeight;
-      var maxL = Math.max(pad, vw - rw - pad);
-      var maxT = Math.max(pad, vh - rh - pad);
-      var l = Math.min(maxL, Math.max(pad, left));
-      var t = Math.min(maxT, Math.max(pad, top));
-      root.classList.add("cg-staff-chat-root--custom");
-      root.style.left = Math.round(l) + "px";
-      root.style.top = Math.round(t) + "px";
-      root.style.right = "auto";
-      root.style.bottom = "auto";
-      return { left: l, top: t };
-    }
-    function staffChatFabPosStorageKey() {
-      return (G.LS || "") + "staffChatFabPos";
-    }
-    function staffChatFabReadSavedPosition() {
-      try {
-        var raw = localStorage.getItem(staffChatFabPosStorageKey());
-        if (!raw) return null;
-        var pos = JSON.parse(raw);
-        if (!pos || typeof pos.left !== "number" || typeof pos.top !== "number") return null;
-        return pos;
-      } catch (eR) {
-        return null;
-      }
-    }
-    function staffChatFabWriteSavedPosition(obj) {
-      try {
-        localStorage.setItem(staffChatFabPosStorageKey(), JSON.stringify(obj));
-      } catch (eW) {}
-    }
-    function staffChatFabRestoreSavedPosition() {
+    function staffChatFabResetDockPosition() {
       var root = document.getElementById("cg-staff-chat-root");
       if (!root) return;
-      var pos = staffChatFabReadSavedPosition();
-      if (!pos) {
-        root.classList.remove("cg-staff-chat-root--custom");
-        root.style.left = "";
-        root.style.top = "";
-        root.style.right = "";
-        root.style.bottom = "";
-        return;
-      }
-      staffChatFabClampApply(root, pos.left, pos.top);
+      root.classList.remove("cg-staff-chat-root--custom");
+      root.style.left = "";
+      root.style.top = "";
+      root.style.right = "";
+      root.style.bottom = "";
+      try {
+        localStorage.removeItem((G.LS || "") + "staffChatFabPos");
+      } catch (eRm) {}
     }
     function staffChatFabUpdatePanelPlacement() {
       var root = document.getElementById("cg-staff-chat-root");
@@ -12725,75 +12669,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         root.classList.remove("cg-staff-chat-root--panel-up");
       }
     }
-    function staffChatFabBindDrag() {
-      if (window.__cgStaffChatFabDragBound) return;
-      var toggle = document.getElementById("cg-chat-toggle");
-      var root = document.getElementById("cg-staff-chat-root");
-      if (!toggle || !root) return;
-      window.__cgStaffChatFabDragBound = true;
-      var state = null;
-      var THRESH = 9;
-      function onDown(e) {
-        if (e.pointerType === "mouse" && e.button !== 0) return;
-        state = {
-          pid: e.pointerId,
-          sx: e.clientX,
-          sy: e.clientY,
-          origL: root.getBoundingClientRect().left,
-          origT: root.getBoundingClientRect().top,
-          dragged: false
-        };
-        try {
-          toggle.setPointerCapture(e.pointerId);
-        } catch (ex) {}
-      }
-      function onMove(e) {
-        if (!state || e.pointerId !== state.pid) return;
-        var dx = e.clientX - state.sx;
-        var dy = e.clientY - state.sy;
-        if (!state.dragged && (Math.abs(dx) > THRESH || Math.abs(dy) > THRESH)) {
-          state.dragged = true;
-          toggle.classList.add("cg-chat-fab--dragging");
-        }
-        if (state.dragged) {
-          e.preventDefault();
-          staffChatFabClampApply(root, state.origL + dx, state.origT + dy);
-        }
-      }
-      function onUp(e) {
-        if (!state || e.pointerId !== state.pid) return;
-        if (state.dragged) {
-          window.__cgStaffChatFabSkipToggleClick = true;
-          var fin = staffChatFabClampApply(
-            root,
-            state.origL + (e.clientX - state.sx),
-            state.origT + (e.clientY - state.sy)
-          );
-          staffChatFabWriteSavedPosition(fin);
-          staffChatFabUpdatePanelPlacement();
-        }
-        try {
-          toggle.releasePointerCapture(e.pointerId);
-        } catch (ex2) {}
-        toggle.classList.remove("cg-chat-fab--dragging");
-        state = null;
-      }
-      toggle.addEventListener("pointerdown", onDown);
-      toggle.addEventListener("pointermove", onMove, { passive: false });
-      toggle.addEventListener("pointerup", onUp);
-      toggle.addEventListener("pointercancel", onUp);
-      var resizeT = null;
-      window.addEventListener("resize", function () {
-        if (!root.classList.contains("cg-staff-chat-root--custom")) return;
-        window.clearTimeout(resizeT);
-        resizeT = window.setTimeout(function () {
-          var b = root.getBoundingClientRect();
-          var o = staffChatFabClampApply(root, b.left, b.top);
-          staffChatFabWriteSavedPosition(o);
-          staffChatFabUpdatePanelPlacement();
-        }, 100);
-      });
-    }
     function staffChatBind() {
       if (staffChatBound) return;
       var toggle = document.getElementById("cg-chat-toggle");
@@ -12810,10 +12685,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         });
       }
       toggle.addEventListener("click", function () {
-        if (window.__cgStaffChatFabSkipToggleClick) {
-          window.__cgStaffChatFabSkipToggleClick = false;
-          return;
-        }
         var open = panel.classList.contains("hidden");
         if (open) {
           panel.classList.remove("hidden");
@@ -12921,7 +12792,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (e.key !== G.LS + "staffChatMessages") return;
         staffChatRefreshFromStore();
       });
-      staffChatFabBindDrag();
     }
     function staffChatStartPoll() {
       if (staffChatPollId) return;
@@ -12970,7 +12840,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         staffChatSyncPanelSub();
         staffChatRefreshFromStore();
         staffChatSyncClearButton();
-        staffChatFabRestoreSavedPosition();
+        staffChatFabResetDockPosition();
         staffChatFabUpdatePanelPlacement();
       } else {
         root.classList.add("hidden");
