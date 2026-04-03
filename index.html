@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════════════
+  index-fabrica.html — copia para distribución / instalación nueva (sin datos)
+  • Prefijo localStorage distinto (conciergeria_fabrica_v1_) para no mezclar con index-solo-local.html
+    en el mismo origen (p. ej. http://localhost).
+  • No importa automáticamente claves legacy vinculacion_wm815_* de otras instalaciones.
+  • Con CG_FIREBASE_CONFIG rellenado (apiKey, projectId, siteId, …): Firestore es la fuente de verdad;
+    localStorage solo como caché opcional (cgSites/{siteId}/kv/{clave} → campo json).
+  ═══════════════════════════════════════════════════════════════════════════
   index.html — mapa interno (un solo archivo ejecutable)
 
   FILOSOFÍA DEL MONOLITO (convenciones; sin React/Vue/Vite/TS ni trocear en carpetas)
@@ -51,17 +58,18 @@
     }
     .hidden { display: none !important; }
   </style>
-  <title>Sistema de Gestión - Conserjería</title>
+  <title>Conserjería — instalación nueva (fábrica)</title>
   <script>
     /**
      * Capa centralizada localStorage / sessionStorage (misma clave de producto que el core CG).
      * Expuesta temprano para primer pintado (paleta) y reutilizada en todo el monolito vía window.CG.persist.
      *
      * Persistencia: localStorage es distinto por origen (protocolo + host + puerto). Abrir el mismo HTML
-     * como file://, otro localhost o otro puerto = datos distintos; use siempre la misma URL al desarrollar.
+     * como file://, otro localhost u otro puerto = datos distintos; use siempre la misma URL al desarrollar.
+     * Esta variante «fábrica» usa prefijo propio para no compartir datos con index-solo-local.html.
      */
     (function () {
-      var LS = "conciergeria_v1_";
+      var LS = "conciergeria_fabrica_v1_";
       function tryStore(store, fn, fallback) {
         try {
           return fn(store);
@@ -150,8 +158,9 @@
         },
         /**
          * Borra del navegador todo lo guardado por esta app en este origen:
-         * todas las claves localStorage con prefijo del producto y sessionStorage usado por Conserjería.
-         * Solo afecta al almacenamiento de este navegador.
+         * localStorage con prefijo del producto, copias legacy vinculacion_wm815_*,
+         * sessionStorage usado por Conserjería (dashboard, pestaña, alertas visita) y espejo __cgMemLs.
+         * Solo afecta a este origen (mismo protocolo/host/puerto).
          */
         clearAllAppBrowserStorage: function () {
           var prefix = LS;
@@ -161,16 +170,44 @@
           try {
             for (i = 0; i < localStorage.length; i++) {
               k = localStorage.key(i);
-              if (k && k.indexOf(prefix) === 0) toRemove.push(k);
+              if (!k) continue;
+              if (k.indexOf(prefix) === 0 || k.indexOf("vinculacion_wm815_") === 0) {
+                toRemove.push(k);
+              }
             }
             for (i = 0; i < toRemove.length; i++) {
               localStorage.removeItem(toRemove[i]);
             }
           } catch (e1) {}
           try {
-            sessionStorage.removeItem("cg_dash_act_month");
-            sessionStorage.removeItem("cg_tab_session_v1");
+            var ssRm = [];
+            for (i = 0; i < sessionStorage.length; i++) {
+              k = sessionStorage.key(i);
+              if (!k) continue;
+              if (
+                k === "cg_dash_act_month" ||
+                k === "cg_tab_session_v1" ||
+                k.indexOf("warned_visit_") === 0 ||
+                k.indexOf("limit_visit_") === 0 ||
+                k.indexOf("veh_alert_sound_multa_") === 0 ||
+                k.indexOf("multa_mail_toast_") === 0
+              ) {
+                ssRm.push(k);
+              }
+            }
+            for (i = 0; i < ssRm.length; i++) {
+              sessionStorage.removeItem(ssRm[i]);
+            }
           } catch (e2) {}
+          try {
+            if (window.__cgMemLs && typeof window.__cgMemLs === "object") {
+              for (k in window.__cgMemLs) {
+                if (Object.prototype.hasOwnProperty.call(window.__cgMemLs, k)) {
+                  delete window.__cgMemLs[k];
+                }
+              }
+            }
+          } catch (e3) {}
         },
         /** Copia valor crudo si destino vacío (migraciones legacy). */
         copyLocalRawIfMissing: function (targetFullKey, sourceFullKey) {
@@ -181,6 +218,347 @@
         }
       };
     })();
+    /** Limpieza total sin login: abra este HTML con ?cg_limpieza=1 o ?cg_reset_local=1 y se borrará todo y se recargará limpio. */
+    (function cgResetLocalStorageIfQuery() {
+      try {
+        var href = String(window.location.href || "");
+        var u = new URL(href);
+        if (u.searchParams.get("cg_limpieza") !== "1" && u.searchParams.get("cg_reset_local") !== "1") return;
+        var P = window.CG_PERSIST;
+        if (P && typeof P.clearAllAppBrowserStorage === "function") {
+          P.clearAllAppBrowserStorage();
+        }
+        u.searchParams.delete("cg_limpieza");
+        u.searchParams.delete("cg_reset_local");
+        window.location.replace(u.toString());
+      } catch (e) {}
+    })();
+    window.__CG_FACTORY_DISTRIB__ = true;
+  </script>
+  <!-- Firebase: fuente de verdad en Firestore; localStorage solo como caché opcional (ver CG_FIREBASE_CONFIG). -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script>
+    /**
+     * CONFIGURACIÓN — Copie desde Firebase Console → Ajustes del proyecto → Sus apps.
+     * siteId: mismo string en todos los dispositivos del edificio (instalación compartida).
+     */
+    window.CG_FIREBASE_CONFIG = {
+      apiKey: "AIzaSyA_IsH2eJyQf20SdWSFvZjTblPZOlFU9Y8",
+      authDomain: "conserjeriawm2.firebaseapp.com",
+      projectId: "conserjeriawm2",
+      storageBucket: "conserjeriawm2.firebasestorage.app",
+      messagingSenderId: "470166692685",
+      appId: "1:470166692685:web:80da0c3beccf001d4b0d04",
+      /** Mismo valor en todos los dispositivos; si gestiona varios edificios en un solo proyecto, use un id por edificio. */
+      siteId: "conserjeriawm2",
+      useAnonymousAuth: false,
+      useLocalStorageCache: true,
+      connectFirestoreEmulator: null
+    };
+    (function cgFirebaseHeadBridge() {
+      window.cgApp = null;
+      window.cgDb = null;
+      window.cgAuth = null;
+      window.CG_CLOUD_SYNC_ENABLED = false;
+      window.__cgFsMem = Object.create(null);
+      window.__cgFsUseLocalCache = true;
+      window.__cgFsRemoteReady = false;
+      window.__cgFsLastError = null;
+      window.__cgFsListenerUnsub = null;
+      window.__cgFsWriteTimers = Object.create(null);
+      window.__cgFsSkipFirestoreKey = { session: true, __cgPendingDeleted: true };
+      window.__cgCloudSyncLastInitResult = null;
+      window.__cgFsPullGeneration = 0;
+
+      var cfg = window.CG_FIREBASE_CONFIG || {};
+      window.__cgFsUseLocalCache = cfg.useLocalStorageCache !== false;
+
+      function fsActive() {
+        return !!(
+          window.cgDb &&
+          cfg.siteId &&
+          String(cfg.siteId).trim() &&
+          cfg.apiKey &&
+          String(cfg.apiKey).indexOf("YOUR_") !== 0
+        );
+      }
+
+      function kvCol() {
+        return window.cgDb.collection("cgSites").doc(String(cfg.siteId).trim()).collection("kv");
+      }
+
+      function tryLocalStorageGet(fullKey) {
+        try {
+          if (typeof localStorage !== "undefined" && localStorage) return localStorage.getItem(fullKey);
+        } catch (e) {}
+        return null;
+      }
+      function tryLocalStorageSet(fullKey, str) {
+        try {
+          if (typeof localStorage !== "undefined" && localStorage) {
+            localStorage.setItem(fullKey, str);
+            return true;
+          }
+        } catch (e) {}
+        return false;
+      }
+      function tryLocalStorageRemove(fullKey) {
+        try {
+          if (typeof localStorage !== "undefined" && localStorage) localStorage.removeItem(fullKey);
+        } catch (e) {}
+      }
+      function trySessionGet(fullKey) {
+        try {
+          if (typeof sessionStorage !== "undefined" && sessionStorage) return sessionStorage.getItem(fullKey);
+        } catch (e) {}
+        return null;
+      }
+      function trySessionSet(fullKey, str) {
+        try {
+          if (typeof sessionStorage !== "undefined" && sessionStorage) {
+            sessionStorage.setItem(fullKey, str);
+            return true;
+          }
+        } catch (e) {}
+        return false;
+      }
+
+      window.cgFsBridge = {
+        active: fsActive,
+        kvCol: kvCol,
+        queueWrite: function (shortKey, jsonString) {
+          if (!fsActive() || !shortKey || window.__cgFsSkipFirestoreKey[shortKey]) return;
+          if (typeof jsonString !== "string") return;
+          var t = window.__cgFsWriteTimers;
+          if (t[shortKey]) clearTimeout(t[shortKey]);
+          t[shortKey] = setTimeout(function () {
+            delete t[shortKey];
+            window.cgFsBridge.pushImmediate(shortKey, jsonString);
+          }, 320);
+        },
+        flushPending: function () {
+          var t = window.__cgFsWriteTimers;
+          var k;
+          for (k in t) {
+            if (Object.prototype.hasOwnProperty.call(t, k)) {
+              clearTimeout(t[k]);
+              delete t[k];
+            }
+          }
+          var mem = window.__cgFsMem;
+          var LS = window.CG_PERSIST.LS;
+          for (k in mem) {
+            if (!Object.prototype.hasOwnProperty.call(mem, k) || window.__cgFsSkipFirestoreKey[k]) continue;
+            window.cgFsBridge.pushImmediate(k, mem[k]);
+          }
+        },
+        pushImmediate: function (shortKey, jsonString) {
+          if (!fsActive() || !shortKey || window.__cgFsSkipFirestoreKey[shortKey]) {
+            return Promise.resolve({ ok: true, skipped: true });
+          }
+          if (typeof jsonString !== "string") {
+            return Promise.resolve({ ok: false, reason: "bad_payload" });
+          }
+          var ref = kvCol().doc(shortKey);
+          return ref
+            .set(
+              {
+                json: jsonString,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                key: shortKey
+              },
+              { merge: true }
+            )
+            .then(function () {
+              return { ok: true, shortKey: shortKey };
+            })
+            .catch(function (err) {
+              window.__cgFsLastError = err;
+              console.warn("[CG][Firestore] escritura", shortKey, err);
+              return { ok: false, err: err, shortKey: shortKey };
+            });
+        },
+        abortTimers: function () {
+          var t = window.__cgFsWriteTimers;
+          var k;
+          for (k in t) {
+            if (Object.prototype.hasOwnProperty.call(t, k)) clearTimeout(t[k]);
+            delete t[k];
+          }
+        },
+        applyRemoteDoc: function (shortKey, jsonString, changeType) {
+          var LS = window.CG_PERSIST.LS;
+          var full = LS + shortKey;
+          if (changeType === "removed" || jsonString == null) {
+            delete window.__cgFsMem[shortKey];
+            if (window.__cgFsUseLocalCache) tryLocalStorageRemove(full);
+            return;
+          }
+          window.__cgFsMem[shortKey] = String(jsonString);
+          if (window.__cgFsUseLocalCache) tryLocalStorageSet(full, String(jsonString));
+        }
+      };
+
+      if (typeof firebase !== "undefined" && cfg.apiKey && String(cfg.apiKey).indexOf("YOUR_") !== 0) {
+        try {
+          if (!firebase.apps.length) {
+            window.cgApp = firebase.initializeApp({
+              apiKey: cfg.apiKey,
+              authDomain: cfg.authDomain,
+              projectId: cfg.projectId,
+              storageBucket: cfg.storageBucket,
+              messagingSenderId: cfg.messagingSenderId,
+              appId: cfg.appId
+            });
+          } else {
+            window.cgApp = firebase.app();
+          }
+          window.cgDb = firebase.firestore();
+          window.cgAuth = firebase.auth();
+          /* Emulador: en SDK modular use connectFirestoreEmulator(db, host, port) antes de otras llamadas;
+             en este bundle compat, configure reglas contra el proyecto real o consulte la guía oficial. */
+          if (cfg.connectFirestoreEmulator && cfg.connectFirestoreEmulator.host) {
+            console.info(
+              "[CG][Firestore] connectFirestoreEmulator: use el SDK modular o ajuste reglas en el proyecto; host indicado:",
+              cfg.connectFirestoreEmulator.host
+            );
+          }
+          window.CG_CLOUD_SYNC_ENABLED = true;
+        } catch (eInit) {
+          console.warn("[CG][Firebase] init:", eInit);
+          window.cgDb = null;
+          window.CG_CLOUD_SYNC_ENABLED = false;
+        }
+      }
+
+      (function patchCgPersistForFirestore() {
+        var P = window.CG_PERSIST;
+        if (!P || P.__cgFirestorePatched) return;
+        P.__cgFirestorePatched = true;
+        var origGet = P.localGetRaw.bind(P);
+        var origSet = P.localSetRaw.bind(P);
+        var origRemove = P.localRemove.bind(P);
+        var LSref = P.LS;
+
+        P.localGetRaw = function (fullKey) {
+          if (!fullKey || typeof fullKey !== "string") return origGet(fullKey);
+          if (!fsActive() || fullKey.indexOf(LSref) !== 0) return origGet(fullKey);
+          var sk = fullKey.slice(LSref.length);
+          if (sk === "session") return trySessionGet(fullKey);
+          if (Object.prototype.hasOwnProperty.call(window.__cgFsMem, sk)) return window.__cgFsMem[sk];
+          if (window.__cgFsUseLocalCache) {
+            var c = tryLocalStorageGet(fullKey);
+            if (c != null && c !== "") return c;
+          }
+          return null;
+        };
+
+        P.localSetRaw = function (fullKey, str) {
+          if (typeof str !== "string") return false;
+          if (!fullKey || fullKey.indexOf(LSref) !== 0) {
+            return origSet(fullKey, str);
+          }
+          if (!fsActive()) {
+            return origSet(fullKey, str);
+          }
+          var sk = fullKey.slice(LSref.length);
+          if (sk === "session") return trySessionSet(fullKey, str);
+          window.__cgFsMem[sk] = str;
+          if (window.__cgFsUseLocalCache) tryLocalStorageSet(fullKey, str);
+          window.cgFsBridge.queueWrite(sk, str);
+          return true;
+        };
+
+        P.localRemove = function (fullKey) {
+          if (!fullKey || fullKey.indexOf(LSref) !== 0) {
+            origRemove(fullKey);
+            return;
+          }
+          var sk = fullKey.slice(LSref.length);
+          if (!fsActive()) {
+            origRemove(fullKey);
+            return;
+          }
+          if (sk === "session") {
+            try {
+              if (sessionStorage) sessionStorage.removeItem(fullKey);
+            } catch (eS) {}
+            return;
+          }
+          delete window.__cgFsMem[sk];
+          if (window.__cgFsUseLocalCache) tryLocalStorageRemove(fullKey);
+          if (!window.__cgFsSkipFirestoreKey[sk] && window.cgDb) {
+            kvCol()
+              .doc(sk)
+              .delete()
+              .catch(function (e) {
+                console.warn("[CG][Firestore] delete", sk, e);
+              });
+          }
+        };
+      })();
+
+      window.CG_DB = {
+        enabled: function () {
+          return fsActive();
+        },
+        siteId: function () {
+          return (cfg && cfg.siteId) || "";
+        },
+        get: function (shortKey, fallback) {
+          var raw = window.CG_PERSIST.localGetRaw(window.CG_PERSIST.LS + shortKey);
+          if (raw == null || raw === "") return fallback;
+          return window.CG_PERSIST.parseJson(raw, fallback);
+        },
+        save: function (shortKey, val) {
+          var str = window.CG_PERSIST.stringifyForStorage(val);
+          if (str == null) return false;
+          return window.CG_PERSIST.localSetRaw(window.CG_PERSIST.LS + shortKey, str);
+        },
+        subscribe: function (shortKey, onNext) {
+          if (!fsActive() || typeof onNext !== "function") return function () {};
+          var col = kvCol();
+          if (shortKey) {
+            return col.doc(String(shortKey)).onSnapshot(
+              function (snap) {
+                var d = snap.data();
+                if (!snap.exists || !d || d.json == null) onNext(null);
+                else onNext(window.CG_PERSIST.parseJson(String(d.json), null));
+              },
+              function (err) {
+                window.__cgFsLastError = err;
+                console.warn("[CG][Firestore] subscribe", shortKey, err);
+              }
+            );
+          }
+          return col.onSnapshot(
+            function (q) {
+              var out = Object.create(null);
+              q.forEach(function (doc) {
+                var d = doc.data();
+                if (d && d.json != null) out[doc.id] = window.CG_PERSIST.parseJson(String(d.json), null);
+              });
+              onNext(out);
+            },
+            function (err) {
+              window.__cgFsLastError = err;
+            }
+          );
+        },
+        status: function () {
+          return {
+            firestore: fsActive(),
+            remoteReady: !!window.__cgFsRemoteReady,
+            lastError: window.__cgFsLastError,
+            cloudSyncEnabled: window.CG_CLOUD_SYNC_ENABLED
+          };
+        }
+      };
+    })();
+  </script>
+  <script>
     /* Paleta guardada antes del body: el login usa variables en html[data-cg-palette] (misma clave que CG.LS + personalization). */
     (function () {
       try {
@@ -2816,12 +3194,7 @@
       };
     })();
   </script>
-  <script>
-    /** Sin nube: todos los datos quedan en localStorage de este navegador. */
-    window.cgApp = null;
-    window.cgDb = null;
-    window.CG_CLOUD_SYNC_ENABLED = false;
-  </script>
+  <!-- cgApp / cgDb / CG_CLOUD_SYNC_ENABLED: inicializados en <head> (Firebase). -->
 </head>
 <body>
   <a href="#main-content" class="cg-skip-link">Ir al contenido principal</a>
@@ -2957,7 +3330,7 @@
   <script>
   /* === PART 1: storage, state, auth ===
    * Instalación limpia: sin usuarios ni datos de prueba precargados (primer administrador en el login).
-   * Persistencia: solo localStorage / sessionStorage en este origen.
+   * Persistencia: Firestore (si CG_FIREBASE_CONFIG está rellenado) + caché local opcional; sesión en sessionStorage.
    */
   (function () {
     /* ┌─ 1. Constantes de producto (LS, módulos, categorías, IDs fijos) ───────────────── */
@@ -2983,22 +3356,58 @@
     /** Destino fijo para proveedores / administración; no es unidad del registro de residentes (wm815). */
     const ADMIN_UNIT_ID = "cg_virtual_admin";
 
-    /* ┌─ 2. Solo almacenamiento local (sin sincronización en la nube) ─────────────────── */
-    var CG_CLOUD_SYNC_ENABLED = false;
-    var CG_CLOUD_BUILDING_KEY = "";
+    /* ┌─ 2. Nube Firestore + caché local (CG_PERSIST parcheado en <head> si hay cgDb) ───── */
+    var CG_CLOUD_SYNC_ENABLED = typeof window.CG_CLOUD_SYNC_ENABLED === "boolean" ? window.CG_CLOUD_SYNC_ENABLED : false;
+    var CG_CLOUD_BUILDING_KEY =
+      window.CG_FIREBASE_CONFIG && window.CG_FIREBASE_CONFIG.siteId ? String(window.CG_FIREBASE_CONFIG.siteId) : "";
     var CG_CLOUD_ONLY_STORAGE = false;
     var CG_SESSION_BROWSER_KEY = "cg_tab_session_v1";
     window.__cgMemLs = window.__cgMemLs || {};
     var __cgMemLs = window.__cgMemLs;
 
-    /** Modo solo local: sin espejo en memoria; CG_PERSIST escribe directo a localStorage. */
-    function __cgEffectiveCloudOnly() {
-      return false;
+    function __cgFsCoreActive() {
+      return window.cgFsBridge && typeof window.cgFsBridge.active === "function" && window.cgFsBridge.active();
     }
 
-    function __cgStripLegacyLocalStorageIfCloudOnly() {}
+    /** Sin semilla local de plantilla cuando la fuente de verdad es Firestore. */
+    function __cgEffectiveCloudOnly() {
+      return __cgFsCoreActive();
+    }
 
-    function __cgHydrateMemLsFromLocalStorageBackup() {}
+    function __cgStripLegacyLocalStorageIfCloudOnly() {
+      if (!__cgFsCoreActive()) return;
+      if (!window.CG_FIREBASE_CONFIG || !window.CG_FIREBASE_CONFIG.stripLocalKeysAfterCloudBoot) return;
+      try {
+        var i;
+        var k;
+        var skip = { session: true };
+        for (i = 0; i < localStorage.length; i++) {
+          k = localStorage.key(i);
+          if (!k || k.indexOf(LS) !== 0) continue;
+          var sk = k.slice(LS.length);
+          if (skip[sk]) continue;
+          localStorage.removeItem(k);
+        }
+      } catch (eSt) {}
+    }
+
+    /** Arranque: hidratar memoria desde caché local antes del primer snapshot remoto. */
+    function __cgHydrateMemLsFromLocalStorageBackup() {
+      if (!__cgFsCoreActive() || !window.__cgFsUseLocalCache) return;
+      try {
+        var i;
+        var k;
+        for (i = 0; i < localStorage.length; i++) {
+          k = localStorage.key(i);
+          if (!k || k.indexOf(LS) !== 0) continue;
+          var sk = k.slice(LS.length);
+          if (sk === "session" || window.__cgFsSkipFirestoreKey[sk]) continue;
+          if (Object.prototype.hasOwnProperty.call(window.__cgFsMem, sk)) continue;
+          var raw = localStorage.getItem(k);
+          if (raw != null && raw !== "") window.__cgFsMem[sk] = raw;
+        }
+      } catch (eH) {}
+    }
 
     var __CG_LS_KEY_PENDING_DELETED = "__cgPendingDeleted";
     var CG_SYNC_STATE = {
@@ -3052,6 +3461,7 @@
     }
 
     __cgLoadPendingDeletedFromStorage();
+    __cgHydrateMemLsFromLocalStorageBackup();
 
     function __cgSyncLog(level, code, detail) {
       var verbose = typeof window.CG_SYNC_VERBOSE === "boolean" && window.CG_SYNC_VERBOSE;
@@ -3072,6 +3482,9 @@
     function __cgMarkLsKeyDirty() {}
 
     function __cgClearLsKeyDirty() {}
+
+    var __cgFsInitGeneration = 0;
+    var __cgArmPullTimers = Object.create(null);
 
     function __cgRegisterPendingDeletedLsKey(lsKey, itemId) {
       if (!lsKey || itemId == null || String(itemId) === "") return;
@@ -3094,52 +3507,188 @@
       return "leg:" + at + "\0" + uid + "\0" + tx.slice(0, 240);
     }
 
-    function scheduleCloudWrite() {}
+    function scheduleCloudWrite(shortKey) {
+      if (!__cgFsCoreActive() || !shortKey || shortKey === "session") return;
+      var str = window.__cgFsMem[shortKey];
+      if (typeof str === "string") window.cgFsBridge.queueWrite(shortKey, str);
+    }
 
-    function initCloudSync() {
-      return Promise.resolve({
-        ok: false,
-        reason: "local_only",
-        partial: false,
-        phases: {},
-        listenerStarted: false
+    function __cgMaybeAnonymousAuth() {
+      var c = window.CG_FIREBASE_CONFIG || {};
+      if (!c.useAnonymousAuth || !window.cgAuth) return Promise.resolve();
+      if (window.cgAuth.currentUser) return Promise.resolve();
+      return window.cgAuth.signInAnonymously().catch(function (e) {
+        console.warn("[CG][Auth] Anónimo:", e);
       });
     }
 
-    function stopCloudSyncListener() {}
+    function initCloudSync() {
+      if (!__cgFsCoreActive()) {
+        var r0 = {
+          ok: false,
+          reason: "local_only",
+          partial: false,
+          phases: {},
+          listenerStarted: false
+        };
+        window.__cgCloudSyncLastInitResult = r0;
+        return Promise.resolve(r0);
+      }
+      var gen = ++__cgFsInitGeneration;
+      return __cgMaybeAnonymousAuth().then(function () {
+        if (gen !== __cgFsInitGeneration) {
+          return { ok: false, reason: "superseded", partial: false, phases: {}, listenerStarted: false };
+        }
+        if (window.__cgFsListenerUnsub) {
+          try {
+            window.__cgFsListenerUnsub();
+          } catch (eU) {}
+          window.__cgFsListenerUnsub = null;
+        }
+        var col = window.cgFsBridge.kvCol();
+        window.__cgFsListenerUnsub = col.onSnapshot(
+          function (snapshot) {
+            snapshot.docChanges().forEach(function (chg) {
+              var id = chg.doc.id;
+              var d = chg.doc.data();
+              var js = d && d.json != null ? String(d.json) : null;
+              window.cgFsBridge.applyRemoteDoc(id, js, chg.type);
+              if (typeof window.CG_UI !== "undefined" && window.CG_UI && typeof window.CG_UI.refreshAfterRemoteLsKey === "function") {
+                try {
+                  window.CG_UI.refreshAfterRemoteLsKey(id);
+                } catch (eRf) {}
+              }
+            });
+            window.__cgFsRemoteReady = true;
+          },
+          function (err) {
+            window.__cgFsLastError = err;
+            __cgSyncLog("warn", "firestore_listener", err);
+            setTimeout(function () {
+              if (window.CG && typeof window.CG.toast === "function") {
+                window.CG.toast("Error de sincronización con la nube. Revise red y reglas Firestore.", "error");
+              }
+            }, 0);
+          }
+        );
+        var rOk = {
+          ok: true,
+          reason: "firestore",
+          partial: false,
+          phases: { listener: true },
+          listenerStarted: true
+        };
+        window.__cgCloudSyncLastInitResult = rOk;
+        attachStaffChatRemoteSync();
+        return rOk;
+      });
+    }
+
+    function stopCloudSyncListener() {
+      if (window.__cgFsListenerUnsub) {
+        try {
+          window.__cgFsListenerUnsub();
+        } catch (eS) {}
+        window.__cgFsListenerUnsub = null;
+      }
+      try {
+        if (window.CG && typeof window.CG.detachStaffChatRemoteSync === "function") window.CG.detachStaffChatRemoteSync();
+      } catch (eD) {}
+    }
 
     function attachStaffChatRemoteSync() {}
 
     function detachStaffChatRemoteSync() {}
 
-    function cloudSyncAbortInFlight() {}
-
-    function cloudSyncAfterDirectLocalStorageWrite() {}
-
-    function cloudPullAllOnce() {
-      return Promise.resolve();
+    function cloudSyncAbortInFlight() {
+      if (window.cgFsBridge) window.cgFsBridge.abortTimers();
     }
 
-    function cloudPullSingleLsKey() {
-      return Promise.resolve();
+    function cloudSyncAfterDirectLocalStorageWrite(shortKey) {
+      if (!shortKey || !__cgFsCoreActive()) return;
+      cloudPushKeyImmediate(shortKey);
+    }
+
+    function cloudPullAllOnce() {
+      if (!__cgFsCoreActive()) return Promise.resolve();
+      var g = ++window.__cgFsPullGeneration;
+      return __cgMaybeAnonymousAuth().then(function () {
+        return window.cgFsBridge.kvCol().get();
+      }).then(function (qs) {
+        if (g !== window.__cgFsPullGeneration) return;
+        qs.forEach(function (doc) {
+          var d = doc.data();
+          if (d && d.json != null) window.cgFsBridge.applyRemoteDoc(doc.id, String(d.json), "added");
+        });
+        window.__cgFsRemoteReady = true;
+      }).catch(function (err) {
+        window.__cgFsLastError = err;
+        __cgSyncLog("warn", "firestore_pull_all", err);
+      });
+    }
+
+    function cloudPullSingleLsKey(shortKey) {
+      if (!shortKey || !__cgFsCoreActive()) return Promise.resolve();
+      return __cgMaybeAnonymousAuth().then(function () {
+        return window.cgFsBridge.kvCol().doc(String(shortKey)).get();
+      }).then(function (snap) {
+        if (!snap.exists) return;
+        var d = snap.data();
+        if (d && d.json != null) window.cgFsBridge.applyRemoteDoc(shortKey, String(d.json), "added");
+      }).catch(function (err) {
+        window.__cgFsLastError = err;
+      });
     }
 
     function cloudPushAllKeysOnce() {
-      return Promise.resolve();
+      if (!__cgFsCoreActive()) return Promise.resolve({ ok: true, skipped: true });
+      window.cgFsBridge.flushPending();
+      var mem = window.__cgFsMem;
+      var tasks = [];
+      var k;
+      for (k in mem) {
+        if (!Object.prototype.hasOwnProperty.call(mem, k) || window.__cgFsSkipFirestoreKey[k]) continue;
+        tasks.push(window.cgFsBridge.pushImmediate(k, mem[k]));
+      }
+      return Promise.all(tasks).then(function (results) {
+        var bad = results.filter(function (x) {
+          return x && !x.ok && !x.skipped;
+        });
+        return { ok: !bad.length, partial: !!bad.length, count: results.length };
+      });
     }
 
-    function flushPendingCloudWritesNow() {}
+    function flushPendingCloudWritesNow() {
+      if (window.cgFsBridge) window.cgFsBridge.flushPending();
+    }
 
-    function cloudPushKeyImmediate() {}
+    function cloudPushKeyImmediate(shortKey) {
+      if (!shortKey || !__cgFsCoreActive() || window.__cgFsSkipFirestoreKey[shortKey]) {
+        return Promise.resolve({ ok: true, skipped: true, shortKey: shortKey });
+      }
+      var str = window.__cgFsMem[shortKey];
+      if (typeof str !== "string") {
+        return Promise.resolve({ ok: false, reason: "missing_mem", shortKey: shortKey });
+      }
+      return window.cgFsBridge.pushImmediate(shortKey, str);
+    }
 
     function cloudPushLsKeyPromise(shortKey) {
-      return Promise.resolve({ ok: true, skipped: true, reason: "local_only", shortKey: shortKey });
+      return cloudPushKeyImmediate(shortKey);
     }
 
-    function armLsKeyPullQuiet() {}
+    function armLsKeyPullQuiet(shortKey, delayMs) {
+      if (!shortKey || !__cgFsCoreActive()) return;
+      var d = delayMs != null ? delayMs : 8000;
+      if (__cgArmPullTimers[shortKey]) clearTimeout(__cgArmPullTimers[shortKey]);
+      __cgArmPullTimers[shortKey] = setTimeout(function () {
+        delete __cgArmPullTimers[shortKey];
+        cloudPullSingleLsKey(shortKey).catch(function () {});
+      }, d);
+    }
 
     function getCloudSyncLastInitResult() {
-      return null;
+      return window.__cgCloudSyncLastInitResult;
     }
     /* ┌─ 3. Persistencia local (clave corta → JSON en localStorage) ──────────────────── */
     function load(key, fallback) {
@@ -4746,7 +5295,7 @@
       effectiveCloudOnlyStorage: function () {
         return __cgEffectiveCloudOnly();
       },
-      stripLegacyLocalStorageIfCloudOnly: __cgStripLegacyLocalStorageLsPrefix,
+      stripLegacyLocalStorageIfCloudOnly: __cgStripLegacyLocalStorageIfCloudOnly,
       __cgHydrateMemLsFromLocalStorageBackup: __cgHydrateMemLsFromLocalStorageBackup,
       validate: CG_VALIDATE
     };
@@ -4771,6 +5320,7 @@
   function __migrateLegacyDeptStorageOnce() {
     if (window.__CG_DEPT_LS_MIGRATED) return;
     window.__CG_DEPT_LS_MIGRATED = true;
+    if (window.__CG_FACTORY_DISTRIB__) return;
     try {
       var p = window.CG.LS;
       var nu = p + "wm815_units";
