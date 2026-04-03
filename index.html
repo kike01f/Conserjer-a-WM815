@@ -12540,18 +12540,27 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       } catch (eUpd) {}
     }
 
+    /** Gráficos + tarjetas KPI + actividad/novedades (vista dashboard ya montada). */
+    function updateDashboardChartsSummaryAndActivity() {
+      updateDashboardChartsDataOnly();
+      updateDashboardSummaryStatsOnly();
+      updateDashboardActivityAndNovBodiesOnly();
+    }
+
     function updateDashboardSummaryStatsOnly() {
       if (!document.getElementById("dash-stat-visits-today")) return;
       var today = new Date();
       var yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-      var visitsToday = G.state.visits.filter(function (v) {
+      var visits = G.state.visits || [];
+      var reservas = G.state.reservas || [];
+      var visitsToday = visits.filter(function (v) {
         return G.isSameDay(v.at, today);
       }).length;
-      var visitsYesterday = G.state.visits.filter(function (v) {
+      var visitsYesterday = visits.filter(function (v) {
         return G.isSameDay(v.at, yesterday);
       }).length;
-      var reservasActivas = G.state.reservas.filter(function (r) {
-        return new Date(r.end) >= today;
+      var reservasActivas = reservas.filter(function (r) {
+        return r && r.end && new Date(r.end) >= today;
       }).length;
       var encList = G.state.encomiendas || [];
       var encPend = encList.filter(function (e) {
@@ -12587,21 +12596,23 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var novEl = document.getElementById("cg-dash-nov-recent-body");
       if (novEl) {
         try {
-          var novRec = G.state.novedades.slice().sort(function (a, b) {
+          var novList = G.state.novedades || [];
+          var novRec = novList.slice().sort(function (a, b) {
             return new Date(b.at) - new Date(a.at);
           }).slice(0, 5);
-          novEl.innerHTML = novRec.length
+          novEl.innerHTML =           novRec.length
             ? "<ul style=\"list-style:none\">" +
               novRec
                 .map(function (n) {
+                  var tx = n.text == null ? "" : String(n.text);
                   return (
                     "<li style=\"padding:0.5rem 0;border-bottom:1px solid var(--gray-200)\"><strong>#" +
                     (n.seq || "—") +
                     "</strong> · " +
                     G.fmtDate(n.at) +
                     " — " +
-                    G.escapeHtml(n.text.slice(0, 80)) +
-                    (n.text.length > 80 ? "…" : "") +
+                    G.escapeHtml(tx.slice(0, 80)) +
+                    (tx.length > 80 ? "…" : "") +
                     "</li>"
                   );
                 })
@@ -12784,11 +12795,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (window.CG_ACTIONS && typeof CG_ACTIONS.syncParkingSlotsFromBuilding === "function") CG_ACTIONS.syncParkingSlotsFromBuilding();
       const today = new Date();
       const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-      const visitsToday = G.state.visits.filter(v => G.isSameDay(v.at, today)).length;
-      const visitsYesterday = G.state.visits.filter(v => G.isSameDay(v.at, yesterday)).length;
-      const reservasActivas = G.state.reservas.filter(function (r) {
+      const visitsArr = G.state.visits || [];
+      const reservasArr = G.state.reservas || [];
+      const novedadesArr = G.state.novedades || [];
+      const visitsToday = visitsArr.filter(v => G.isSameDay(v.at, today)).length;
+      const visitsYesterday = visitsArr.filter(v => G.isSameDay(v.at, yesterday)).length;
+      const reservasActivas = reservasArr.filter(function (r) {
+        if (!r || !r.end) return false;
         const end = new Date(r.end);
-        return end >= today;
+        return !isNaN(end.getTime()) && end >= today;
       }).length;
       const encList = G.state.encomiendas || [];
       const encPend = encList.filter(function (e) { return !e.entregadoAt; }).length;
@@ -12796,7 +12811,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       const encReceivedYesterday = encList.filter(function (e) { return e.receivedAt && G.isSameDay(e.receivedAt, yesterday); }).length;
       const visDelta = dashCompareDelta(visitsToday, visitsYesterday);
       const encRecDelta = dashCompareDelta(encReceivedToday, encReceivedYesterday);
-      const novRec = G.state.novedades.slice().sort(function (a, b) { return new Date(b.at) - new Date(a.at); }).slice(0, 5);
+      const novRec = novedadesArr.slice().sort(function (a, b) { return new Date(b.at) - new Date(a.at); }).slice(0, 5);
       const actTable = buildDashMonthlyConserjeActivityHtml();
       return (
         "<h1 class=\"page-title\">Dashboard</h1>" +
@@ -12824,8 +12839,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "</div></div>" +
         "<div class=\"card cg-dash-nov-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-clipboard-list\" aria-hidden=\"true\"></i> Novedades recientes</h3></div><div class=\"card-b\" id=\"cg-dash-nov-recent-body\">" +
         (novRec.length ? "<ul style=\"list-style:none\">" + novRec.map(function (n) {
+          var tx = n.text == null ? "" : String(n.text);
           return "<li style=\"padding:0.5rem 0;border-bottom:1px solid var(--gray-200)\"><strong>#" + (n.seq || "—") + "</strong> · " + G.fmtDate(n.at) +
-            " — " + G.escapeHtml(n.text.slice(0, 80)) + (n.text.length > 80 ? "…" : "") + "</li>";
+            " — " + G.escapeHtml(tx.slice(0, 80)) + (tx.length > 80 ? "…" : "") + "</li>";
         }).join("") + "</ul>" : "<p class=\"page-desc\">Sin novedades.</p>") +
         "</div></div>"
       );
@@ -12841,7 +12857,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         checkVehicularVisitWarnings();
         if (window.CG_ACTIONS && CG_ACTIONS.updateVisitLiveDurations) CG_ACTIONS.updateVisitLiveDurations();
         if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardVehAlerts) CG_ACTIONS.renderDashboardVehAlerts();
-        if (document.getElementById("dash-chart-visits")) updateDashboardChartsDataOnly();
+        if (document.getElementById("dash-chart-visits")) updateDashboardChartsSummaryAndActivity();
       }
       visitAlertsTick();
       visitAlertInterval = setInterval(visitAlertsTick, 15000);
@@ -13358,6 +13374,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             window.loadFormerResidentsFromCloud().catch(function () {});
           }
         }
+        if (dash) {
+          try {
+            updateDashboardActivityAndNovBodiesOnly();
+          } catch (eDashDept) {}
+        }
       }
 
       if (
@@ -13427,11 +13448,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             A.renderDashboardVehAlerts();
           } catch (eDv) {}
         }
-        if (dash) {
-          updateDashboardChartsDataOnly();
-          updateDashboardSummaryStatsOnly();
-          updateDashboardActivityAndNovBodiesOnly();
-        }
+        if (dash) updateDashboardChartsSummaryAndActivity();
       }
 
       if (k === "encomiendas") {
@@ -13440,11 +13457,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             A.renderEncomiendas();
           } catch (eEnc) {}
         }
-        if (dash) {
-          updateDashboardChartsDataOnly();
-          updateDashboardSummaryStatsOnly();
-          updateDashboardActivityAndNovBodiesOnly();
-        }
+        if (dash) updateDashboardChartsSummaryAndActivity();
       }
 
       if (k === "reservas") {
@@ -13523,14 +13536,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         } catch (eCr) {}
       }
 
-      if (
-        dash &&
-        (k === "wm815_units" ||
-          k === "departments" ||
-          k === "buildingUnits" ||
-          k === "users")
-      ) {
-        updateDashboardActivityAndNovBodiesOnly();
+      if (dash && k === "users") {
+        try {
+          updateDashboardActivityAndNovBodiesOnly();
+        } catch (eDashUsers) {}
       }
     }
 
