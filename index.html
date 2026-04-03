@@ -1054,6 +1054,66 @@
       padding: 1.25rem 0.5rem;
       font-weight: 500;
     }
+    @keyframes cg-chat-buzz-shake {
+      0%, 100% { transform: translateX(0); }
+      12% { transform: translateX(-8px); }
+      25% { transform: translateX(8px); }
+      37% { transform: translateX(-6px); }
+      50% { transform: translateX(6px); }
+      62% { transform: translateX(-4px); }
+      75% { transform: translateX(4px); }
+    }
+    .cg-chat-buzz-shake {
+      animation: cg-chat-buzz-shake 0.55s ease-in-out;
+    }
+    .cg-chat-panel,
+    .cg-chat-fab {
+      will-change: transform;
+    }
+    .cg-chat-bubble--buzz {
+      background: linear-gradient(135deg, #fef3c7, #fde68a) !important;
+      border: 1px solid #f59e0b;
+      font-weight: 600;
+      text-align: center;
+    }
+    .cg-chat-bubble--buzz .cg-chat-bubble-text {
+      font-size: 0.95rem;
+    }
+    .cg-chat-tools {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.25rem 0.35rem;
+    }
+    .cg-chat-tools-label {
+      font-size: 0.72rem;
+      color: #64748b;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-right: 0.15rem;
+    }
+    button.cg-chat-emoji-btn {
+      font-size: 1.15rem;
+      line-height: 1;
+      padding: 0.2rem 0.35rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+      transition: transform 0.12s, border-color 0.12s;
+    }
+    button.cg-chat-emoji-btn:hover {
+      border-color: #74bd20;
+      transform: scale(1.08);
+    }
+    .cg-chat-tools-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 0.15rem;
+    }
     .cg-chat-form {
       display: flex;
       flex-direction: column;
@@ -3338,8 +3398,26 @@
         </div>
         <div id="cg-chat-thread" class="cg-chat-thread" role="log" aria-live="polite" aria-relevant="additions"></div>
         <form id="cg-chat-form" class="cg-chat-form" action="#" method="post" onsubmit="return false;">
+          <div class="cg-chat-tools" role="toolbar" aria-label="Insertar icono en el mensaje">
+            <span class="cg-chat-tools-label">Iconos</span>
+            <button type="button" class="cg-chat-emoji-btn" data-cg-chat-emoji="👍" title="Pulgar arriba">👍</button>
+            <button type="button" class="cg-chat-emoji-btn" data-cg-chat-emoji="👋" title="Saludo">👋</button>
+            <button type="button" class="cg-chat-emoji-btn" data-cg-chat-emoji="✅" title="Listo / OK">✅</button>
+            <button type="button" class="cg-chat-emoji-btn" data-cg-chat-emoji="📞" title="Teléfono / llamar">📞</button>
+            <button type="button" class="cg-chat-emoji-btn" data-cg-chat-emoji="🚨" title="Urgente">🚨</button>
+            <button type="button" class="cg-chat-emoji-btn" data-cg-chat-emoji="📦" title="Encomienda / paquete">📦</button>
+            <button type="button" class="cg-chat-emoji-btn" data-cg-chat-emoji="🚗" title="Visita / vehículo">🚗</button>
+            <button type="button" class="cg-chat-emoji-btn" data-cg-chat-emoji="⏰" title="Hora / turno">⏰</button>
+            <button type="button" class="cg-chat-emoji-btn" data-cg-chat-emoji="🙏" title="Gracias">🙏</button>
+          </div>
+          <div class="cg-chat-tools-actions">
+            <button type="button" class="btn btn-secondary btn-sm" id="cg-chat-buzz" title="Llamar la atención del otro usuario (sonido y vibración)">
+              <i class="fa-solid fa-bell" aria-hidden="true"></i> Zumbido
+            </button>
+            <span class="page-desc" style="margin:0;font-size:0.72rem">Los enlaces http… o www… se muestran clicables al enviar.</span>
+          </div>
           <label class="sr-only" for="cg-chat-input">Escribir mensaje</label>
-          <textarea id="cg-chat-input" rows="2" maxlength="4000" placeholder="Escriba un mensaje…" required></textarea>
+          <textarea id="cg-chat-input" rows="2" maxlength="4000" placeholder="Escriba un mensaje…"></textarea>
           <button type="submit" class="btn btn-primary btn-sm"><i class="fa-solid fa-paper-plane"></i> Enviar</button>
         </form>
       </div>
@@ -3525,8 +3603,9 @@
       if (m && typeof m === "object" && m.id) return "id:" + String(m.id);
       var at = m && m.at ? String(m.at) : "";
       var uid = m && m.userId ? String(m.userId) : "";
+      var kind = m && m.kind === "buzz" ? "buzz" : "text";
       var tx = m && m.text != null ? String(m.text) : "";
-      return "leg:" + at + "\0" + uid + "\0" + tx.slice(0, 240);
+      return "leg:" + at + "\0" + uid + "\0" + kind + "\0" + tx.slice(0, 240);
     }
 
     function scheduleCloudWrite(shortKey) {
@@ -11623,6 +11702,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var staffChatSoundInited = false;
     var staffChatLastSoundAtMs = 0;
     var STAFF_CHAT_SOUND_COOLDOWN_MS = 2200;
+    var staffChatLastBuzzSentAt = 0;
+    var STAFF_CHAT_BUZZ_SEND_COOLDOWN_MS = 12000;
     var staffPresenceIntervalId = null;
     var STAFF_PRESENCE_STALE_MS = 52000;
     var STAFF_PRESENCE_HEARTBEAT_MS = 12000;
@@ -11853,6 +11934,124 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         o.stop(t0 + dur + 0.02);
       }
     }
+    function staffChatPlayBuzzSound() {
+      var ctx = staffChatGetAudioContext();
+      if (!ctx) return;
+      try {
+        ctx.resume().catch(function () {});
+      } catch (eRz) {}
+      var t0 = ctx.currentTime;
+      var b;
+      for (b = 0; b < 3; b++) {
+        var o = ctx.createOscillator();
+        var gn = ctx.createGain();
+        o.type = "square";
+        o.frequency.setValueAtTime(175 + b * 30, t0 + b * 0.14);
+        o.connect(gn);
+        gn.connect(ctx.destination);
+        var tb = t0 + b * 0.14;
+        gn.gain.setValueAtTime(0.0001, tb);
+        gn.gain.exponentialRampToValueAtTime(0.1, tb + 0.02);
+        gn.gain.exponentialRampToValueAtTime(0.0001, tb + 0.1);
+        o.start(tb);
+        o.stop(tb + 0.11);
+      }
+    }
+    function staffChatRunBuzzRecipientFx() {
+      staffChatPlayBuzzSound();
+      try {
+        if (navigator.vibrate) navigator.vibrate([100, 45, 100, 45, 160]);
+      } catch (eVb) {}
+      ["cg-chat-panel", "cg-staff-chat-root"].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove("cg-chat-buzz-shake");
+        void el.offsetWidth;
+        el.classList.add("cg-chat-buzz-shake");
+        window.setTimeout(function () {
+          el.classList.remove("cg-chat-buzz-shake");
+        }, 600);
+      });
+    }
+    function staffChatMaybeTriggerIncomingBuzz(prevJsonStr) {
+      var u = G.currentUser();
+      if (!u) return;
+      var prev = [];
+      if (prevJsonStr && typeof prevJsonStr === "string" && prevJsonStr.length) {
+        try {
+          var parsedBuzz = JSON.parse(prevJsonStr);
+          if (Array.isArray(parsedBuzz)) prev = parsedBuzz;
+        } catch (ePb) {}
+      }
+      var prevV = staffChatFilterListForViewer(prev, u);
+      var nextV = staffChatFilterListForViewer(staffChatMessagesSafe(), u);
+      var prevBuzzKeys = {};
+      var i;
+      for (i = 0; i < prevV.length; i++) {
+        var pm = prevV[i];
+        if (!pm || pm.kind !== "buzz") continue;
+        var pk = staffChatMessageDedupeKey(pm);
+        if (pk) prevBuzzKeys[pk] = true;
+      }
+      for (i = 0; i < nextV.length; i++) {
+        var nm = nextV[i];
+        if (!nm || nm.kind !== "buzz") continue;
+        if (nm.userId === u.id) continue;
+        var nk = staffChatMessageDedupeKey(nm);
+        if (nk && !prevBuzzKeys[nk]) {
+          staffChatRunBuzzRecipientFx();
+          return;
+        }
+      }
+    }
+    function staffChatInsertAtCursor(textarea, chunk) {
+      if (!textarea || chunk == null) return;
+      var ins = String(chunk);
+      var start = textarea.selectionStart;
+      var end = textarea.selectionEnd;
+      var v = textarea.value;
+      if (typeof start !== "number" || typeof end !== "number") {
+        textarea.value = v + ins;
+        return;
+      }
+      textarea.value = v.slice(0, start) + ins + v.slice(end);
+      var pos = start + ins.length;
+      textarea.selectionStart = textarea.selectionEnd = pos;
+      textarea.focus();
+    }
+    function staffChatSafeUrlFromMatch(raw) {
+      var s = String(raw || "").trim();
+      if (!s) return null;
+      var lower = s.toLowerCase();
+      if (lower.indexOf("javascript:") === 0 || lower.indexOf("data:") === 0) return null;
+      if (/^https?:\/\//i.test(s)) return s;
+      if (/^www\./i.test(s)) return "https://" + s;
+      return null;
+    }
+    function staffChatLinkifyToHtml(raw) {
+      var s = String(raw || "");
+      var re = /(\bhttps?:\/\/[^\s<]+|\bwww\.[^\s<]+)/gi;
+      var out = "";
+      var last = 0;
+      var m;
+      while ((m = re.exec(s)) !== null) {
+        out += G.escapeHtml(s.slice(last, m.index));
+        var url = staffChatSafeUrlFromMatch(m[0]);
+        if (url) {
+          out +=
+            '<a href="' +
+            G.escapeAttr(url) +
+            '" target="_blank" rel="noopener noreferrer">' +
+            G.escapeHtml(m[0]) +
+            "</a>";
+        } else {
+          out += G.escapeHtml(m[0]);
+        }
+        last = m.index + m[0].length;
+      }
+      out += G.escapeHtml(s.slice(last));
+      return out;
+    }
     function staffChatFilterListForViewer(list, u) {
       if (!u) return [];
       var all = Array.isArray(list) ? list : [];
@@ -11870,11 +12069,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function staffChatMessageDedupeKey(m) {
       if (!m || typeof m !== "object") return "";
       if (m.id) return "id:" + String(m.id);
+      var kind = m.kind === "buzz" ? "buzz" : "text";
       return (
         "leg:" +
         String(m.at || "") +
         "\0" +
         String(m.userId || "") +
+        "\0" +
+        kind +
         "\0" +
         String(m.text == null ? "" : m.text).slice(0, 120)
       );
@@ -11905,6 +12107,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var m = nextV[i];
         if (!m || typeof m !== "object") continue;
         if (m.userId === u.id) continue;
+        if (m.kind === "buzz") continue;
         var nk = staffChatMessageDedupeKey(m);
         if (nk && !prevKeys[nk]) {
           hasNewFromOther = true;
@@ -12010,7 +12213,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           div.appendChild(meta);
           var txt = document.createElement("span");
           txt.className = "cg-chat-bubble-text";
-          txt.textContent = m.text == null ? "" : String(m.text);
+          if (m.kind === "buzz") {
+            div.className += " cg-chat-bubble--buzz";
+            txt.textContent = (m.userName || "Usuario") + " envió un zumbido";
+          } else {
+            txt.innerHTML = staffChatLinkifyToHtml(m.text == null ? "" : String(m.text));
+          }
           div.appendChild(txt);
           thread.appendChild(div);
         });
@@ -12020,8 +12228,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function staffChatRefreshFromStore() {
       var json = JSON.stringify(staffChatMessagesSafe());
       if (json !== staffChatLastMsgs) {
+        var prevSnap = staffChatLastMsgs;
         if (staffChatSoundInited) {
-          staffChatMaybePlayIncomingSound(staffChatLastMsgs);
+          staffChatMaybeTriggerIncomingBuzz(prevSnap);
+          staffChatMaybePlayIncomingSound(prevSnap);
         }
         staffChatLastMsgs = json;
         staffChatSoundInited = true;
@@ -12089,6 +12299,35 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       staffChatRenderThread();
       staffChatUpdateBadge();
     }
+    function staffChatSendBuzz() {
+      var u = G.currentUser();
+      if (!u) return;
+      var now = Date.now();
+      if (now - staffChatLastBuzzSentAt < STAFF_CHAT_BUZZ_SEND_COOLDOWN_MS) {
+        G.toast("Espere unos segundos antes de enviar otro zumbido.", "warn");
+        return;
+      }
+      staffChatLastBuzzSentAt = now;
+      if (!Array.isArray(G.state.staffChatMessages)) {
+        G.state.staffChatMessages = [];
+      }
+      var listBuzz = G.state.staffChatMessages.slice();
+      listBuzz.push({
+        id: G.uid(),
+        at: new Date().toISOString(),
+        userId: u.id,
+        userName: u.name,
+        role: u.role,
+        kind: "buzz",
+        text: ""
+      });
+      G.state.staffChatMessages = listBuzz;
+      staffChatLastMsgs = JSON.stringify(listBuzz);
+      if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffChatMessages");
+      staffChatMarkRead();
+      staffChatRenderThread();
+      staffChatUpdateBadge();
+    }
     function staffChatBind() {
       if (staffChatBound) return;
       var toggle = document.getElementById("cg-chat-toggle");
@@ -12140,6 +12379,20 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         });
       }
       if (form) {
+        form.addEventListener("click", function (e) {
+          var em = e.target && e.target.closest && e.target.closest(".cg-chat-emoji-btn");
+          if (!em || !form.contains(em)) return;
+          e.preventDefault();
+          var ch = em.getAttribute("data-cg-chat-emoji");
+          if (!ch || !input) return;
+          staffChatInsertAtCursor(input, ch);
+        });
+        var buzzBtn = document.getElementById("cg-chat-buzz");
+        if (buzzBtn) {
+          buzzBtn.addEventListener("click", function () {
+            staffChatSendBuzz();
+          });
+        }
         form.addEventListener("submit", function (e) {
           e.preventDefault();
           if (!input) return;
