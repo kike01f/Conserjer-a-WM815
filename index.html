@@ -4422,12 +4422,11 @@
     function canSeeModule(modId) {
       var u = currentUser();
       if (!u) return false;
+      if (!MODULES.some(function (m) { return m.id === modId; })) return false;
+      /* Administrador: acceso total a la app; los checkboxes en Control de accesos solo afinan conserjes (y el estado guardado para informes). */
+      if (u.role === "admin") return true;
       var rm = state.roleModules;
       if (!rm || typeof rm !== "object") return false;
-      if (u.role === "admin") {
-        var adm = rm.admin;
-        return Array.isArray(adm) && adm.indexOf(modId) >= 0;
-      }
       var co = rm.conserje;
       return Array.isArray(co) && co.indexOf(modId) >= 0;
     }
