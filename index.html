@@ -2827,11 +2827,13 @@
     })();
   </script>
   <!--
-    Firebase / Firestore — sincronización colaborativa (toda clave conciergeria_v1_* excepto sesión de pestaña).
-    1) Cree proyecto en https://console.firebase.google.com → Activar Firestore (modo prueba o reglas en firestore.rules).
-    2) Objeto de configuración de la app Web (equivalente a initializeApp desde el SDK modular).
-    3) Mismo CG_REMOTE_BUILDING_KEY en todos los navegadores del mismo edificio (p. ej. wm815_shared_v1).
-    4) firebase deploy --only firestore:rules (desde la carpeta del proyecto).
+    Firebase / Firestore — sincronización colaborativa (colección cg_building_shared/{edificio}/ls/*; la sesión de login no se replica).
+    Checklist multi-dispositivo (mismos datos en cualquier navegador / PC / móvil):
+    1) Mismo archivo HTML (o mismo origen) y misma CG_FIREBASE_CONFIG (proyecto Firestore activo).
+    2) Mismo CG_REMOTE_BUILDING_KEY en todos los equipos del edificio (debe coincidir con firestore.rules → buildingId).
+    3) Reglas desplegadas: firebase deploy --only firestore:rules
+    4) Abrir la app por HTTPS o localhost; file:// puede bloquear red o almacenamiento según el navegador.
+    5) Tras login, la app hace pull→push; hay listener o sondeo, push periódico y al volver a la pestaña pull+push.
   -->
   <script>
     window.CG_FIREBASE_CONFIG = {
@@ -4312,7 +4314,14 @@
                 try {
                   var u = window.CG && window.CG.currentUser && window.CG.currentUser();
                   if (u && window.CG.cloudPullAllOnce) {
-                    window.CG.cloudPullAllOnce().catch(function () {});
+                    window.CG
+                      .cloudPullAllOnce()
+                      .catch(function () {})
+                      .then(function () {
+                        if (window.CG && window.CG.cloudPushAllKeysOnce) {
+                          return window.CG.cloudPushAllKeysOnce().catch(function () {});
+                        }
+                      });
                   }
                 } catch (eVisPull) {}
               });
