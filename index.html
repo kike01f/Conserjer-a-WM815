@@ -19,9 +19,9 @@
   portapapeles por id seguro; ventanas impresión sin opener.
   ═══════════════════════════════════════════════════════════════════════════
   [HEAD]  CSS crítico → scripts tempranos (paleta, file://) → CSS principal
-         → CG_lazy (carga diferida XLSX / jsPDF+AutoTable / Chart) → Firebase Firestore (sync colaborativa, opcional)
+         → CG_lazy (carga diferida XLSX / jsPDF+AutoTable / Chart)
   [BODY]  Login + shell app (#app-main) → toasts/modales
-  [JS-1]  PART 1 — Core window.CG: window.CG_PERSIST (local/session), capa sync Firestore si cgDb está activo,
+  [JS-1]  PART 1 — Core window.CG: window.CG_PERSIST (local/session), datos solo en este navegador,
          load/save, auth PBKDF2, CG.validate (reglas reutilizables), estado, sesión, migraciones, export window.CG
   [JS-2]  Módulo Departamentos (wm815_* + UI incrustada)
   [JS-3]  PART 2 — window.CG_UI: router, nav, chat staff, alertas visitas, dashboard
@@ -152,7 +152,7 @@
          * Borra del navegador todo lo guardado por esta app en este origen:
          * todas las claves localStorage con prefijo del producto, sessionStorage usado por Conserjería
          * y el espejo en memoria (__cgMemLs) del modo solo-nube.
-         * No borra datos en Firestore (si usa sync, el remoto sigue intacto hasta que otro cliente escriba).
+         * Solo afecta al almacenamiento de este navegador.
          */
         clearAllAppBrowserStorage: function () {
           var prefix = LS;
@@ -2826,76 +2826,11 @@
       };
     })();
   </script>
-  <!--
-    Firebase / Firestore — sincronización colaborativa (colección cg_building_shared/{edificio}/ls/*; la sesión de login no se replica).
-    Checklist multi-dispositivo (mismos datos en cualquier navegador / PC / móvil):
-    1) Mismo archivo HTML (o mismo origen) y misma CG_FIREBASE_CONFIG (proyecto Firestore activo).
-    2) Mismo CG_REMOTE_BUILDING_KEY en todos los equipos del edificio (debe coincidir con firestore.rules → buildingId).
-    3) Reglas desplegadas: firebase deploy --only firestore:rules
-    4) Abrir la app por HTTPS o localhost; file:// puede bloquear red o almacenamiento según el navegador.
-    5) Tras login, la app hace pull→push; hay listener o sondeo, push periódico y al volver a la pestaña pull+push.
-  -->
   <script>
-    window.CG_FIREBASE_CONFIG = {
-      apiKey: "AIzaSyBBkY-w561wlQdxcKmMPLhAPMlJEHjgq68",
-      authDomain: "conserjeriawm815-80403.firebaseapp.com",
-      projectId: "conserjeriawm815-80403",
-      storageBucket: "conserjeriawm815-80403.firebasestorage.app",
-      messagingSenderId: "327084949184",
-      appId: "1:327084949184:web:909fb4ccf25a269b313725"
-    };
-    /** Identificador del edificio en Firestore: cg_building_shared/{CG_REMOTE_BUILDING_KEY}/ls/{claveApp} */
-    window.CG_REMOTE_BUILDING_KEY =
-      typeof window.CG_REMOTE_BUILDING_KEY === "string" && window.CG_REMOTE_BUILDING_KEY.length > 0
-        ? window.CG_REMOTE_BUILDING_KEY
-        : "wm815_shared_v1";
-    /** true = onSnapshot en toda la colección ls (tiempo real). Si el SDK falla, la app pasa a sondeo. */
-    window.CG_REMOTE_USE_REALTIME_LISTENER = true;
-    window.CG_CLOUD_ONLY_STORAGE = false;
+    /** Sin nube: todos los datos quedan en localStorage de este navegador. */
     window.cgApp = null;
     window.cgDb = null;
     window.CG_CLOUD_SYNC_ENABLED = false;
-    (function __cgFirebasePreCheck() {
-      var c = window.CG_FIREBASE_CONFIG;
-      if (!c || typeof c !== "object") return;
-      var ak = String(c.apiKey || "");
-      var pid = String(c.projectId || "");
-      if (!ak || ak.indexOf("REEMPLACE") !== -1) return;
-      if (!pid || pid.indexOf("REEMPLACE") !== -1) return;
-      window.CG_CLOUD_SYNC_ENABLED = true;
-    })();
-  </script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-  <script>
-    (function __cgFirebaseInit() {
-      if (!window.CG_CLOUD_SYNC_ENABLED) {
-        window.cgDb = null;
-        console.warn(
-          "[CG] Sincronización Firebase desactivada: complete window.CG_FIREBASE_CONFIG en el <head> (sin placeholders REEMPLACE_*)."
-        );
-        return;
-      }
-      try {
-        if (typeof firebase === "undefined" || !firebase.initializeApp) {
-          throw new Error("firebase-app-compat no cargó");
-        }
-        if (!firebase.apps.length) {
-          firebase.initializeApp(window.CG_FIREBASE_CONFIG);
-        }
-        window.cgApp = firebase.app();
-        window.cgDb = firebase.firestore();
-        window.CG_CLOUD_SYNC_ENABLED = true;
-        console.info(
-          "[CG] Firestore conectado · edificio remoto:",
-          window.CG_REMOTE_BUILDING_KEY || "wm815_shared_v1"
-        );
-      } catch (e) {
-        console.error("[CG] Error inicializando Firebase:", e);
-        window.cgDb = null;
-        window.CG_CLOUD_SYNC_ENABLED = false;
-      }
-    })();
   </script>
 </head>
 <body>
@@ -3032,8 +2967,7 @@
   <script>
   /* === PART 1: storage, state, auth ===
    * Instalación limpia: sin usuarios ni datos de prueba precargados (primer administrador en el login).
-   * Sincronización: si Firebase está configurado en el <head>, cada clave G.save → Firestore
-   * (cg_building_shared/{CG_REMOTE_BUILDING_KEY}/ls/*) con listener en tiempo real o sondeo de respaldo.
+   * Persistencia: solo localStorage / sessionStorage en este origen.
    */
   (function () {
     /* ┌─ 1. Constantes de producto (LS, módulos, categorías, IDs fijos) ───────────────── */
@@ -3059,22 +2993,16 @@
     /** Destino fijo para proveedores / administración; no es unidad del registro de residentes (wm815). */
     const ADMIN_UNIT_ID = "cg_virtual_admin";
 
-    /* ┌─ 2. Sincronización remota Firestore (activa si window.cgDb y CG_CLOUD_SYNC_ENABLED tras init en <head>) ── */
-    var CG_CLOUD_SYNC_ENABLED =
-      typeof window.CG_CLOUD_SYNC_ENABLED === "boolean" ? window.CG_CLOUD_SYNC_ENABLED : true;
-    var CG_CLOUD_BUILDING_KEY =
-      typeof window.CG_REMOTE_BUILDING_KEY === "string" && window.CG_REMOTE_BUILDING_KEY.length > 0
-        ? window.CG_REMOTE_BUILDING_KEY
-        : "wm815_shared_v1";
-    var CG_CLOUD_ONLY_STORAGE =
-      typeof window.CG_CLOUD_ONLY_STORAGE === "boolean" ? window.CG_CLOUD_ONLY_STORAGE : false;
-    /** Sesión de login en el navegador (pestaña); no se replica al servidor en esta copia. */
+    /* ┌─ 2. Solo almacenamiento local (sin sincronización en la nube) ─────────────────── */
+    var CG_CLOUD_SYNC_ENABLED = false;
+    var CG_CLOUD_BUILDING_KEY = "";
+    var CG_CLOUD_ONLY_STORAGE = false;
     var CG_SESSION_BROWSER_KEY = "cg_tab_session_v1";
     window.__cgMemLs = window.__cgMemLs || {};
     var __cgMemLs = window.__cgMemLs;
 
     function __cgEffectiveCloudOnly() {
-      return !!(CG_CLOUD_ONLY_STORAGE && CG_CLOUD_SYNC_ENABLED && window.cgDb);
+      return false;
     }
 
     (function __cgInstallLsPersistLayer() {
@@ -3141,75 +3069,13 @@
       };
     })();
 
-    function __cgStripLegacyLocalStorageLsPrefix() {
-      if (!__cgEffectiveCloudOnly()) return;
-      try {
-        var rm = [];
-        var ix;
-        for (ix = 0; ix < localStorage.length; ix++) {
-          var k = localStorage.key(ix);
-          if (k && k.indexOf(LS) === 0) rm.push(k);
-        }
-        for (ix = 0; ix < rm.length; ix++) localStorage.removeItem(rm[ix]);
-      } catch (eZ) {}
-    }
+    function __cgStripLegacyLocalStorageIfCloudOnly() {}
 
-    /**
-     * Copia claves CG.LS desde localStorage a __cgMemLs cuando el modo solo-nube está activo.
-     * Se llama antes del pull inicial y si el pull falla; con espejo LS en localSetRaw los datos sobreviven al recargar.
-     */
-    function __cgHydrateMemLsFromLocalStorageBackup() {
-      if (!__cgEffectiveCloudOnly()) return;
-      try {
-        var ix;
-        for (ix = 0; ix < localStorage.length; ix++) {
-          var k = localStorage.key(ix);
-          if (!k || k.indexOf(LS) !== 0) continue;
-          var sk = k.slice(LS.length);
-          if (sk === "session") continue;
-          if (Object.prototype.hasOwnProperty.call(__cgMemLs, sk)) continue;
-          var v = localStorage.getItem(k);
-          if (v != null) __cgMemLs[sk] = v;
-        }
-      } catch (eH) {}
-    }
+    function __cgHydrateMemLsFromLocalStorageBackup() {}
 
-    /**
-     * Estado interno del sync (servidor remoto ↔ memoria / LS según modo). No mezclar con UI.
-     * Estrategia: last-write-wins en documentos ls/{key}; merge explícito solo en shiftLogs (tramos abiertos locales).
-     */
-    /** Metadato local: ids borrados aún no confirmados en Firestore; no se sube como doc `ls`. */
     var __CG_LS_KEY_PENDING_DELETED = "__cgPendingDeleted";
     var CG_SYNC_STATE = {
       pullSkipKeys: { session: true, __cgPendingDeleted: true },
-      /** Tras subir users/roleModules: ignorar pulls remotos de esa clave hasta este timestamp (evita que el polling pise altas recientes). */
-      lsPullQuietUntil: {},
-      /** Anti-rafaga: último cloudPullAllOnce al volver a la pestaña (visibility). */
-      lastVisiblePullAt: 0,
-      applyingRemote: false,
-      remoteApplyDepth: 0,
-      unsubscribe: null,
-      periodicPushTimer: null,
-      pushTimers: {},
-      /** Cadena Promise: evita saturar el stream del SDK remoto (resource-exhausted / cola de writes). */
-      writeSerialTail: null,
-      listenerRetryTimer: null,
-      listenerFailures: 0,
-      initGeneration: 0,
-      lastInitResult: null,
-      /** Una sola promesa de pull global: dos col.get() concurrentes rompen el SDK 11.x ("Unexpected state"). */
-      pullAllInFlight: null,
-      /** Evita registrar onSnapshot en el mismo tick que unsubscribe (otra fuente de "Unexpected state" en 11.x). */
-      listenerAttachGen: 0,
-      /** Si true: sin onSnapshot; solo cloudPullAllOnce periódico (mitiga bugs del watch en algunos navegadores). */
-      preferPollingSync: false,
-      pollingTimer: null,
-      /** Durante initCloudSync no encolar escrituras sueltas (evita carrera con pull/listener). */
-      syncInitActive: false,
-      pendingPushAfterInit: {},
-      /** true = esta clave tiene cambios locales aún no confirmados en Firestore; el pull usa fusión. Si es false, el remoto sustituye al local (los borrados del admin no reaparecen al reiniciar). */
-      lsKeyDirty: {},
-      /** Por clave LS: ids borrados aquí pero aún no reflejados en el remoto; se ignoran en el merge para que no vuelvan al instante. */
       pendingDeletedIdsByKey: {}
     };
 
@@ -3258,11 +3124,6 @@
       } catch (eL) {}
     }
 
-    function __cgHasPendingDeletedFor(lsKey) {
-      var p = CG_SYNC_STATE.pendingDeletedIdsByKey && CG_SYNC_STATE.pendingDeletedIdsByKey[lsKey];
-      return !!(p && typeof p === "object" && Object.keys(p).length > 0);
-    }
-
     __cgLoadPendingDeletedFromStorage();
 
     function __cgSyncLog(level, code, detail) {
@@ -3276,554 +3137,14 @@
           tail = " " + String(detail);
         }
       }
-      var line = "[CG.sync/" + code + "]" + tail;
-      if (level === "warn") console.warn(line);
-      else console.info(line);
+      var line = "[CG]" + tail;
+      if (level === "warn") console.warn(line, code);
+      else console.info(line, code);
     }
 
-    function __cgIsRetriableSyncError(err) {
-      var c = err && err.code;
-      return (
-        c === "unavailable" ||
-        c === "deadline-exceeded" ||
-        c === "resource-exhausted" ||
-        c === "aborted" ||
-        c === "cancelled"
-      );
-    }
+    function __cgMarkLsKeyDirty() {}
 
-    /** Reintento con backoff exponencial para operaciones que devuelven Promise. */
-    function __cgRetryPromise(tag, fn, maxAttempts, baseMs) {
-      maxAttempts = maxAttempts || 3;
-      baseMs = baseMs || 500;
-      function attempt(n) {
-        return fn().catch(function (err) {
-          if (n >= maxAttempts) return Promise.reject(err);
-          if (!__cgIsRetriableSyncError(err)) return Promise.reject(err);
-          var delay = Math.min(30000, baseMs * Math.pow(2, n - 1));
-          __cgSyncLog("info", "retry_" + tag, "intento " + (n + 1) + "/" + maxAttempts + " en " + delay + "ms");
-          return new Promise(function (resolve) {
-            setTimeout(function () {
-              resolve(attempt(n + 1));
-            }, delay);
-          });
-        });
-      }
-      return attempt(1);
-    }
-
-    function __cgCloudSanitizeDocId(shortKey) {
-      return String(shortKey || "").replace(/[/\\]/g, "_").slice(0, 700);
-    }
-
-    function __cgCloudLsCol() {
-      if (!window.cgDb || !CG_CLOUD_BUILDING_KEY) return null;
-      return window.cgDb
-        .collection("cg_building_shared")
-        .doc(CG_CLOUD_BUILDING_KEY)
-        .collection("ls");
-    }
-
-    function __cgNoCloudFieldApi() {
-      try {
-        if (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue) {
-          return firebase.firestore.FieldValue;
-        }
-      } catch (eFv) {}
-      return null;
-    }
-
-    /** Una clave → un documento en cg_building_shared/{building}/ls/{id}. */
-    function __cgCloudPushSingleDoc(shortKey, raw) {
-      var col = __cgCloudLsCol();
-      if (!col) return Promise.reject({ code: "no_col", message: "Sin colección ls" });
-      var FV = __cgNoCloudFieldApi();
-      if (!FV) return Promise.reject({ code: "no_fv" });
-      var id = __cgCloudSanitizeDocId(shortKey);
-      return col.doc(id).set(
-        { key: shortKey, value: raw, updatedAt: FV.serverTimestamp() },
-        { merge: true }
-      );
-    }
-
-    function __cgBeginRemoteApply() {
-      CG_SYNC_STATE.remoteApplyDepth++;
-      CG_SYNC_STATE.applyingRemote = true;
-    }
-
-    function __cgEndRemoteApply() {
-      CG_SYNC_STATE.remoteApplyDepth = Math.max(0, CG_SYNC_STATE.remoteApplyDepth - 1);
-      CG_SYNC_STATE.applyingRemote = CG_SYNC_STATE.remoteApplyDepth > 0;
-    }
-
-    function __cgMarkPushDeferredDuringInit() {
-      CG_SYNC_STATE.syncInitActive = true;
-      var keys = Object.keys(CG_SYNC_STATE.pushTimers);
-      var i;
-      for (i = 0; i < keys.length; i++) {
-        var sk = keys[i];
-        clearTimeout(CG_SYNC_STATE.pushTimers[sk]);
-        delete CG_SYNC_STATE.pushTimers[sk];
-        CG_SYNC_STATE.pendingPushAfterInit[sk] = true;
-      }
-    }
-
-    function __cgFlushDeferredPushesAfterInit() {
-      CG_SYNC_STATE.syncInitActive = false;
-      var pend = CG_SYNC_STATE.pendingPushAfterInit;
-      CG_SYNC_STATE.pendingPushAfterInit = {};
-      var k;
-      for (k in pend) {
-        if (pend[k]) scheduleCloudWrite(k);
-      }
-    }
-
-    function scheduleCloudWrite(shortKey) {
-      /* No usar CG_SYNC_STATE.applyingRemote aquí: al aplicar el pull/listener el usuario puede editar
-         (p. ej. Personal) y esas subidas no deben perderse. applyRemoteLsDoc no llama a save(). */
-      if (shortKey === "session") return;
-      if (!CG_CLOUD_SYNC_ENABLED) return;
-      if (!window.cgDb || !__cgNoCloudFieldApi()) return;
-      if (CG_SYNC_STATE.syncInitActive) {
-        CG_SYNC_STATE.pendingPushAfterInit[shortKey] = true;
-        return;
-      }
-      clearTimeout(CG_SYNC_STATE.pushTimers[shortKey]);
-      CG_SYNC_STATE.pushTimers[shortKey] = setTimeout(function () {
-        __cgCloudPushKeyNow(shortKey);
-      }, 650);
-    }
-
-    var __CG_PUSH_KEY_MAX = 5;
-    var __CG_PUSH_KEY_BASE_MS = 700;
-    /** Pausa entre escrituras sueltas al stream (ms); reduce resource-exhausted en clientes lentos o muchas claves. */
-    var __CG_PUSH_SERIAL_GAP_MS = 90;
-    /** Tamaño de lote en push masivo (máx. típ. 500 por lote; lotes pequeños + pausa alivian la cola interna). */
-    var __CG_CLOUD_BATCH_SIZE = 80;
-    var __CG_CLOUD_BATCH_PAUSE_MS = 200;
-
-    function __cgPushSerialDelay() {
-      return new Promise(function (r) {
-        setTimeout(r, __CG_PUSH_SERIAL_GAP_MS);
-      });
-    }
-
-    /**
-     * Encola fn() tras la escritura anterior; pausa breve entre operaciones para no llenar la cola del SDK.
-     * Devuelve la Promise del trabajo (fallos no detienen la cola).
-     */
-    function __cgSerialCloudWrite(fn) {
-      if (!CG_SYNC_STATE.writeSerialTail) CG_SYNC_STATE.writeSerialTail = Promise.resolve();
-      var userP = CG_SYNC_STATE.writeSerialTail.then(function () {
-        return fn();
-      });
-      CG_SYNC_STATE.writeSerialTail = userP
-        .then(
-          function () {
-            return __cgPushSerialDelay();
-          },
-          function (e) {
-            return __cgPushSerialDelay().then(function () {
-              throw e;
-            });
-          }
-        )
-        .catch(function () {
-          return Promise.resolve();
-        });
-      return userP;
-    }
-
-    function __cgCloudPushKeyNow(shortKey) {
-      if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb || !__cgNoCloudFieldApi()) return;
-      if (CG_SYNC_STATE.syncInitActive) {
-        CG_SYNC_STATE.pendingPushAfterInit[shortKey] = true;
-        return;
-      }
-      __cgSerialCloudWrite(function () {
-        var full = LS + shortKey;
-
-        function runAttempt(attemptIdx) {
-          var raw = P.localGetRaw(full);
-          if (raw === null) return Promise.resolve();
-          return __cgCloudPushSingleDoc(shortKey, raw).then(
-            function () {
-              __cgClearLsKeyDirty(shortKey);
-              __cgClearPendingDeletedLsKey(shortKey);
-              if (attemptIdx > 0) __cgSyncLog("info", "push_key_ok_after_retry", shortKey);
-            },
-            function (err) {
-              if (attemptIdx >= __CG_PUSH_KEY_MAX || !__cgIsRetriableSyncError(err)) {
-                __cgSyncLog("warn", "push_key_failed", shortKey + " " + (err && err.code ? err.code : err));
-                return Promise.resolve();
-              }
-              var ms = Math.min(25000, __CG_PUSH_KEY_BASE_MS * Math.pow(2, attemptIdx));
-              if (err && err.code === "resource-exhausted") {
-                ms = Math.max(ms, 4000);
-              }
-              __cgSyncLog("info", "push_key_retry", shortKey + " " + (attemptIdx + 1) + "/" + __CG_PUSH_KEY_MAX + " +" + ms + "ms");
-              return new Promise(function (r) {
-                setTimeout(r, ms);
-              }).then(function () {
-                return runAttempt(attemptIdx + 1);
-              });
-            }
-          );
-        }
-        return runAttempt(0);
-      });
-    }
-
-    /**
-     * Sube una clave al servidor remoto y devuelve una Promise (para feedback tras cambiar la clave de Estadística).
-     * Sin conexión al servidor o sin permisos: ok/skipped o ok:false según el caso.
-     */
-    function cloudPushLsKeyPromise(shortKey) {
-      return new Promise(function (resolve) {
-        try {
-          if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb || !__cgNoCloudFieldApi()) {
-            resolve({ ok: true, skipped: true, reason: "no_cloud" });
-            return;
-          }
-          __cgSerialCloudWrite(function () {
-            var full = LS + shortKey;
-            if (P.localGetRaw(full) === null) {
-              resolve({ ok: false, reason: "missing_local" });
-              return Promise.resolve();
-            }
-            return __cgRetryPromise(
-              "pushLsKey:" + shortKey,
-              function () {
-                var r = P.localGetRaw(full);
-                if (r === null) return Promise.reject({ code: "missing_local" });
-                return __cgCloudPushSingleDoc(shortKey, r);
-              },
-              4,
-              800
-            )
-              .then(function () {
-                __cgClearLsKeyDirty(shortKey);
-                __cgClearPendingDeletedLsKey(shortKey);
-                if (shortKey === "users" || shortKey === "roleModules") {
-                  CG_SYNC_STATE.lsPullQuietUntil = CG_SYNC_STATE.lsPullQuietUntil || {};
-                  var prevQ = CG_SYNC_STATE.lsPullQuietUntil[shortKey] || 0;
-                  CG_SYNC_STATE.lsPullQuietUntil[shortKey] = Math.max(prevQ, Date.now() + 18000);
-                }
-                resolve({ ok: true, skipped: false });
-              })
-              .catch(function (err) {
-                __cgSyncLog("warn", "push_ls_key", shortKey + " " + (err && err.code ? err.code : err));
-                resolve({ ok: false, reason: "remote_sync_error", err: err });
-              });
-          }).catch(function (ePush) {
-            __cgSyncLog("warn", "push_ls_key_exception", ePush);
-            resolve({ ok: false, reason: "exception", err: ePush });
-          });
-        } catch (ePush) {
-          __cgSyncLog("warn", "push_ls_key_exception", ePush);
-          resolve({ ok: false, reason: "exception", err: ePush });
-        }
-      });
-    }
-
-    /** Tras guardar personal/permisos por vía distinta a cloudPushLsKeyPromise, evita que un pull inmediato pise datos. */
-    function armLsKeyPullQuiet(shortKey, ms) {
-      if (!shortKey || (shortKey !== "users" && shortKey !== "roleModules")) return;
-      ms = typeof ms === "number" && ms > 0 ? ms : 18000;
-      CG_SYNC_STATE.lsPullQuietUntil = CG_SYNC_STATE.lsPullQuietUntil || {};
-      var until = Date.now() + ms;
-      var prev = CG_SYNC_STATE.lsPullQuietUntil[shortKey] || 0;
-      CG_SYNC_STATE.lsPullQuietUntil[shortKey] = Math.max(prev, until);
-    }
-
-    function cloudSyncAfterDirectLocalStorageWrite(shortKey) {
-      __cgMarkLsKeyDirty(shortKey);
-      scheduleCloudWrite(shortKey);
-    }
-
-    function flushPendingCloudWritesNow() {
-      var keys = Object.keys(CG_SYNC_STATE.pushTimers);
-      var i;
-      for (i = 0; i < keys.length; i++) {
-        var sk = keys[i];
-        clearTimeout(CG_SYNC_STATE.pushTimers[sk]);
-        delete CG_SYNC_STATE.pushTimers[sk];
-        if (CG_SYNC_STATE.syncInitActive) {
-          CG_SYNC_STATE.pendingPushAfterInit[sk] = true;
-        } else {
-          __cgCloudPushKeyNow(sk);
-        }
-      }
-    }
-
-    function cloudPushKeyImmediate(shortKey) {
-      if (shortKey === "session") return;
-      if (!CG_CLOUD_SYNC_ENABLED) return;
-      if (!window.cgDb || !__cgNoCloudFieldApi()) return;
-      if (CG_SYNC_STATE.pushTimers[shortKey]) {
-        clearTimeout(CG_SYNC_STATE.pushTimers[shortKey]);
-        delete CG_SYNC_STATE.pushTimers[shortKey];
-      }
-      if (CG_SYNC_STATE.syncInitActive) {
-        CG_SYNC_STATE.pendingPushAfterInit[shortKey] = true;
-        return;
-      }
-      __cgCloudPushKeyNow(shortKey);
-    }
-
-    function __cgScheduleListenerRestart() {
-      if (CG_SYNC_STATE.listenerRetryTimer) return;
-      if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return;
-      if (CG_SYNC_STATE.preferPollingSync) {
-        __cgActivatePollingSync("scheduled_retry");
-        return;
-      }
-      var n = Math.min(CG_SYNC_STATE.listenerFailures || 0, 8);
-      var delay = Math.min(60000, 800 * Math.pow(2, n));
-      __cgSyncLog("info", "listener_scheduled_restart", "en " + delay + "ms");
-      CG_SYNC_STATE.listenerRetryTimer = setTimeout(function () {
-        CG_SYNC_STATE.listenerRetryTimer = null;
-        if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return;
-        try {
-          startCloudSyncListener();
-        } catch (eR) {
-          __cgSyncLog("warn", "listener_restart_failed", eR);
-        }
-      }, delay);
-    }
-
-    function cloudSyncAbortInFlight() {
-      CG_SYNC_STATE.initGeneration++;
-      CG_SYNC_STATE.listenerFailures = 0;
-      if (CG_SYNC_STATE.syncInitActive) {
-        try {
-          __cgFlushDeferredPushesAfterInit();
-        } catch (eFl) {}
-      }
-    }
-
-    function getCloudSyncLastInitResult() {
-      var r = CG_SYNC_STATE.lastInitResult;
-      if (!r) return null;
-      return {
-        ok: r.ok,
-        partial: r.partial,
-        phases: r.phases,
-        listenerStarted: r.listenerStarted,
-        reason: r.reason
-      };
-    }
-
-    function stopCloudSyncListener() {
-      if (CG_SYNC_STATE.listenerRetryTimer) {
-        try {
-          clearTimeout(CG_SYNC_STATE.listenerRetryTimer);
-        } catch (eT) {}
-        CG_SYNC_STATE.listenerRetryTimer = null;
-      }
-      if (typeof CG_SYNC_STATE.unsubscribe === "function") {
-        try {
-          CG_SYNC_STATE.unsubscribe();
-        } catch (eU) {}
-      }
-      CG_SYNC_STATE.unsubscribe = null;
-      if (CG_SYNC_STATE.pollingTimer != null) {
-        try {
-          clearInterval(CG_SYNC_STATE.pollingTimer);
-        } catch (ePoll) {}
-        CG_SYNC_STATE.pollingTimer = null;
-      }
-      if (CG_SYNC_STATE.periodicPushTimer !== null) {
-        try {
-          clearInterval(CG_SYNC_STATE.periodicPushTimer);
-        } catch (eI) {}
-        CG_SYNC_STATE.periodicPushTimer = null;
-      }
-      detachStaffChatRemoteSync();
-    }
-
-    /** Tramo de shiftLog sin cierre (compartido con CG_UI vía window.CG). */
-    function shiftLogTramoIsOpen(s) {
-      return !!(s && (s.endAt == null || s.endAt === ""));
-    }
-
-    /**
-     * El pull inicial a veces trae shiftLogs antiguos sin el tramo abierto recién guardado en local.
-     * Reincorpora tramos abiertos de conserje que existen en local pero no vienen en el JSON remoto (por id).
-     * Si el remoto ya incluye el mismo id (cerrado o abierto), se respeta el remoto.
-     */
-    function __cgMergeShiftLogsPullPreserveLocalOpen(curJson, incomingJson) {
-      var local = [];
-      var inc = [];
-      try {
-        local = JSON.parse(curJson || "[]");
-      } catch (e1) {
-        local = [];
-      }
-      try {
-        inc = JSON.parse(incomingJson || "[]");
-      } catch (e2) {
-        return incomingJson;
-      }
-      inc = __cgArrayFilterPendingDeleted("shiftLogs", inc);
-      if (!Array.isArray(local) || !Array.isArray(inc)) return incomingJson;
-
-      var incIds = {};
-      var ii;
-      for (ii = 0; ii < inc.length; ii++) {
-        var si = inc[ii];
-        if (si && si.id) incIds[si.id] = true;
-      }
-
-      var extras = [];
-      var li;
-      for (li = 0; li < local.length; li++) {
-        var L = local[li];
-        if (!L || !L.id || !shiftLogTramoIsOpen(L)) continue;
-        if (L.role && L.role !== "conserje") continue;
-        if (incIds[L.id]) continue;
-        extras.push(L);
-      }
-      if (extras.length === 0) return incomingJson;
-
-      var merged = inc.concat(extras);
-      merged.sort(function (a, b) {
-        return new Date((a && a.startAt) || 0) - new Date((b && b.startAt) || 0);
-      });
-      return JSON.stringify(merged);
-    }
-
-    /** Clave estable para unir mensajes locales y remotos sin perder conversación (last-write-wins puro pisaba al otro equipo). */
-    function __cgStaffChatDedupeKey(m) {
-      if (m && typeof m === "object" && m.id) return "id:" + String(m.id);
-      var at = m && m.at ? String(m.at) : "";
-      var uid = m && m.userId ? String(m.userId) : "";
-      var tx = m && m.text != null ? String(m.text) : "";
-      return "leg:" + at + "\0" + uid + "\0" + tx.slice(0, 240);
-    }
-
-    /**
-     * Une mensajes del canal conserje↔admin por id (huella legada). El documento remoto guarda el hilo completo;
-     * la UI filtra por rol (cada conserje solo ve lo suyo + admin). Si el remoto es [] se respeta (vaciar desde admin).
-     */
-    function __cgMergeStaffChatPull(curRaw, incomingRaw) {
-      var loc = [];
-      var rem = [];
-      try {
-        loc = JSON.parse(curRaw || "[]");
-      } catch (e1) {
-        loc = [];
-      }
-      try {
-        rem = JSON.parse(incomingRaw || "[]");
-      } catch (e2) {
-        return typeof incomingRaw === "string" ? incomingRaw : "[]";
-      }
-      if (!Array.isArray(loc)) loc = [];
-      if (!Array.isArray(rem)) return typeof incomingRaw === "string" ? incomingRaw : "[]";
-      if (rem.length === 0) return "[]";
-      var pd = CG_SYNC_STATE.pendingDeletedIdsByKey && CG_SYNC_STATE.pendingDeletedIdsByKey["staffChatMessages"];
-      function staffChatSkipPending(m) {
-        if (!m || !pd) return false;
-        return !!pd[__cgStaffChatDedupeKey(m)];
-      }
-      var byId = Object.create(null);
-      var i;
-      for (i = 0; i < loc.length; i++) {
-        var a = loc[i];
-        if (!a || typeof a !== "object") continue;
-        if (staffChatSkipPending(a)) continue;
-        byId[__cgStaffChatDedupeKey(a)] = a;
-      }
-      for (i = 0; i < rem.length; i++) {
-        var b = rem[i];
-        if (!b || typeof b !== "object") continue;
-        if (staffChatSkipPending(b)) continue;
-        byId[__cgStaffChatDedupeKey(b)] = b;
-      }
-      var merged = [];
-      for (var k in byId) {
-        if (Object.prototype.hasOwnProperty.call(byId, k)) merged.push(byId[k]);
-      }
-      merged.sort(function (x, y) {
-        return new Date((x && x.at) || 0) - new Date((y && y.at) || 0);
-      });
-      return JSON.stringify(merged);
-    }
-
-    function __cgShouldSkipEmptyRemoteRoleModules(curRaw, incRaw) {
-      var inc;
-      try {
-        inc = JSON.parse(incRaw || "{}");
-      } catch (eI2) {
-        return false;
-      }
-      if (!inc || typeof inc !== "object" || Array.isArray(inc) || Object.keys(inc).length > 0) return false;
-      var cur;
-      try {
-        cur = JSON.parse(curRaw || "{}");
-      } catch (eC2) {
-        return false;
-      }
-      return !!(cur && typeof cur === "object" && !Array.isArray(cur) && Object.keys(cur).length > 0);
-    }
-
-    function __cgShouldSkipEmptyRemoteArray(curRaw, incRaw) {
-      var inc = [];
-      try {
-        inc = JSON.parse(incRaw || "[]");
-      } catch (eIa) {
-        return false;
-      }
-      if (!Array.isArray(inc) || inc.length !== 0) return false;
-      var cur = [];
-      try {
-        cur = JSON.parse(curRaw || "[]");
-      } catch (eCa) {
-        return false;
-      }
-      return Array.isArray(cur) && cur.length > 0;
-    }
-
-    /**
-     * Listas de negocio: al hacer pull, unir por `id` (el remoto gana en conflicto; se conservan filas solo locales).
-     * Evita que dos equipos se pisen mutuamente y reduce pérdida de datos frente a last-write-wins puro.
-     */
-    var __CG_LS_MERGE_ARRAY_BY_ID = {
-      departments: true,
-      parkingSlots: true,
-      bodegas: true,
-      visits: true,
-      reservas: true,
-      novedades: true,
-      encomiendas: true,
-      proveedores: true,
-      buildingUnits: true,
-      buildingResidents: true,
-      buildingFormerResidents: true,
-      buildingParking: true,
-      conserjeActivityLog: true,
-      wm815_units: true,
-      wm815_former_residents: true
-    };
-
-    function __cgMarkLsKeyDirty(shortKey) {
-      if (!shortKey || shortKey === "session") return;
-      if (
-        shortKey !== "users" &&
-        shortKey !== "roleModules" &&
-        shortKey !== "visitVehAlertLog" &&
-        !__CG_LS_MERGE_ARRAY_BY_ID[shortKey]
-      ) {
-        return;
-      }
-      CG_SYNC_STATE.lsKeyDirty[shortKey] = true;
-    }
-
-    function __cgClearLsKeyDirty(shortKey) {
-      if (!shortKey || !CG_SYNC_STATE.lsKeyDirty) return;
-      delete CG_SYNC_STATE.lsKeyDirty[shortKey];
-    }
+    function __cgClearLsKeyDirty() {}
 
     function __cgRegisterPendingDeletedLsKey(lsKey, itemId) {
       if (!lsKey || itemId == null || String(itemId) === "") return;
@@ -3838,794 +3159,61 @@
       __cgPersistPendingDeletedToStorage();
     }
 
-    function __cgArrayFilterPendingDeleted(lsKey, arr) {
-      var pd = CG_SYNC_STATE.pendingDeletedIdsByKey && CG_SYNC_STATE.pendingDeletedIdsByKey[lsKey];
-      if (!pd || !Array.isArray(arr) || !arr.length) return arr;
-      return arr.filter(function (u) {
-        if (!u || u.id == null || u.id === "") return true;
-        return !pd[String(u.id)];
+    function __cgStaffChatDedupeKey(m) {
+      if (m && typeof m === "object" && m.id) return "id:" + String(m.id);
+      var at = m && m.at ? String(m.at) : "";
+      var uid = m && m.userId ? String(m.userId) : "";
+      var tx = m && m.text != null ? String(m.text) : "";
+      return "leg:" + at + "\0" + uid + "\0" + tx.slice(0, 240);
+    }
+
+    function scheduleCloudWrite() {}
+
+    function initCloudSync() {
+      return Promise.resolve({
+        ok: false,
+        reason: "disabled",
+        partial: false,
+        phases: {},
+        listenerStarted: false
       });
     }
 
-    /** Objetos mapa (p. ej. alertas por id de visita): unir remoto+local y eliminar claves marcadas como borradas pendientes de sync. */
-    function __cgMergeVisitVehAlertLogPull(curRaw, incRaw) {
-      var cur = {};
-      var inc = {};
-      try {
-        cur = JSON.parse(curRaw || "{}");
-      } catch (eC) {
-        cur = {};
-      }
-      try {
-        inc = JSON.parse(incRaw || "{}");
-      } catch (eI) {
-        return typeof incRaw === "string" ? incRaw : "{}";
-      }
-      if (!cur || typeof cur !== "object" || Array.isArray(cur)) cur = {};
-      if (!inc || typeof inc !== "object" || Array.isArray(inc)) return typeof incRaw === "string" ? incRaw : "{}";
-      var pend = CG_SYNC_STATE.pendingDeletedIdsByKey && CG_SYNC_STATE.pendingDeletedIdsByKey["visitVehAlertLog"];
-      var out = Object.create(null);
-      var k;
-      for (k in inc) {
-        if (!Object.prototype.hasOwnProperty.call(inc, k)) continue;
-        if (pend && pend[k]) continue;
-        out[k] = inc[k];
-      }
-      for (k in cur) {
-        if (!Object.prototype.hasOwnProperty.call(cur, k)) continue;
-        if (pend && pend[k]) continue;
-        out[k] = cur[k];
-      }
-      return JSON.stringify(out);
-    }
+    function stopCloudSyncListener() {}
 
-    /** Objetos JSON: no aplicar `{}` remoto si el local ya tiene claves (misma lógica que roleModules). */
-    var __CG_LS_PROTECT_EMPTY_OBJECT = {
-      config: true,
-      visitVehAlertLog: true,
-      chatLastReadByUser: true,
-      personalization: true,
-      parkingConfig: true,
-      deptAdminGateVerifier: true
-    };
+    function attachStaffChatRemoteSync() {}
 
-    function __cgMergeRemoteLsArrayById(curRaw, incRaw, lsKeyOpt) {
-      var cur = [];
-      var inc = [];
-      try {
-        cur = JSON.parse(curRaw || "[]");
-      } catch (eC) {
-        cur = [];
-      }
-      try {
-        inc = JSON.parse(incRaw || "[]");
-      } catch (eI) {
-        return typeof incRaw === "string" ? incRaw : "[]";
-      }
-      if (lsKeyOpt) {
-        inc = __cgArrayFilterPendingDeleted(lsKeyOpt, inc);
-        cur = __cgArrayFilterPendingDeleted(lsKeyOpt, cur);
-      }
-      if (!Array.isArray(cur) || !Array.isArray(inc)) return typeof incRaw === "string" ? incRaw : "[]";
-      if (inc.length === 0) return cur.length ? JSON.stringify(cur) : typeof incRaw === "string" ? incRaw : "[]";
-      if (cur.length === 0) return JSON.stringify(inc);
-      var byId = Object.create(null);
-      var i;
-      var u;
-      var k;
-      for (i = 0; i < inc.length; i++) {
-        u = inc[i];
-        if (u && u.id != null && u.id !== "") byId[String(u.id)] = u;
-      }
-      for (i = 0; i < cur.length; i++) {
-        u = cur[i];
-        if (!u || u.id == null || u.id === "") continue;
-        k = String(u.id);
-        if (!byId[k]) byId[k] = u;
-      }
-      var order = [];
-      var seen = Object.create(null);
-      for (i = 0; i < inc.length; i++) {
-        u = inc[i];
-        if (u && u.id != null && u.id !== "") {
-          k = String(u.id);
-          if (!seen[k]) {
-            order.push(byId[k]);
-            seen[k] = true;
-          }
-        }
-      }
-      for (i = 0; i < cur.length; i++) {
-        u = cur[i];
-        if (!u || u.id == null || u.id === "") continue;
-        k = String(u.id);
-        if (!seen[k]) {
-          order.push(byId[k]);
-          seen[k] = true;
-        }
-      }
-      var tail = [];
-      for (i = 0; i < inc.length; i++) {
-        u = inc[i];
-        if (u && (u.id == null || u.id === "")) tail.push(u);
-      }
-      for (i = 0; i < cur.length; i++) {
-        u = cur[i];
-        if (u && (u.id == null || u.id === "")) tail.push(u);
-      }
-      return JSON.stringify(order.concat(tail));
-    }
+    function detachStaffChatRemoteSync() {}
 
-    function __cgMergeUsersPull(curRaw, incRaw) {
-      var cur = [];
-      var inc = [];
-      try {
-        cur = JSON.parse(curRaw || "[]");
-      } catch (e1) {
-        return typeof incRaw === "string" ? incRaw : "[]";
-      }
-      try {
-        inc = JSON.parse(incRaw || "[]");
-      } catch (e2) {
-        return curRaw;
-      }
-      cur = __cgArrayFilterPendingDeleted("users", cur);
-      inc = __cgArrayFilterPendingDeleted("users", inc);
-      if (!Array.isArray(cur) || !Array.isArray(inc)) return typeof incRaw === "string" ? incRaw : "[]";
-      if (inc.length === 0) return cur.length ? JSON.stringify(cur) : typeof incRaw === "string" ? incRaw : "[]";
-      var byId = Object.create(null);
-      var i;
-      var u;
-      var k;
-      for (i = 0; i < inc.length; i++) {
-        u = inc[i];
-        if (u && u.id != null) byId[String(u.id)] = Object.assign({}, u);
-      }
-      for (i = 0; i < cur.length; i++) {
-        u = cur[i];
-        if (!u || u.id == null) continue;
-        k = String(u.id);
-        if (!byId[k]) byId[k] = Object.assign({}, u);
-        else {
-          var R = byId[k];
-          if (!R.passwordVerifier && u.passwordVerifier) {
-            byId[k] = Object.assign({}, R, { passwordVerifier: u.passwordVerifier });
-          }
-        }
-      }
-      var order = [];
-      var seen = Object.create(null);
-      for (i = 0; i < inc.length; i++) {
-        u = inc[i];
-        if (u && u.id != null) {
-          k = String(u.id);
-          if (!seen[k]) {
-            order.push(byId[k]);
-            seen[k] = true;
-          }
-        }
-      }
-      for (i = 0; i < cur.length; i++) {
-        u = cur[i];
-        if (!u || u.id == null) continue;
-        k = String(u.id);
-        if (!seen[k]) {
-          order.push(byId[k]);
-          seen[k] = true;
-        }
-      }
-      return JSON.stringify(order);
-    }
+    function cloudSyncAbortInFlight() {}
 
-    function __cgMergeRoleModulesPull(curRaw, incRaw) {
-      if (__cgShouldSkipEmptyRemoteRoleModules(curRaw, incRaw)) return curRaw;
-      var c = {};
-      var incObj = {};
-      try {
-        c = JSON.parse(curRaw || "{}");
-      } catch (eC) {
-        c = {};
-      }
-      try {
-        incObj = JSON.parse(incRaw || "{}");
-      } catch (eI) {
-        return curRaw;
-      }
-      if (!incObj || typeof incObj !== "object" || Array.isArray(incObj)) return typeof incRaw === "string" ? incRaw : "{}";
-      return JSON.stringify(Object.assign({}, c, incObj));
-    }
-
-    var __cgStaffChatFsUnsub = null;
-
-    function detachStaffChatRemoteSync() {
-      if (typeof __cgStaffChatFsUnsub === "function") {
-        try {
-          __cgStaffChatFsUnsub();
-        } catch (eD) {}
-      }
-      __cgStaffChatFsUnsub = null;
-    }
-
-    /**
-     * Escucha en tiempo real solo el doc del chat (independiente del modo polling/listener global de ls).
-     */
-    function attachStaffChatRemoteSync() {
-      if (__cgStaffChatFsUnsub) return;
-      if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb || !__cgNoCloudFieldApi()) return;
-      var col = __cgCloudLsCol();
-      if (!col) return;
-      try {
-        var docRef = col.doc(__cgCloudSanitizeDocId("staffChatMessages"));
-        __cgStaffChatFsUnsub = docRef.onSnapshot(
-          function (snap) {
-            if (!snap || !snap.exists) return;
-            __cgBeginRemoteApply();
-            try {
-              applyRemoteLsDoc(snap);
-            } finally {
-              __cgEndRemoteApply();
-            }
-          },
-          function (err) {
-            __cgSyncLog("warn", "staff_chat_fs_listener", err && err.code ? err.code : err);
-          }
-        );
-      } catch (eAtt) {
-        __cgSyncLog("warn", "staff_chat_fs_listener_attach", eAtt);
-      }
-    }
-
-    /**
-     * Aplica un documento remoto al almacén local. No inicia transacción remota.
-     * Si no hay cambios locales pendientes de subir (lsKeyDirty), listas y users/roleModules
-     * se sustituyen por el remoto → los borrados del administrador no reaparecen al reiniciar.
-     * Con dirty activo se fusiona por id hasta que un push confirme.
-     */
-    function applyRemoteLsDoc(docSnap) {
-      if (!docSnap || !docSnap.exists) return;
-      var d = docSnap.data();
-      if (!d || typeof d.key !== "string" || typeof d.value !== "string") return;
-      if (CG_SYNC_STATE.pullSkipKeys[d.key]) return;
-      var quietUntil = CG_SYNC_STATE.lsPullQuietUntil && CG_SYNC_STATE.lsPullQuietUntil[d.key];
-      if (quietUntil != null && Date.now() < quietUntil) {
-        __cgSyncLog("info", "skip_pull_quiet_window", d.key);
-        return;
-      }
-      var full = LS + d.key;
-      try {
-        var cur = P.localGetRaw(full);
-        var nextVal = d.value;
-        var mergedUp = false;
-        var usedReplaceFromRemote = false;
-        var dirty = !!(CG_SYNC_STATE.lsKeyDirty && CG_SYNC_STATE.lsKeyDirty[d.key]);
-        if (d.key === "shiftLogs") {
-          nextVal = __cgMergeShiftLogsPullPreserveLocalOpen(cur, d.value);
-          mergedUp = true;
-        } else if (d.key === "staffChatMessages") {
-          nextVal = __cgMergeStaffChatPull(cur, d.value);
-          mergedUp = true;
-        } else if (d.key === "visitVehAlertLog") {
-          nextVal = __cgMergeVisitVehAlertLogPull(cur, d.value);
-          mergedUp = true;
-        } else if (d.key === "users") {
-          if (dirty || __cgHasPendingDeletedFor("users")) {
-            nextVal = __cgMergeUsersPull(cur, d.value);
-            mergedUp = true;
-          } else {
-            if (__cgShouldSkipEmptyRemoteArray(cur, d.value)) {
-              scheduleCloudWrite("users");
-              return;
-            }
-            nextVal = d.value;
-            usedReplaceFromRemote = true;
-          }
-        } else if (d.key === "roleModules") {
-          if (__cgShouldSkipEmptyRemoteRoleModules(cur, d.value)) {
-            __cgSyncLog("info", "skip_pull_empty_roleModules_keeps_local");
-            scheduleCloudWrite("roleModules");
-            return;
-          }
-          if (dirty) {
-            nextVal = __cgMergeRoleModulesPull(cur, d.value);
-            mergedUp = true;
-          } else {
-            nextVal = d.value;
-            usedReplaceFromRemote = true;
-          }
-        } else if (__CG_LS_MERGE_ARRAY_BY_ID[d.key]) {
-          if (dirty || __cgHasPendingDeletedFor(d.key)) {
-            nextVal = __cgMergeRemoteLsArrayById(cur, d.value, d.key);
-            mergedUp = true;
-          } else {
-            if (__cgShouldSkipEmptyRemoteArray(cur, d.value)) {
-              scheduleCloudWrite(d.key);
-              return;
-            }
-            nextVal = d.value;
-            usedReplaceFromRemote = true;
-          }
-        } else if (__CG_LS_PROTECT_EMPTY_OBJECT[d.key] && __cgShouldSkipEmptyRemoteRoleModules(cur, d.value)) {
-          __cgSyncLog("info", "skip_pull_empty_object_keeps_local", d.key);
-          scheduleCloudWrite(d.key);
-          return;
-        }
-        if (cur === nextVal) return;
-        if (!P.localSetRaw(full, nextVal)) {
-          __cgSyncLog("warn", "apply_remote_local_write_failed", d.key);
-          return;
-        }
-        window.dispatchEvent(
-          new CustomEvent("cg-cloud-storage-applied", { detail: { key: d.key, source: "remote" } })
-        );
-        if (usedReplaceFromRemote) {
-          __cgClearLsKeyDirty(d.key);
-          __cgClearPendingDeletedLsKey(d.key);
-        }
-        if (mergedUp) scheduleCloudWrite(d.key);
-      } catch (eA) {
-        __cgSyncLog("warn", "apply_remote", eA);
-      }
-    }
-
-    function __cgSyncSdkInternalBugMsg(err) {
-      var msg = err && (err.message != null ? String(err.message) : String(err));
-      return msg.indexOf("INTERNAL ASSERTION FAILED") !== -1;
-    }
-
-    /**
-     * Alternativa a onSnapshot: pulls periódicos. Más lecturas remotas; evita fallos del watch en algunos entornos.
-     * No llama a stopCloudSyncListener completo: no cancela el push periódico ya armado en finishOk.
-     */
-    function __cgActivatePollingSync(reason) {
-      if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return;
-      if (CG_SYNC_STATE.listenerRetryTimer) {
-        try {
-          clearTimeout(CG_SYNC_STATE.listenerRetryTimer);
-        } catch (eT) {}
-        CG_SYNC_STATE.listenerRetryTimer = null;
-      }
-      if (typeof CG_SYNC_STATE.unsubscribe === "function") {
-        try {
-          CG_SYNC_STATE.unsubscribe();
-        } catch (eU) {}
-      }
-      CG_SYNC_STATE.unsubscribe = null;
-      if (CG_SYNC_STATE.pollingTimer != null) {
-        try {
-          clearInterval(CG_SYNC_STATE.pollingTimer);
-        } catch (eP) {}
-        CG_SYNC_STATE.pollingTimer = null;
-      }
-      var pollMs =
-        typeof window.CG_REMOTE_POLL_MS === "number" && window.CG_REMOTE_POLL_MS >= 15000
-          ? window.CG_REMOTE_POLL_MS
-          : 60000;
-      function tick() {
-        if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return;
-        cloudPullAllOnce().catch(function (e) {
-          __cgSyncLog("warn", "poll_pull", e && e.code ? e.code : e);
-        });
-      }
-      tick();
-      CG_SYNC_STATE.pollingTimer = setInterval(tick, pollMs);
-      __cgSyncLog("warn", "remote_polling_on", String(reason || "") + " · " + pollMs + "ms");
-    }
-
-    function __cgRecoverFromSyncWatchBug(source, msg) {
-      try {
-        if (typeof CG_CLOUD_SYNC_ENABLED !== "undefined" && !CG_CLOUD_SYNC_ENABLED) return;
-        if (!window.cgDb) return;
-        if (CG_SYNC_STATE.preferPollingSync) return;
-        CG_SYNC_STATE.preferPollingSync = true;
-        __cgSyncLog("warn", "remote_watch_assertion_recover", source + " " + String(msg || "").slice(0, 120));
-        __cgActivatePollingSync(source);
-      } catch (e) {}
-    }
-
-    (function __cgBindSyncWatchCrashRecovery() {
-      if (window.__CG_FS_WATCH_RECOVERY) return;
-      window.__CG_FS_WATCH_RECOVERY = true;
-      window.addEventListener(
-        "error",
-        function (ev) {
-          try {
-            var msg = (ev && ev.message) || (ev && ev.error && ev.error.message) || "";
-            var fn = ev && ev.filename ? String(ev.filename) : "";
-            if (msg.indexOf("INTERNAL ASSERTION FAILED") === -1) return;
-            if (msg.indexOf("__CG_SYNC_MARKER_A__") === -1 && msg.indexOf("__CG_SYNC_MARKER_B__") === -1 && fn.indexOf("__CG_SYNC_MARKER_C__") === -1)
-              return;
-            __cgRecoverFromSyncWatchBug("window_error", msg);
-          } catch (e2) {}
-        },
-        true
-      );
-      window.addEventListener("unhandledrejection", function (ev) {
-        try {
-          var r = ev.reason;
-          var msg = r && (r.message != null ? String(r.message) : String(r));
-          if (msg.indexOf("INTERNAL ASSERTION FAILED") === -1) return;
-          if (msg.indexOf("__CG_SYNC_MARKER_A__") === -1 && msg.indexOf("__CG_SYNC_MARKER_B__") === -1) return;
-          if (CG_SYNC_STATE.preferPollingSync) {
-            ev.preventDefault();
-            return;
-          }
-          ev.preventDefault();
-          __cgRecoverFromSyncWatchBug("unhandledrejection", msg);
-        } catch (eRec) {}
-      });
-    })();
-
-    function startCloudSyncListener() {
-      if (CG_SYNC_STATE.preferPollingSync) {
-        __cgActivatePollingSync("prefer");
-        return;
-      }
-      stopCloudSyncListener();
-      var col = __cgCloudLsCol();
-      if (!col) return;
-      if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return;
-      CG_SYNC_STATE.listenerAttachGen = (CG_SYNC_STATE.listenerAttachGen || 0) + 1;
-      var attachGen = CG_SYNC_STATE.listenerAttachGen;
-      setTimeout(function () {
-        if (attachGen !== CG_SYNC_STATE.listenerAttachGen) return;
-        if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return;
-        var colLive = __cgCloudLsCol();
-        if (!colLive) return;
-        try {
-          CG_SYNC_STATE.unsubscribe = colLive.onSnapshot(
-            function (snapshot) {
-              CG_SYNC_STATE.listenerFailures = 0;
-              snapshot.docChanges().forEach(function (ch) {
-                if (ch.type === "removed") return;
-                __cgBeginRemoteApply();
-                try {
-                  applyRemoteLsDoc(ch.doc);
-                } finally {
-                  __cgEndRemoteApply();
-                }
-              });
-            },
-            function (err) {
-              CG_SYNC_STATE.listenerFailures++;
-              __cgSyncLog("warn", "listener_error", err);
-              try {
-                if (typeof CG_SYNC_STATE.unsubscribe === "function") CG_SYNC_STATE.unsubscribe();
-              } catch (eD) {}
-              CG_SYNC_STATE.unsubscribe = null;
-              if (__cgSyncSdkInternalBugMsg(err)) {
-                CG_SYNC_STATE.preferPollingSync = true;
-                __cgActivatePollingSync("listener_error");
-                return;
-              }
-              __cgScheduleListenerRestart();
-            }
-          );
-        } catch (eSnap) {
-          __cgSyncLog("warn", "listener_attach_exception", eSnap);
-          if (__cgSyncSdkInternalBugMsg(eSnap)) {
-            CG_SYNC_STATE.preferPollingSync = true;
-            __cgActivatePollingSync("attach_exception");
-          } else {
-            __cgScheduleListenerRestart();
-          }
-        }
-      }, 80);
-    }
-
-    function __cgCloudPullAllInner() {
-      var col = __cgCloudLsCol();
-      if (!col) return Promise.resolve();
-      return col.get().then(function (snap) {
-        __cgBeginRemoteApply();
-        try {
-          snap.forEach(function (docSnap) {
-            applyRemoteLsDoc(docSnap);
-          });
-        } finally {
-          __cgEndRemoteApply();
-        }
-      });
-    }
+    function cloudSyncAfterDirectLocalStorageWrite() {}
 
     function cloudPullAllOnce() {
-      if (CG_SYNC_STATE.pullAllInFlight) return CG_SYNC_STATE.pullAllInFlight;
-      var p = __cgRetryPromise("pullAll", __cgCloudPullAllInner, 3, 600);
-      CG_SYNC_STATE.pullAllInFlight = p.finally(function () {
-        CG_SYNC_STATE.pullAllInFlight = null;
-      });
-      return CG_SYNC_STATE.pullAllInFlight;
+      return Promise.resolve();
     }
 
-    /** Pull de un solo doc `ls` (p. ej. chat) sin esperar al ciclo global (~60s). */
-    function cloudPullSingleLsKey(shortKey) {
-      if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb) return Promise.resolve();
-      if (!shortKey || shortKey === "session" || CG_SYNC_STATE.pullSkipKeys[shortKey]) return Promise.resolve();
-      var col = __cgCloudLsCol();
-      if (!col) return Promise.resolve();
-      return col
-        .doc(__cgCloudSanitizeDocId(shortKey))
-        .get()
-        .then(function (snap) {
-          applyRemoteLsDoc(snap);
-        })
-        .catch(function (e) {
-          __cgSyncLog("warn", "pull_single_ls", shortKey + " " + (e && e.code ? e.code : e));
-        });
-    }
-
-    function __cgCloudPushAllKeysInner() {
-      var col = __cgCloudLsCol();
-      if (!col) return Promise.resolve();
-      return __cgSerialCloudWrite(function () {
-        var db = window.cgDb;
-        var ops = [];
-        P.eachLocalKeyWithPrefix(LS, function (fk) {
-          var sk = fk.slice(LS.length);
-          if (sk === "session" || sk === __CG_LS_KEY_PENDING_DELETED) return;
-          var raw = P.localGetRaw(fk);
-          if (raw === null) return;
-          ops.push({ sk: sk, raw: raw });
-        });
-        function runChunk(start) {
-          if (start >= ops.length) return Promise.resolve();
-          var batch = db.batch();
-          var end = Math.min(start + __CG_CLOUD_BATCH_SIZE, ops.length);
-          var j;
-          var FVb = __cgNoCloudFieldApi();
-          for (j = start; j < end; j++) {
-            var o = ops[j];
-            batch.set(
-              col.doc(__cgCloudSanitizeDocId(o.sk)),
-              {
-                key: o.sk,
-                value: o.raw,
-                updatedAt: FVb.serverTimestamp()
-              },
-              { merge: true }
-            );
-          }
-          return batch
-            .commit()
-            .then(function () {
-              var ji;
-              for (ji = start; ji < end; ji++) {
-                __cgClearLsKeyDirty(ops[ji].sk);
-                __cgClearPendingDeletedLsKey(ops[ji].sk);
-              }
-              return new Promise(function (r) {
-                setTimeout(r, __CG_CLOUD_BATCH_PAUSE_MS);
-              });
-            })
-            .then(function () {
-              return runChunk(end);
-            });
-        }
-        return runChunk(0);
-      });
+    function cloudPullSingleLsKey() {
+      return Promise.resolve();
     }
 
     function cloudPushAllKeysOnce() {
-      return __cgRetryPromise("pushAll", __cgCloudPushAllKeysInner, 3, 800);
+      return Promise.resolve();
     }
 
-    function initCloudSync() {
-      var disabled = { ok: false, reason: "disabled", partial: false, phases: {}, listenerStarted: false };
-      if (!CG_CLOUD_SYNC_ENABLED) return Promise.resolve(disabled);
-      if (!window.cgDb) {
-        __cgSyncLog("warn", "no_db");
-        return Promise.resolve({ ok: false, reason: "no-db", partial: false, phases: {}, listenerStarted: false });
-      }
-      if (!__cgNoCloudFieldApi()) {
-        __cgSyncLog("warn", "no_fieldvalue");
-        return Promise.resolve({ ok: false, reason: "no-fieldvalue", partial: false, phases: {}, listenerStarted: false });
-      }
+    function flushPendingCloudWritesNow() {}
 
-      CG_SYNC_STATE.initGeneration++;
-      CG_SYNC_STATE.listenerFailures = 0;
-      if (window.CG_REMOTE_FORCE_POLLING === true) {
-        CG_SYNC_STATE.preferPollingSync = true;
-      } else if (window.CG_REMOTE_USE_REALTIME_LISTENER === true) {
-        CG_SYNC_STATE.preferPollingSync = false;
-      } else {
-        CG_SYNC_STATE.preferPollingSync = true;
-      }
-      var gen = CG_SYNC_STATE.initGeneration;
+    function cloudPushKeyImmediate() {}
 
-      try {
-        stopCloudSyncListener();
-      } catch (eStop) {}
-      __cgMarkPushDeferredDuringInit();
-
-      try {
-        if (typeof window.cgDb.enableNetwork === "function") {
-          window.cgDb.enableNetwork().catch(function () {});
-        }
-      } catch (eN) {}
-
-      var result = {
-        ok: false,
-        partial: false,
-        partialPullFailed: false,
-        partialPushFailed: false,
-        phases: {},
-        listenerStarted: false,
-        reason: null,
-        err: null
-      };
-
-      function alive() {
-        return gen === CG_SYNC_STATE.initGeneration;
-      }
-
-      function finishOk() {
-        if (!alive()) {
-          result.reason = "superseded";
-          CG_SYNC_STATE.lastInitResult = result;
-          return Promise.resolve(result);
-        }
-        function armPostPullUi() {
-          try {
-            if (CG_SYNC_STATE.preferPollingSync) {
-              __cgActivatePollingSync("init");
-            } else {
-              startCloudSyncListener();
-            }
-          } catch (eL) {
-            __cgSyncLog("warn", "listener_start", eL);
-          }
-          result.listenerStarted =
-            !!(CG_CLOUD_SYNC_ENABLED && window.cgDb && __cgCloudLsCol());
-          result.ok = true;
-          CG_SYNC_STATE.lastInitResult = result;
-          try {
-            if (window.CG_ACTIONS && typeof window.CG_ACTIONS.syncDepartamentosModuleFromLocal === "function") {
-              window.CG_ACTIONS.syncDepartamentosModuleFromLocal();
-            }
-          } catch (eS) {
-            __cgSyncLog("warn", "post_sync_dept_hook", eS);
-          }
-          if (CG_SYNC_STATE.periodicPushTimer !== null) {
-            try {
-              clearInterval(CG_SYNC_STATE.periodicPushTimer);
-            } catch (eC) {}
-            CG_SYNC_STATE.periodicPushTimer = null;
-          }
-          CG_SYNC_STATE.periodicPushTimer = setInterval(function () {
-            if (!CG_CLOUD_SYNC_ENABLED || !window.cgDb || CG_SYNC_STATE.applyingRemote) return;
-            cloudPushAllKeysOnce().catch(function (eP) {
-              __cgSyncLog("warn", "periodic_push", eP && eP.code ? eP.code : eP);
-            });
-          }, 60000);
-          if (!window.__CG_CLOUD_LIFECYCLE_BOUND) {
-            window.__CG_CLOUD_LIFECYCLE_BOUND = true;
-            try {
-              window.addEventListener(
-                "pagehide",
-                function () {
-                  flushPendingCloudWritesNow();
-                },
-                { capture: true }
-              );
-              document.addEventListener("visibilitychange", function () {
-                if (document.visibilityState === "hidden") {
-                  flushPendingCloudWritesNow();
-                  return;
-                }
-                if (document.visibilityState !== "visible") return;
-                var now = Date.now();
-                if (now - (CG_SYNC_STATE.lastVisiblePullAt || 0) < 2800) return;
-                CG_SYNC_STATE.lastVisiblePullAt = now;
-                try {
-                  var u = window.CG && window.CG.currentUser && window.CG.currentUser();
-                  if (u && window.CG.cloudPullAllOnce) {
-                    window.CG
-                      .cloudPullAllOnce()
-                      .catch(function () {})
-                      .then(function () {
-                        if (window.CG && window.CG.cloudPushAllKeysOnce) {
-                          return window.CG.cloudPushAllKeysOnce().catch(function () {});
-                        }
-                      });
-                  }
-                } catch (eVisPull) {}
-              });
-            } catch (eEv) {}
-          }
-          try {
-            if (window.CG && window.CG.currentUser && window.CG.currentUser()) {
-              attachStaffChatRemoteSync();
-            }
-          } catch (eChatL) {}
-          if (result.partial) __cgSyncLog("warn", "init_done_partial", CG_CLOUD_BUILDING_KEY);
-          else __cgSyncLog("info", "init_done_ok", CG_CLOUD_BUILDING_KEY);
-          return result;
-        }
-        var pend =
-          window.cgDb && typeof window.cgDb.waitForPendingWrites === "function"
-            ? window.cgDb.waitForPendingWrites().catch(function () {})
-            : Promise.resolve();
-        return pend
-          .then(function () {
-            return new Promise(function (r) {
-              setTimeout(r, 220);
-            });
-          })
-          .then(function () {
-            if (!alive()) {
-              result.reason = "superseded";
-              CG_SYNC_STATE.lastInitResult = result;
-              return result;
-            }
-            return armPostPullUi();
-          });
-      }
-
-      /* Pull primero: un equipo nuevo puede tener plantilla local vacía; si empujáramos antes, pisaríamos el servidor remoto.
-       * Luego un push sube el estado ya fusionado con la nube (claves solo locales, etc.).
-       * Si el pull falla, NO hacer push en este init (evita borrar remoto con un snapshot local vacío). */
-      var pullOk = false;
-      return cloudPullAllOnce()
-        .then(function () {
-          if (alive()) {
-            result.phases.pull = { ok: true };
-            pullOk = true;
-          }
-        })
-        .catch(function (ePull) {
-          if (!alive()) return;
-          result.phases.pull = { ok: false, err: ePull };
-          result.partial = true;
-          result.partialPullFailed = true;
-          __cgSyncLog("warn", "phase_pull", ePull);
-          try {
-            setTimeout(function () {
-              if (!alive()) return;
-              cloudPullAllOnce()
-                .then(function () {
-                  if (!alive()) return;
-                  return cloudPushAllKeysOnce();
-                })
-                .catch(function () {});
-            }, 7000);
-          } catch (eRetryPull) {}
-        })
-        .then(function () {
-          if (!alive()) return Promise.resolve();
-          if (!pullOk) {
-            result.phases.push = { ok: false, skipped: true, reason: "pull-failed" };
-            __cgSyncLog("warn", "phase_push_skipped_pull_failed");
-            return Promise.resolve();
-          }
-          return cloudPushAllKeysOnce();
-        })
-        .then(function () {
-          if (alive() && pullOk) result.phases.push = { ok: true };
-        })
-        .catch(function (ePush) {
-          if (!alive()) return;
-          result.phases.push = { ok: false, err: ePush };
-          result.partial = true;
-          result.partialPushFailed = true;
-          __cgSyncLog("warn", "phase_push", ePush);
-        })
-        .then(function () {
-          return finishOk();
-        })
-        .catch(function (err) {
-          result.ok = false;
-          result.err = err;
-          result.reason = "exception";
-          CG_SYNC_STATE.lastInitResult = result;
-          __cgSyncLog("warn", "init_exception", err);
-          return result;
-        })
-        .finally(function () {
-          try {
-            __cgFlushDeferredPushesAfterInit();
-          } catch (eFin) {}
-        });
+    function cloudPushLsKeyPromise(shortKey) {
+      return Promise.resolve({ ok: true, skipped: true, reason: "local_only", shortKey: shortKey });
     }
 
+    function armLsKeyPullQuiet() {}
+
+    function getCloudSyncLastInitResult() {
+      return null;
+    }
     /* ┌─ 3. Persistencia local (clave corta → JSON en localStorage) ──────────────────── */
     function load(key, fallback) {
       var raw = P.localGetRaw(LS + key);
@@ -4918,8 +3506,6 @@
     /** Primera ejecución: persistir plantilla defaultState (una sola responsabilidad: escritura inicial). */
     function ensureInitSeedFromDefaultIfNeeded() {
       if (__cgEffectiveCloudOnly()) {
-        /* La nube (pull) + migraciones + attachVirtualAdmin son la fuente de verdad; sembrar defaultState aquí
-         * pisaba datos reales cuando faltaba la clave "initialized" en el servidor o el pull iba detrás del arranque. */
         return;
       }
       if (load("initialized", false)) return;
@@ -7980,11 +6566,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         };
 
         window.startRealtimeSync = function() {
-            if (window.cgDb && window.CG_CLOUD_SYNC_ENABLED !== false) {
-                console.log("🔁 Sincronización del shell activa (colección compartida; ver consola al iniciar sesión).");
-                return;
-            }
-            console.log("💾 Modo local: solo este navegador (sin sincronización remota en esta copia)");
+            console.log("💾 Datos solo en este navegador (localStorage).");
         };
 
         window.saveUnitNoteToCloud = async function(unit) {
@@ -8316,9 +6898,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 modal.remove();
                 var cloud = result.cloud;
                 if (cloud && cloud.ok && !cloud.skipped) {
-                    showNotification('success', '✅ Clave actualizada y sincronizada con la nube.');
+                    showNotification('success', '✅ Clave actualizada y guardada en este navegador.');
                 } else if (cloud && !cloud.ok && !cloud.skipped) {
-                    showNotification('info', '⚠️ Clave guardada en este equipo; la nube no pudo actualizarse. Revise conexión o permisos del servidor.');
+                    showNotification('info', '⚠️ Clave guardada en este equipo.');
                 } else {
                     showNotification('success', '✅ Clave actualizada (solo local o sincronización no activa).');
                 }
@@ -9110,8 +7692,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 if (!appState.editingUnitId && appState.units.find(u => u.unitNumber === formData.unitNumber)) {
                     throw new Error('Esta unidad ya está registrada');
                 }
-                // Guardar en la nube PRIMERO antes de actualizar el estado local
-                // Esto asegura que los datos se persistan antes de modificar la UI
+                // Persistir en localStorage antes de actualizar la UI
                 try {
                     // Actualizar el estado local temporalmente para el guardado
                     if (appState.editingUnitId) {
@@ -9123,7 +7704,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                         appState.units.push(formData);
                     }
                     
-                    // Guardar en la nube
                     await saveUnitsToCloud();
                     
                     // Solo si el guardado es exitoso, actualizar la UI y limpiar el formulario
@@ -9157,7 +7737,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                         appState.units = appState.units.filter(u => u.id !== formData.id);
                     }
                     updateAllUI();
-                    showNotification('error', `❌ Error al guardar en la nube: ${error.message || 'Error desconocido'}. Los cambios no se guardaron. Verifica tu conexión e intenta nuevamente.`);
+                    showNotification('error', `❌ Error al guardar: ${error.message || 'Error desconocido'}. Los cambios no se guardaron.`);
                     // NO limpiar editingUnitId para que el usuario pueda reintentar
                 }
             } catch (error) {
@@ -9190,18 +7770,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                         `¿Eliminar la unidad ${unitNumber}? Esta acción no se puede deshacer.`,
                         async () => {
                             try {
-                                // Primero eliminar de la nube
                                 await deleteUnitFromCloud(unitId);
                                 
-                                // Solo si la eliminación en la nube es exitosa, actualizar el estado local
                                 appState.units = appState.units.filter(u => u.id !== unitId);
                                 updateAllUI();
                                 showNotification('success', '✅ Unidad eliminada correctamente');
                                 const residentCount = unit && unit.residents ? unit.residents.length : 0;
                             } catch (error) {
                                 console.error('Error eliminando unidad:', error);
-                                // NO actualizar el estado local si falla la eliminación en la nube
-                                showNotification('error', `❌ Error al eliminar unidad de la nube: ${error.message || 'Error desconocido'}. La unidad no fue eliminada.`);
+                                showNotification('error', `❌ Error al eliminar la unidad: ${error.message || 'Error desconocido'}. La unidad no fue eliminada.`);
                             }
                         }
                     );
@@ -9327,7 +7904,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                         loadingIndicator.style.cssText = 'text-align: center; padding: 20px; margin-top: 15px;';
                         loadingIndicator.innerHTML = `
                             <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid var(--border-color); border-top-color: var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                            <p style="margin-top: 10px; color: var(--secondary-text);">Guardando cambios en la nube...</p>
+                            <p style="margin-top: 10px; color: var(--secondary-text);">Guardando cambios…</p>
                         `;
                         confirmModal.querySelector('.modal-content').appendChild(loadingIndicator);
                         
@@ -9494,14 +8071,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         window.updateFormerResidentsTable = function() {
             const tableBody = document.getElementById('formerResidentsTableBody');
             const emptyState = document.getElementById('formerResidentsEmptyState');
+            if (!tableBody || !emptyState) {
+                return;
+            }
             const filterInput = document.getElementById('formerResidentsFilter');
             const filterValue = filterInput ? filterInput.value.toLowerCase().trim() : '';
             
-            let filteredResidents = appState.formerResidents;
+            let filteredResidents = appState.formerResidents || [];
             
             // Aplicar filtro si hay texto
             if (filterValue) {
-                filteredResidents = appState.formerResidents.filter(resident => 
+                filteredResidents = filteredResidents.filter(resident => 
                     resident.name.toLowerCase().includes(filterValue) ||
                     resident.unitNumber.toLowerCase().includes(filterValue) ||
                     (resident.email && resident.email.toLowerCase().includes(filterValue)) ||
@@ -9584,6 +8164,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         // ===== FUNCIÓN PARA TOGGLE SELECCIONAR TODOS =====
         window.toggleSelectAllFormerResidents = function() {
             const selectAllCheckbox = document.getElementById('selectAllFormerResidents');
+            if (!selectAllCheckbox) return;
             const checkboxes = document.querySelectorAll('.former-resident-checkbox');
             const isChecked = selectAllCheckbox.checked;
             
@@ -9598,6 +8179,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         function updateSelectAllCheckbox() {
             const selectAllCheckbox = document.getElementById('selectAllFormerResidents');
             const checkboxes = document.querySelectorAll('.former-resident-checkbox');
+            if (!selectAllCheckbox) return;
             
             if (checkboxes.length === 0) {
                 selectAllCheckbox.checked = false;
@@ -11085,10 +9667,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                                         confirmModal.remove();
                                         cgCloseBuildingUnitFichaOverlay();
                                         showUnitDetailModal(unit);
-                                        showNotification('success', '✅ Nota eliminada de la nube');
+                                        showNotification('success', '✅ Nota eliminada');
                                     } catch (error) {
-                                        console.error('Error eliminando nota de la nube:', error);
-                                        showNotification('error', '❌ Error al eliminar nota de la nube');
+                                        console.error('Error eliminando nota:', error);
+                                        showNotification('error', '❌ Error al eliminar la nota');
                                     }
                                 };
                                 
@@ -11281,11 +9863,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
         // ===== INICIALIZACIÓN (index: tras inyectar HTML en #dept-module-host) =====
         async function __cgDeptRunAfterInject() {
-            console.log(
-                window.cgDb
-                    ? "🚀 Inicializando módulo Departamentos (datos locales; shell con sincronización remota disponible)"
-                    : "🚀 Inicializando aplicación (modo solo local en esta copia)..."
-            );
+            console.log("🚀 Inicializando módulo Departamentos (datos en este navegador)");
 
             try {
                 console.log('💾 Cargando datos desde almacenamiento local del navegador...');
@@ -12281,13 +10859,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                     appState.units[unitIndex].hasRentalContract = hasRentalContract;
                 }
                 
-                // Guardar inmediatamente en la nube
+                // Guardar en almacenamiento local
                 try {
                     await saveUnitNoteToCloud(unit);
                     updateAllUI();
                     modal.remove();
                     showUnitDetailModal(unit);
-                    showNotification('success', '✅ Nota guardada en la nube');
+                    showNotification('success', '✅ Nota guardada');
                     const notePreview = newNote ? (newNote.length > 50 ? newNote.slice(0, 50) + '...' : newNote) : '(sin texto)';
                     const contractLabel = hasRentalContract ? 'Contrato de arriendo: sí' : 'Contrato de arriendo: no';
                     const parkingLabel = finalRentalParking ? 'Est. arriendo: ' + finalRentalParking : 'Est. arriendo: (ninguno)';
@@ -12301,8 +10879,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                     } else if (prevRentalParking && finalRentalParking && prevRentalParking !== finalRentalParking) {
                     }
                 } catch (error) {
-                    console.error('Error guardando nota en la nube:', error);
-                    showNotification('error', '❌ Error al guardar nota en la nube');
+                    console.error('Error guardando nota:', error);
+                    showNotification('error', '❌ Error al guardar la nota');
                 }
             };
             
@@ -12466,7 +11044,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return Array.isArray(G.state.staffChatMessages) ? G.state.staffChatMessages : [];
     }
     /**
-     * Canal unilateral conserje ↔ admin: en Firestore sigue el hilo completo; cada conserje solo ve
+     * Canal conserje ↔ admin: el hilo se guarda en este navegador; cada conserje solo ve
      * sus envíos y los mensajes del administrador (no lee a otros conserjes). El admin ve todo.
      */
     function staffChatMessagesForViewer() {
@@ -12517,10 +11095,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (!el || !u) return;
       if (u.role === "admin") {
         el.textContent =
-          "Vista completa del canal: mensajes de todos los conserjes y respuestas de administración. Sincronizado en tiempo real con Firestore.";
+          "Vista completa del canal: mensajes de todos los conserjes y respuestas de administración (datos en este equipo).";
       } else {
         el.textContent =
-          "Canal directo con administración: solo ve sus mensajes y los del admin; no ve mensajes de otros conserjes. Tiempo real.";
+          "Canal directo con administración: solo ve sus mensajes y los del admin; no ve mensajes de otros conserjes.";
       }
     }
     function staffChatClearAll() {
@@ -19173,7 +17751,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "</textarea>" +
         "<button type=\"button\" class=\"btn btn-primary\" style=\"margin-top:0.75rem\" data-cg-act=\"cfgVisitorParkingSave\">Guardar estacionamientos visitas</button></div></div>" +
         "<div class=\"card\" style=\"margin-top:1rem;border-color:var(--danger-color)\"><div class=\"card-h\"><h3>Zona de mantenimiento</h3></div><div class=\"card-b\">" +
-        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Elimina <strong>por completo</strong> los datos de la app en <strong>este navegador</strong> (localStorage y sessionStorage del producto). Luego se crea una instalación limpia y deberá registrar de nuevo al administrador. Los datos en la nube (Firestore) <strong>no</strong> se borran desde aquí.</p>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Elimina <strong>por completo</strong> los datos de la app en <strong>este navegador</strong> (localStorage y sessionStorage del producto). Luego se crea una instalación limpia y deberá registrar de nuevo al administrador.</p>" +
         "<button type=\"button\" class=\"btn btn-danger\" data-cg-act=\"resetSystemLocalData\"><i class=\"fa-solid fa-trash-can\"></i> Limpiar almacenamiento local y reiniciar</button></div></div>";
     }
   };
@@ -19265,17 +17843,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     UI.closeModal();
     if (pushRes && !pushRes.ok && !pushRes.skipped) {
-      var code = pushRes.err && pushRes.err.code ? pushRes.err.code : "";
-      G.toast(
-        code === "permission-denied"
-          ? "Usuario guardado aquí, pero el servidor remoto rechazó la subida (permisos o configuración). Revise políticas del backend."
-          : "Usuario guardado en este equipo; no se pudo subir a la nube (red, cuota o servidor). Reintente o revise F12.",
-        "warn"
-      );
-    } else if (pushRes && pushRes.skipped) {
-      G.toast("Usuario guardado solo en este navegador (sincronización remota desactivada).");
+      G.toast("Usuario guardado en este navegador (revise consola F12).", "warn");
     } else {
-      G.toast("Usuario guardado y subido a la nube.");
+      G.toast("Usuario guardado.");
     }
     A.renderAdmin("staff");
   };
@@ -19340,7 +17910,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       window.CG.cloudPushKeyImmediate("users");
     }
     if (delRes && !delRes.ok && !delRes.skipped) {
-      G.toast("Usuario eliminado aquí; no se pudo actualizar la nube (revise conexión o consola F12).", "warn");
+      G.toast("Usuario eliminado.", "warn");
     } else {
       G.toast("Usuario eliminado");
     }
@@ -19365,7 +17935,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (typeof G.cloudPushLsKeyPromise === "function") {
       var pr = await G.cloudPushLsKeyPromise("roleModules");
       if (pr && !pr.ok && !pr.skipped) {
-        G.toast("Permisos guardados aquí; no se pudo subir a la nube (revise F12).", "warn");
+        G.toast("Permisos guardados.", "warn");
         UI.renderNav();
         return;
       }
@@ -19757,7 +18327,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (
       !confirm(
         "Confirmación final: esta acción no se puede deshacer en este equipo. " +
-          "Los datos en Firestore no se eliminan automáticamente. ¿Proceder?"
+          "Esta acción solo afecta a este navegador. ¿Proceder?"
       )
     ) {
       return;
