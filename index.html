@@ -22167,7 +22167,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   /**
    * Conserje: solo puede editar sus propias novedades (no categoría Turno) registradas
-   * durante el tramo de turno abierto actual. Administrador: siempre.
+   * durante el tramo de turno abierto actual. Administrador: puede editar cualquier entrada
+   * (incl. fecha y autor desde el modal de edición; las marcas «Turno» usan el formulario dedicado).
    */
   function novedadConserjeMayEdit(n, user) {
     if (!user || user.role === "admin") return true;
@@ -22525,7 +22526,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var editBtn = mayEdit
           ? "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"novOpen\" data-cg-id=\"" +
             G.escapeHtml(n.id) +
-            "\">Editar</button>"
+            "\"" +
+            (isAdm && !isTurno ? " title=\"Administrador: puede editar fecha, autor y texto\"" : "") +
+            ">Editar</button>"
           : "";
         if (editBtn || delNov) {
           actions =
@@ -22761,14 +22764,79 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         return "<option value=\"" + G.escapeAttr(c) + "\"" + (n.category === c ? " selected" : "") + ">" + G.escapeHtml(c) + "</option>";
       })
       .join("");
+    var isAdminNov = !!(uNov && uNov.role === "admin");
+    var adminHint = isAdminNov
+      ? "<p class=\"page-desc\" style=\"margin:0 0 0.85rem;font-size:0.82rem;line-height:1.45\">Como <strong>administrador</strong> puede corregir la fecha, el usuario que figura como autor y el contenido de esta entrada.</p>"
+      : "";
+    var adminMeta = "";
+    if (isAdminNov) {
+      var usersArr = Array.isArray(G.state.users) ? G.state.users : [];
+      var uidSel = n.userId != null && n.userId !== "" ? n.userId : uNov && uNov.id ? uNov.id : "";
+      var hasSel = usersArr.some(function (usr) {
+        return usr && usr.id === uidSel;
+      });
+      var userOpts = usersArr
+        .filter(function (usr) {
+          return usr && usr.id;
+        })
+        .map(function (usr) {
+          return (
+            "<option value=\"" +
+            G.escapeAttr(usr.id) +
+            "\"" +
+            (usr.id === uidSel ? " selected" : "") +
+            ">" +
+            G.escapeHtml(usr.name || usr.id) +
+            " (" +
+            G.escapeHtml(usr.role || "—") +
+            ")</option>"
+          );
+        })
+        .join("");
+      if (uidSel && !hasSel) {
+        userOpts =
+          "<option value=\"" +
+          G.escapeAttr(uidSel) +
+          "\" selected>" +
+          G.escapeHtml((n.userName || uidSel) + " (no listado)") +
+          "</option>" +
+          userOpts;
+      }
+      if (!userOpts.trim()) {
+        userOpts =
+          "<option value=\"" +
+          G.escapeAttr(uidSel || (uNov && uNov.id) || "") +
+          "\" selected>" +
+          G.escapeHtml((n.userName && String(n.userName).trim()) || (uNov && uNov.name) || "—") +
+          "</option>";
+      }
+      adminMeta =
+        "<div class=\"form-group\"><label>Fecha y hora del registro</label><input name=\"at\" type=\"datetime-local\" required value=\"" +
+        G.escapeAttr(localDatetimeValue(new Date(n.at))) +
+        "\" /></div>" +
+        "<div class=\"form-group\"><label>Usuario autor en bitácora</label><select name=\"userId\" required>" +
+        userOpts +
+        "</select></div>";
+    }
     UI.openModal(
-      "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>Editar novedad #" + n.seq + "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
-      "<div class=\"modal-b\"><form id=\"f-nov-e\" action=\"#\" method=\"post\" onsubmit=\"return false;\">" +
-      "<div class=\"form-group\"><label>Categoría</label><select name=\"category\">" + cats + "</select></div>" +
-      "<div class=\"form-group\"><label>Descripción</label><textarea name=\"text\" rows=\"4\">" + G.escapeHtml(n.text) + "</textarea></div>" +
-      "<input type=\"hidden\" name=\"nid\" value=\"" + G.escapeAttr(n.id) + "\" /></form></div>" +
-      "<div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
-      "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"novSave\">Guardar</button></div></div>"
+      "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>Editar novedad #" +
+        n.seq +
+        (isAdminNov ? " <span style=\"font-weight:600;opacity:0.85;font-size:0.85em\">(admin)</span>" : "") +
+        "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
+        "<div class=\"modal-b\"><form id=\"f-nov-e\" action=\"#\" method=\"post\" onsubmit=\"return false;\">" +
+        adminHint +
+        "<div class=\"form-group\"><label>Categoría</label><select name=\"category\">" +
+        cats +
+        "</select></div>" +
+        adminMeta +
+        "<div class=\"form-group\"><label>Descripción</label><textarea name=\"text\" rows=\"4\">" +
+        G.escapeHtml(n.text) +
+        "</textarea></div>" +
+        "<input type=\"hidden\" name=\"nid\" value=\"" +
+        G.escapeAttr(n.id) +
+        "\" /></form></div>" +
+        "<div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
+        "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"novSave\">Guardar</button></div></div>"
     );
   };
 
@@ -22796,9 +22864,32 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.toast(vtx.message, "error");
       return;
     }
+    var patch = { category: f.category.value, text: vtx.value };
+    if (uSave && uSave.role === "admin" && f.at && f.userId) {
+      var vAtN = G.validate.datetimeLocal(f.at.value, "Fecha y hora del registro");
+      if (!vAtN.ok) {
+        G.toast(vAtN.message, "error");
+        return;
+      }
+      patch.at = vAtN.iso;
+      var uidPick = f.userId.value;
+      var usrPick = (Array.isArray(G.state.users) ? G.state.users : []).find(function (x) {
+        return x && x.id === uidPick;
+      });
+      if (usrPick) {
+        patch.userId = usrPick.id;
+        patch.userName = usrPick.name;
+      } else if (prev && prev.userId === uidPick) {
+        patch.userId = prev.userId;
+        patch.userName = prev.userName;
+      } else {
+        G.toast("Usuario autor inválido", "error");
+        return;
+      }
+    }
     G.state.novedades = novArr.map(function (n) {
       if (n.id !== id) return n;
-      return Object.assign({}, n, { category: f.category.value, text: vtx.value });
+      return Object.assign({}, n, patch);
     });
     if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("novedades");
     UI.closeModal();
