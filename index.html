@@ -2642,8 +2642,9 @@
       margin-bottom: 0.6rem;
       position: relative;
       overflow: hidden;
-      background: linear-gradient(135deg, #f0f9ff 0%, #fff 55%, #e0f2fe 100%);
-      box-shadow: 0 3px 14px rgba(2, 132, 199, 0.1);
+      background: linear-gradient(135deg, #fffbeb 0%, #fefce8 42%, #fef3c7 100%);
+      box-shadow: 0 3px 14px rgba(180, 130, 20, 0.14);
+      border-color: #e8d4a8;
     }
     .cg-dash-sched-card > .card-h.cg-dash-bday-card-h {
       border-bottom: none;
@@ -2653,17 +2654,123 @@
       padding: 0.6rem 0.85rem 0.7rem;
     }
     .cg-dash-sched-card .cg-dash-bday-card-h h3 {
-      color: #0369a1;
+      color: #854d0e;
+    }
+    .cg-dash-sched-card .cg-dash-bday-card-h h3 > i {
+      color: #a16207;
+      opacity: 0.95 !important;
+      animation: cg-dash-sched-icon 2.4s ease-in-out infinite;
     }
     .cg-dash-sched-alert-msg {
       white-space: pre-wrap;
       margin: 0;
+      color: #5c4b1a;
+      font-weight: 500;
     }
     .cg-dash-sched-meta {
       margin: 0.45rem 0 0 !important;
       font-size: 0.72rem !important;
-      color: #0c4a6e !important;
-      opacity: 0.9 !important;
+      color: #713f12 !important;
+      opacity: 0.92 !important;
+    }
+    #dash-scheduled-alerts-mount .cg-dash-sched-card {
+      position: relative;
+      transition: box-shadow 0.45s ease, transform 0.45s ease;
+      animation:
+        cg-dash-sched-enter 0.55s cubic-bezier(0.22, 1, 0.36, 1) both,
+        cg-dash-sched-breathe 3.8s ease-in-out infinite;
+    }
+    #dash-scheduled-alerts-mount .cg-dash-sched-card > .card-h,
+    #dash-scheduled-alerts-mount .cg-dash-sched-card > .card-b {
+      position: relative;
+      z-index: 1;
+    }
+    #dash-scheduled-alerts-mount .cg-dash-sched-card:nth-child(1) {
+      animation-delay: 0.04s;
+    }
+    #dash-scheduled-alerts-mount .cg-dash-sched-card:nth-child(2) {
+      animation-delay: 0.12s;
+    }
+    #dash-scheduled-alerts-mount .cg-dash-sched-card:nth-child(3) {
+      animation-delay: 0.2s;
+    }
+    #dash-scheduled-alerts-mount .cg-dash-sched-card:nth-child(n + 4) {
+      animation-delay: 0.28s;
+    }
+    #dash-scheduled-alerts-mount .cg-dash-sched-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      background: linear-gradient(
+        105deg,
+        transparent 0%,
+        transparent 40%,
+        rgba(255, 255, 255, 0.45) 50%,
+        transparent 60%,
+        transparent 100%
+      );
+      background-size: 220% 100%;
+      animation: cg-dash-sched-shine 6.5s ease-in-out infinite;
+      opacity: 0.55;
+      z-index: 0;
+    }
+    @keyframes cg-dash-sched-enter {
+      from {
+        opacity: 0;
+        transform: translateY(-12px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    @keyframes cg-dash-sched-shine {
+      0%,
+      15% {
+        background-position: 130% 0;
+      }
+      50% {
+        background-position: -30% 0;
+      }
+      85%,
+      100% {
+        background-position: -130% 0;
+      }
+    }
+    @keyframes cg-dash-sched-icon {
+      0%,
+      100% {
+        transform: scale(1);
+        opacity: 0.95;
+      }
+      50% {
+        transform: scale(1.08);
+        opacity: 1;
+      }
+    }
+    @keyframes cg-dash-sched-breathe {
+      0%,
+      100% {
+        box-shadow: 0 3px 14px rgba(180, 130, 20, 0.14);
+      }
+      50% {
+        box-shadow: 0 5px 22px rgba(202, 138, 4, 0.26);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #dash-scheduled-alerts-mount .cg-dash-sched-card,
+      #dash-scheduled-alerts-mount .cg-dash-sched-card::before,
+      .cg-dash-sched-card .cg-dash-bday-card-h h3 > i {
+        animation: none !important;
+        transition: none !important;
+        opacity: 1;
+        transform: none;
+      }
+      #dash-scheduled-alerts-mount .cg-dash-sched-card::before {
+        display: none;
+      }
     }
     .cg-adm-dash-alert-status {
       display: inline-block;
@@ -20869,15 +20976,33 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     active.sort(function (a, b) {
       return new Date(a.startAt || 0).getTime() - new Date(b.startAt || 0).getTime();
     });
+    var cu = G.currentUser();
+    var showEndMeta = !!(cu && cu.role === "admin");
+    var sig =
+      (showEndMeta ? "1" : "0") +
+      "|" +
+      active
+        .map(function (a) {
+          return [a.id, a.title, a.message, a.startAt, a.endAt, a.enabled, a.updatedAt].join("\t");
+        })
+        .join("¦");
     if (!active.length) {
-      mount.innerHTML = "";
+      if (mount.getAttribute("data-cg-sched-sig") !== "") {
+        mount.innerHTML = "";
+        mount.setAttribute("data-cg-sched-sig", "");
+      }
       return;
     }
+    if (mount.getAttribute("data-cg-sched-sig") === sig) return;
+    mount.setAttribute("data-cg-sched-sig", sig);
     mount.innerHTML = active
       .map(function (a) {
         var title = G.escapeHtml(a.title || "Aviso");
         var msgEsc = G.escapeHtml(a.message || "");
         var endShow = a.endAt ? G.fmtDate(a.endAt) : "—";
+        var metaHtml = showEndMeta
+          ? "<p class=\"page-desc cg-dash-sched-meta\">Visible hasta <strong>" + G.escapeHtml(endShow) + "</strong></p>"
+          : "";
         return (
           "<div class=\"card cg-dash-sched-card\" role=\"status\">" +
           "<div class=\"card-h cg-dash-bday-card-h\"><h3><i class=\"fa-solid fa-bullhorn\" aria-hidden=\"true\"></i> " +
@@ -20887,9 +21012,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           "<p class=\"cg-dash-bday-msg cg-dash-sched-alert-msg\">" +
           msgEsc.replace(/\n/g, "<br>") +
           "</p>" +
-          "<p class=\"page-desc cg-dash-sched-meta\">Visible hasta <strong>" +
-          G.escapeHtml(endShow) +
-          "</strong></p>" +
+          metaHtml +
           "</div></div>"
         );
       })
