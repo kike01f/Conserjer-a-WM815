@@ -2534,28 +2534,106 @@
     /* App shell — sidebar opaco (sin vidrio / traslucidez) */
     #app-main { display: flex; min-height: 100vh; }
     /* Ambientación festiva (administrable; fecha según Chile) */
+    @keyframes cg-festive-shimmer {
+      0% { transform: translateX(-55%) skewX(-14deg); opacity: 0; }
+      18% { opacity: 0.22; }
+      100% { transform: translateX(155%) skewX(-14deg); opacity: 0; }
+    }
+    @keyframes cg-festive-icon-breathe {
+      0%, 100% { transform: scale(1) rotate(-2deg); filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.12)); }
+      50% { transform: scale(1.08) rotate(2deg); filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.18)); }
+    }
+    @keyframes cg-festive-float-bob {
+      0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.25; }
+      50% { transform: translateY(-7px) rotate(15deg); opacity: 0.75; }
+    }
+    @keyframes cg-festive-title-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes cg-festive-aura-pulse {
+      0%, 100% { opacity: 0.07; }
+      50% { opacity: 0.12; }
+    }
     .cg-festive-banner {
       flex-shrink: 0;
-      padding: 0.65rem 1rem;
+      position: relative;
+      overflow: hidden;
+      padding: 0.75rem 1rem 0.85rem;
       border-bottom: 1px solid color-mix(in srgb, var(--blue-500) 22%, var(--border-color));
       background: linear-gradient(105deg, color-mix(in srgb, var(--blue-100) 88%, var(--blue-500)), var(--gray-50));
       box-shadow: 0 1px 0 color-mix(in srgb, var(--blue-500) 12%, transparent);
     }
+    .cg-festive-banner__fx {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+    .cg-festive-banner__shimmer {
+      position: absolute;
+      top: -40%;
+      left: 0;
+      width: 42%;
+      height: 180%;
+      background: linear-gradient(
+        100deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.1) 40%,
+        rgba(255, 255, 255, 0.55) 50%,
+        rgba(255, 255, 255, 0.1) 60%,
+        transparent 100%
+      );
+      animation: cg-festive-shimmer 5.5s ease-in-out infinite;
+    }
+    .cg-festive-banner__floats {
+      position: absolute;
+      inset: 0;
+    }
+    .cg-festive-float {
+      position: absolute;
+      font-size: 0.95rem;
+      line-height: 1;
+      animation: cg-festive-float-bob 3.2s ease-in-out infinite;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    }
+    .cg-festive-float--1 { top: 12%; right: 8%; }
+    .cg-festive-float--2 { top: 38%; right: 18%; font-size: 0.78rem; animation-duration: 2.7s; }
+    .cg-festive-float--3 { bottom: 14%; right: 28%; font-size: 0.72rem; animation-duration: 3.8s; }
+    .cg-festive-float--4 { top: 22%; right: 38%; font-size: 0.68rem; animation-duration: 2.4s; }
+    .cg-festive-float--5 { bottom: 20%; right: 12%; font-size: 0.62rem; animation-duration: 4.1s; }
     .cg-festive-banner__inner {
       max-width: 72rem;
       margin: 0 auto;
       display: flex;
       align-items: flex-start;
-      gap: 0.75rem;
+      gap: 0.85rem;
+      position: relative;
+      z-index: 1;
+    }
+    .cg-festive-banner__icon-wrap {
+      flex-shrink: 0;
+      margin-top: 0.05rem;
+      animation: cg-festive-icon-breathe 2.8s ease-in-out infinite;
     }
     .cg-festive-banner__icon {
-      width: 2.25rem;
-      height: 2.25rem;
-      border-radius: 10px;
-      flex-shrink: 0;
-      margin-top: 0.1rem;
+      width: 2.65rem;
+      height: 2.65rem;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.35rem;
+      line-height: 1;
+      color: #fff;
       background: color-mix(in srgb, var(--blue-500) 22%, var(--white));
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue-500) 25%, transparent);
+      box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--blue-500) 25%, transparent),
+        0 4px 14px -4px rgba(0, 0, 0, 0.2);
+    }
+    .cg-festive-banner__icon i {
+      filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
     }
     .cg-festive-banner__text { flex: 1; min-width: 0; }
     .cg-festive-banner__title {
@@ -2563,12 +2641,14 @@
       font-size: 0.98rem;
       color: var(--gray-800);
       letter-spacing: -0.02em;
+      animation: cg-festive-title-in 0.55s ease-out both;
     }
     .cg-festive-banner__msg {
       margin: 0.35rem 0 0;
       font-size: 0.86rem;
       line-height: 1.45;
       color: var(--secondary-text);
+      animation: cg-festive-title-in 0.55s ease-out 0.08s both;
     }
     .cg-festive-banner__close {
       flex-shrink: 0;
@@ -2604,25 +2684,36 @@
       background: linear-gradient(110deg, #fff7ed 0%, #ffedd5 40%, #fef3c7 100%);
       border-bottom-color: color-mix(in srgb, #d97706 35%, var(--border-color));
     }
+    #app-main.cg-festive-theme--labor .cg-festive-float { color: #b45309; }
     #app-main.cg-festive-theme--labor .cg-festive-banner__icon {
       background: linear-gradient(145deg, #fbbf24, #f59e0b);
-      box-shadow: inset 0 0 0 1px rgba(180, 83, 9, 0.35);
+      box-shadow:
+        inset 0 0 0 1px rgba(180, 83, 9, 0.35),
+        0 4px 16px -4px rgba(217, 119, 6, 0.45);
     }
     #app-main.cg-festive-theme--patrias .cg-festive-banner {
       background: linear-gradient(115deg, #eff6ff 0%, #dbeafe 35%, #fee2e2 100%);
       border-bottom-color: color-mix(in srgb, #2563eb 28%, #dc2626 18%, var(--border-color));
     }
+    #app-main.cg-festive-theme--patrias .cg-festive-float:nth-child(odd) { color: #1d4ed8; }
+    #app-main.cg-festive-theme--patrias .cg-festive-float:nth-child(even) { color: #dc2626; }
     #app-main.cg-festive-theme--patrias .cg-festive-banner__icon {
       background: linear-gradient(145deg, #3b82f6, #dc2626);
-      box-shadow: inset 0 0 0 1px rgba(30, 64, 175, 0.35);
+      box-shadow:
+        inset 0 0 0 1px rgba(30, 64, 175, 0.35),
+        0 4px 16px -4px rgba(220, 38, 38, 0.25);
     }
     #app-main.cg-festive-theme--navidad .cg-festive-banner {
       background: linear-gradient(120deg, #ecfdf5 0%, #d1fae5 30%, #fee2e2 85%);
       border-bottom-color: color-mix(in srgb, #059669 25%, #b91c1c 20%, var(--border-color));
     }
+    #app-main.cg-festive-theme--navidad .cg-festive-float:nth-child(odd) { color: #047857; }
+    #app-main.cg-festive-theme--navidad .cg-festive-float:nth-child(even) { color: #b91c1c; }
     #app-main.cg-festive-theme--navidad .cg-festive-banner__icon {
       background: linear-gradient(145deg, #10b981, #dc2626);
-      box-shadow: inset 0 0 0 1px rgba(5, 150, 105, 0.35);
+      box-shadow:
+        inset 0 0 0 1px rgba(5, 150, 105, 0.35),
+        0 4px 18px -4px rgba(5, 150, 105, 0.35);
     }
     #app-main.cg-festive-theme--newyear .cg-festive-banner {
       background: linear-gradient(125deg, #1e1b4b 0%, #312e81 40%, #4c1d95 100%);
@@ -2635,9 +2726,12 @@
       color: #fef9c3;
       border: 1px solid rgba(250, 204, 21, 0.35);
     }
+    #app-main.cg-festive-theme--newyear .cg-festive-float { color: #fde047; }
     #app-main.cg-festive-theme--newyear .cg-festive-banner__icon {
       background: linear-gradient(145deg, #facc15, #eab308);
-      box-shadow: inset 0 0 0 1px rgba(113, 63, 18, 0.4);
+      box-shadow:
+        inset 0 0 0 1px rgba(113, 63, 18, 0.4),
+        0 0 20px -2px rgba(250, 204, 21, 0.55);
     }
     #app-main.cg-festive-on.cg-festive-theme--neutral .main-wrap {
       box-shadow: inset 0 3px 0 color-mix(in srgb, var(--blue-500) 45%, transparent);
@@ -2655,6 +2749,7 @@
       background-image: radial-gradient(circle at 12% 8%, currentColor 0, transparent 42%),
         radial-gradient(circle at 88% 18%, currentColor 0, transparent 38%);
       color: var(--blue-500);
+      animation: cg-festive-aura-pulse 10s ease-in-out infinite;
     }
     #app-main.cg-festive-theme--patrias .main-wrap::before {
       opacity: 0.09;
@@ -2673,6 +2768,7 @@
       color: #facc15;
       background-image: radial-gradient(circle at 20% 0%, #facc15 0, transparent 30%),
         radial-gradient(circle at 95% 8%, #a78bfa 0, transparent 35%);
+      animation: cg-festive-aura-pulse 7s ease-in-out infinite;
     }
     #app-main.cg-festive-theme--labor .main-wrap::before {
       opacity: 0.08;
@@ -2683,6 +2779,58 @@
     #app-main.cg-festive-on .main-wrap > .content {
       position: relative;
       z-index: 1;
+    }
+    #app-main.cg-festive-on .topbar {
+      transition: box-shadow 0.35s ease, border-color 0.35s ease;
+    }
+    #app-main.cg-festive-theme--labor .topbar {
+      box-shadow: inset 0 -1px 0 rgba(217, 119, 6, 0.18);
+    }
+    #app-main.cg-festive-theme--patrias .topbar {
+      box-shadow: inset 0 -1px 0 color-mix(in srgb, #2563eb 22%, #dc2626 22%, transparent);
+    }
+    #app-main.cg-festive-theme--navidad .topbar {
+      box-shadow: inset 0 -1px 0 color-mix(in srgb, #059669 25%, #dc2626 15%, transparent);
+    }
+    #app-main.cg-festive-theme--newyear .topbar {
+      box-shadow: inset 0 -1px 0 rgba(250, 204, 21, 0.28);
+    }
+    #app-main.cg-festive-theme--neutral .cg-festive-float { color: var(--blue-500); }
+    #app-main.cg-festive-theme--neutral .cg-festive-banner__icon {
+      color: #fff;
+      background: linear-gradient(145deg, color-mix(in srgb, var(--blue-500) 92%, #fff), var(--blue-500));
+      box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--blue-500) 40%, transparent),
+        0 4px 14px -4px color-mix(in srgb, var(--blue-500) 45%, transparent);
+    }
+    #app-main.cg-festive-preview-active .cg-festive-banner__shimmer {
+      animation-duration: 3.8s;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cg-festive-banner__shimmer,
+      .cg-festive-float,
+      .cg-festive-banner__icon-wrap,
+      .cg-festive-banner__title,
+      .cg-festive-banner__msg,
+      #app-main.cg-festive-on .main-wrap::before {
+        animation: none !important;
+      }
+      .cg-festive-banner__title,
+      .cg-festive-banner__msg {
+        opacity: 1;
+        transform: none;
+      }
+    }
+    @media (max-width: 540px) {
+      .cg-festive-float--4,
+      .cg-festive-float--5 {
+        display: none;
+      }
+      .cg-festive-banner__icon {
+        width: 2.35rem;
+        height: 2.35rem;
+        font-size: 1.15rem;
+      }
     }
     .sidebar {
       --cg-sidebar-p: var(--blue-500);
@@ -7417,6 +7565,59 @@
       return "neutral";
     }
 
+    /** Iconos Font Awesome (sólidos) alusivos por tema; nombres acotados a fa-[a-z0-9-]+ para sanitizeFaIconClass. */
+    function cgFestiveBannerIconPack(th) {
+      var packs = {
+        labor: {
+          main: "fa-helmet-safety",
+          floats: ["fa-hammer", "fa-screwdriver-wrench", "fa-star", "fa-award", "fa-hands-clapping"]
+        },
+        patrias: {
+          main: "fa-flag",
+          floats: ["fa-star", "fa-music", "fa-heart", "fa-fire-flame-curved", "fa-dove"]
+        },
+        navidad: {
+          main: "fa-tree",
+          floats: ["fa-gift", "fa-snowflake", "fa-bell", "fa-star", "fa-snowman"]
+        },
+        newyear: {
+          main: "fa-champagne-glasses",
+          floats: ["fa-star", "fa-clock", "fa-wand-magic-sparkles", "fa-fire", "fa-music"]
+        },
+        neutral: {
+          main: "fa-wand-magic-sparkles",
+          floats: ["fa-heart", "fa-star", "fa-sparkles", "fa-gift", "fa-music"]
+        }
+      };
+      return packs[th] || packs.neutral;
+    }
+
+    function cgFestiveBannerMainIconHtml(th) {
+      var main = sanitizeFaIconClass(cgFestiveBannerIconPack(th).main);
+      return "<i class=\"fa-solid " + main + "\" aria-hidden=\"true\"></i>";
+    }
+
+    function cgFestiveBannerFloatsHtml(th) {
+      var floats = cgFestiveBannerIconPack(th).floats;
+      var delays = ["0s", "0.35s", "0.72s", "1.05s", "1.38s"];
+      var parts = [];
+      var i;
+      var n = Math.min(floats.length, 5);
+      for (i = 0; i < n; i++) {
+        var ic = sanitizeFaIconClass(floats[i]);
+        parts.push(
+          "<span class=\"cg-festive-float cg-festive-float--" +
+            (i + 1) +
+            "\" style=\"animation-delay:" +
+            delays[i] +
+            "\"><i class=\"fa-solid " +
+            ic +
+            "\" aria-hidden=\"true\"></i></span>"
+        );
+      }
+      return parts.join("");
+    }
+
     function applyFestiveAmbienceToDom() {
       var app = document.getElementById("app-main");
       var banner = document.getElementById("cg-festive-banner");
@@ -7476,9 +7677,19 @@
           escapeHtml(ctx.ymd) +
           "</strong> (solo este navegador).</p>"
         : "";
+      var mainIconInner = cgFestiveBannerMainIconHtml(th);
+      var floatsHtml = cgFestiveBannerFloatsHtml(th);
       banner.innerHTML =
+        "<div class=\"cg-festive-banner__fx\" aria-hidden=\"true\">" +
+        "<div class=\"cg-festive-banner__shimmer\"></div>" +
+        "<div class=\"cg-festive-banner__floats\">" +
+        floatsHtml +
+        "</div></div>" +
         "<div class=\"cg-festive-banner__inner\" role=\"region\" aria-label=\"Mensaje festivo\">" +
-        "<div class=\"cg-festive-banner__icon\" aria-hidden=\"true\"></div>" +
+        "<div class=\"cg-festive-banner__icon-wrap\">" +
+        "<div class=\"cg-festive-banner__icon\">" +
+        mainIconInner +
+        "</div></div>" +
         "<div class=\"cg-festive-banner__text\">" +
         previewNote +
         "<strong class=\"cg-festive-banner__title\">" +
@@ -7490,7 +7701,7 @@
         rid +
         "\" data-cg-param=\"" +
         ymdEsc +
-        "\" title=\"Ocultar hasta mañana\">×</button></div>";
+        "\" title=\"Ocultar hasta mañana\"><span aria-hidden=\"true\">×</span></button></div>";
     }
 
     function migrateStaffChat() {
