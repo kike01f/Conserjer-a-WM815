@@ -4728,6 +4728,9 @@
       line-height: 1.38;
       margin: 0.35rem 0 0;
     }
+    #f-nov-wrap.cg-nov-form-locked form#f-nov {
+      opacity: 0.9;
+    }
     .card-h .cg-nov-bit-toolbar {
       flex: 1 1 100%;
       max-width: 100%;
@@ -16033,13 +16036,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var catsForm = novedadCatsOptionsHtml(true);
       var catsFilter = novedadCatsOptionsHtml(false);
       var gateHint = conserjeMustOpenShiftBeforeModules()
-        ? "<p class=\"page-desc\" style=\"margin:-0.25rem 0 0.75rem;padding:0.65rem 0.9rem;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;font-size:0.9rem;line-height:1.45\">Debe <strong>abrir su turno</strong> en el recuadro siguiente para poder usar el resto de módulos (visitas, encomiendas, etc.).</p>"
+        ? "<p class=\"page-desc\" style=\"margin:-0.25rem 0 0.75rem;padding:0.65rem 0.9rem;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;font-size:0.9rem;line-height:1.45\">Debe <strong>abrir su turno</strong> en el recuadro siguiente para usar el resto de módulos (visitas, encomiendas, etc.) y para <strong>registrar o editar</strong> entradas en el libro de novedades.</p>"
         : "";
       return (
         "<h1 class=\"page-title\">Libro de novedades</h1>" +
         gateHint +
         "<div class=\"card\"><div class=\"card-h\"><h3>Control de turno</h3></div><div class=\"card-b\" id=\"shift-nov-panel\"><p class=\"page-desc\">Cargando…</p></div></div>" +
-        "<div class=\"card\"><div class=\"card-h\"><h3>Nueva entrada</h3></div><div class=\"card-b\">" +
+        "<div class=\"card\"><div class=\"card-h\"><h3>Nueva entrada</h3></div><div class=\"card-b\" id=\"f-nov-wrap\">" +
+        "<p id=\"f-nov-gate-msg\" class=\"page-desc\" style=\"margin:0 0 0.65rem;line-height:1.45;color:#92400e;display:none\" role=\"status\" aria-live=\"polite\"></p>" +
         "<form id=\"f-nov\" action=\"#\" method=\"post\">" +
         "<div class=\"form-group\"><label>Categoría</label><select name=\"category\" required>" + catsForm + "</select></div>" +
         "<div class=\"form-group\"><label>Descripción</label><textarea name=\"text\" rows=\"3\" required placeholder=\"Detalle de la novedad…\"></textarea></div>" +
@@ -22166,9 +22170,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
 
   /**
-   * Conserje: solo puede editar sus propias novedades (no categoría Turno) registradas
-   * durante el tramo de turno abierto actual. Administrador: puede editar cualquier entrada
-   * (incl. fecha y autor desde el modal de edición; las marcas «Turno» usan el formulario dedicado).
+   * Conserje: solo puede registrar o editar novedades (no categoría Turno) con turno abierto;
+   * solo edita las propias entradas creadas desde la apertura de ese tramo. Administrador: sin esta restricción.
    */
   function novedadConserjeMayEdit(n, user) {
     if (!user || user.role === "admin") return true;
@@ -22177,6 +22180,38 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var open = shiftFindOpen(G.state.shiftLogs || [], user.id);
     if (!open) return false;
     return new Date(n.at).getTime() >= new Date(open.startAt).getTime();
+  }
+
+  /** Conserje: requiere turno abierto para usar el formulario «Nueva entrada». Admin: siempre permitido. */
+  function novedadConserjeMayRegisterNew(user) {
+    if (!user || user.role === "admin") return true;
+    return !!shiftFindOpen(G.state.shiftLogs || [], user.id);
+  }
+
+  function syncNovedadEntryFormShiftGate() {
+    var f = document.getElementById("f-nov");
+    var msg = document.getElementById("f-nov-gate-msg");
+    var wrap = document.getElementById("f-nov-wrap");
+    if (!f) return;
+    var u = G.currentUser();
+    var locked = !novedadConserjeMayRegisterNew(u);
+    var hint =
+      "Abra su turno en el recuadro <strong>Control de turno</strong> para poder registrar entradas en el libro.";
+    f.querySelectorAll("select, textarea, button[type=\"submit\"]").forEach(function (el) {
+      el.disabled = locked;
+    });
+    if (wrap) wrap.classList.toggle("cg-nov-form-locked", locked);
+    if (msg) {
+      if (locked) {
+        msg.innerHTML = hint;
+        msg.style.display = "block";
+        msg.removeAttribute("hidden");
+      } else {
+        msg.textContent = "";
+        msg.style.display = "none";
+        msg.setAttribute("hidden", "hidden");
+      }
+    }
   }
 
   function shiftReasonLabel(r) {
@@ -22363,6 +22398,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var u = G.currentUser();
     if (!u) {
       el.innerHTML = "<p class=\"page-desc\">Inicie sesión para ver el turno.</p>";
+      syncNovedadEntryFormShiftGate();
       return;
     }
     if (u.role === "admin") {
@@ -22376,6 +22412,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         G.escapeHtml(u.name) +
         "</strong> · Administrador</p>" +
         orphan;
+      syncNovedadEntryFormShiftGate();
       return;
     }
     var open = shiftFindOpen(G.state.shiftLogs || [], u.id);
@@ -22390,6 +22427,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     el.innerHTML =
       "<p class=\"page-desc\" style=\"margin:0\"><strong>" + G.escapeHtml(u.name) + "</strong> · Conserje</p>" +
       extra;
+    syncNovedadEntryFormShiftGate();
   };
 
   function novedadYmdLocal(d) {
@@ -22579,6 +22617,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           G.toast("Inicie sesión para registrar.", "warn");
           return;
         }
+        if (!novedadConserjeMayRegisterNew(u)) {
+          G.toast("Abra su turno en Control de turno antes de registrar entradas en el libro.", "warn");
+          return;
+        }
         if (f.category.value === "Turno") {
           G.toast("Las marcas de turno las gestiona el administrador", "warn");
           return;
@@ -22745,10 +22787,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var n = (Array.isArray(G.state.novedades) ? G.state.novedades : []).find(function (x) { return x.id === id; });
     if (!n) return;
     var uNov = G.currentUser();
-    if (uNov && uNov.role !== "admin" && !novedadConserjeMayEdit(n, uNov)) {
-      G.toast("No puede editar novedades de turnos ya cerrados ni las de otro usuario. Solo las suyas del turno abierto.", "warn");
-      return;
-    }
     if (n.category === "Turno") {
       if (!uNov || uNov.role !== "admin") {
         G.toast("Solo el administrador puede editar marcas de turno", "warn");
@@ -22756,6 +22794,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
       A.novTurnoOpen(id);
       return;
+    }
+    if (uNov && uNov.role !== "admin") {
+      if (!shiftFindOpen(G.state.shiftLogs || [], uNov.id)) {
+        G.toast("Abra su turno en este módulo para poder editar entradas del libro.", "warn");
+        return;
+      }
+      if (!novedadConserjeMayEdit(n, uNov)) {
+        G.toast("No puede editar esta entrada: solo las suyas registradas durante su turno abierto actual.", "warn");
+        return;
+      }
     }
     var cats = G.NOVEDAD_CATS.filter(function (c) {
       return c !== "Turno";
@@ -22847,9 +22895,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var novArr = Array.isArray(G.state.novedades) ? G.state.novedades : [];
     var prev = novArr.find(function (x) { return x.id === id; });
     var uSave = G.currentUser();
-    if (uSave && uSave.role !== "admin" && prev && !novedadConserjeMayEdit(prev, uSave)) {
-      G.toast("No puede guardar: la entrada no pertenece a su turno abierto o ya quedó en un turno cerrado.", "error");
-      return;
+    if (uSave && uSave.role !== "admin") {
+      if (!shiftFindOpen(G.state.shiftLogs || [], uSave.id)) {
+        G.toast("No puede guardar: debe tener el turno abierto para editar entradas del libro.", "error");
+        return;
+      }
+      if (prev && !novedadConserjeMayEdit(prev, uSave)) {
+        G.toast("No puede guardar: la entrada no pertenece a su turno abierto actual o no es suya.", "error");
+        return;
+      }
     }
     if (prev && prev.category === "Turno") {
       G.toast("Use el formulario de turno (administración)", "warn");
