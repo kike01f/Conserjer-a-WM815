@@ -18814,6 +18814,67 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }, 0);
   };
 
+  /** Tras registrar ingreso: modal con texto plano (mailto), vista previa HTML y copiar diseño. */
+  A.visitIngresoNotifyModal = function (rec) {
+    if (!rec || !visitIngresoNotifyDeptIsResidential(rec.deptId)) return;
+    var inf = residentEmailsAllForDept(rec.deptId);
+    var mail = inf.email;
+    if (!mail) return;
+    var plain = visitIngresoNotifyBodyText(rec);
+    var htmlBody = visitIngresoNotifyBodyHtml(rec);
+    var dep = G.deptById(rec.deptId);
+    var deptLbl = dep ? dep.number : "—";
+    var subjIng = "Aviso de ingreso de visita — Depto " + deptLbl;
+    var mailto = mailtoHrefPlain(mail, subjIng, plain);
+    var rid = String(rec.id || "x").replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!rid) rid = "x";
+    var taId = "visit-ingreso-txt-" + rid;
+    var prevId = "visit-ingreso-preview-" + rid;
+    var resNm = G.deptResidentDisplayName(rec.deptId);
+    UI.openModal(
+      "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>Aviso de ingreso a la unidad</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
+      "<div class=\"modal-b\"><p class=\"page-desc\">Unidad: <strong>" +
+      G.escapeHtml(deptLbl) +
+      "</strong>" +
+      (resNm && resNm !== "—" ? " · " + G.escapeHtml(resNm) : "") +
+      "</p>" +
+      "<p class=\"page-desc\" style=\"margin-top:0\">Integrantes de la unidad (mismo correo): <strong>" +
+      G.escapeHtml(mail.replace(/,/g, ", ")) +
+      "</strong>" +
+      (inf.fuente ? " <span style=\"opacity:.85\">(" + G.escapeHtml(inf.fuente) + ")</span>" : "") +
+      ". <strong>Abrir correo</strong> usa texto plano en el campo Para. <em>Copiar diseño HTML</em> pega el mensaje con colores y firma en Gmail u Outlook.</p>" +
+      "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje (texto plano para mailto)</p>" +
+      "<textarea id=\"" +
+      taId +
+      "\" style=\"width:100%;min-height:200px;font-family:ui-monospace,monospace;font-size:0.8rem;line-height:1.45;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:0.5rem\">" +
+      G.escapeHtml(plain) +
+      "</textarea>" +
+      "<p class=\"page-desc\" style=\"margin:0.75rem 0 0.25rem;font-size:0.8rem\">Vista previa HTML (referencia / copiar)</p>" +
+      "<div class=\"email-html-preview\"><div id=\"" +
+      prevId +
+      "\" class=\"email-html-preview-inner\"></div></div>" +
+      "<div class=\"toolbar\" style=\"margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem\">" +
+      "<a class=\"btn btn-primary btn-sm\" href=\"" +
+      mailto.replace(/"/g, "&quot;") +
+      "\"><i class=\"fa-solid fa-envelope\"></i> Abrir correo</a>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"btn-visit-ingreso-copy-html\"><i class=\"fa-solid fa-palette\"></i> Copiar diseño HTML</button>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"clipboardCopyByElId\" data-cg-id=\"" +
+      G.escapeHtml(taId) +
+      "\">Copiar texto plano</button>" +
+      "</div></div><div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cerrar</button></div></div>"
+    );
+    setTimeout(function () {
+      var prev = document.getElementById(prevId);
+      if (prev) prev.innerHTML = htmlBody;
+      var btnH = document.getElementById("btn-visit-ingreso-copy-html");
+      if (btnH) {
+        btnH.onclick = function () {
+          A.copyRichEmail(htmlBody, plain);
+        };
+      }
+    }, 0);
+  };
+
   A.encomiendaMarkNotified = function (id, kind) {
     var now = new Date().toISOString();
     G.state.encomiendas = (G.state.encomiendas || []).map(function (x) {
@@ -19287,21 +19348,77 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return lines.join("\n") + sig;
   }
 
-  /** Abre cliente de correo con integrantes de la unidad en Para (mismo mensaje). */
-  function visitIngresoOpenResidentMail(rec) {
-    if (!visitIngresoNotifyDeptIsResidential(rec.deptId)) return false;
-    var inf = residentEmailsAllForDept(rec.deptId);
-    if (!inf.email) return false;
+  /** HTML aviso ingreso visita: mismo estilo que avisos vehiculares / encomiendas (shell + tabla + firma). */
+  function visitIngresoNotifyBodyHtml(rec) {
+    rec = rec || {};
+    var C = typeof G.getEmailShellThemeColors === "function" ? G.getEmailShellThemeColors() : {};
+    var accRibbon = C.ribbon || "#74bd20";
+    var headDark = C.headG1 || "#1e3a0f";
+    var ff = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif";
     var dep = G.deptById(rec.deptId);
-    var deptLbl = dep ? dep.number : "—";
-    var subjIng = "Aviso de ingreso de visita — Depto " + deptLbl;
-    var bodyIng = visitIngresoNotifyBodyText(rec);
-    try {
-      window.open(mailtoHrefPlain(inf.email, subjIng, bodyIng), "_blank", "noopener,noreferrer");
-    } catch (eIng) {
-      return false;
+    var depto = dep ? dep.number : "—";
+    var resName = G.deptResidentDisplayName(rec.deptId);
+    var saludoLine =
+      resName && resName !== "—"
+        ? "Estimado/a " + resName + ", residente del domicilio " + depto + ":"
+        : "Estimado/a residente del domicilio " + depto + ":";
+    var tipo = visitIsProveedor(rec) ? "Proveedor" : "Persona";
+    var rowsData = [
+      { l: "Tipo de ingreso", v: tipo },
+      { l: "Visitante / registro", v: rec.visitor || "—" }
+    ];
+    if (String(rec.visitorRut || "").trim()) rowsData.push({ l: "RUT", v: String(rec.visitorRut).trim() });
+    rowsData.push({ l: "Unidad", v: depto });
+    rowsData.push({ l: "Fecha y hora de ingreso", v: G.fmtDate(rec.at) });
+    if (rec.vehicular) {
+      rowsData.push({ l: "Vehículo", v: "Sí" });
+      rowsData.push({ l: "Patente", v: rec.plate || "—" });
+      var estHtml = visitVisitorParkingDisplay(rec);
+      if (estHtml) rowsData.push({ l: "Estacionamiento (visitas)", v: estHtml });
+    } else {
+      rowsData.push({ l: "Vehículo", v: "No" });
     }
-    return true;
+    rowsData.push({ l: "Registrado en conserjería por", v: rec.registradoPor || "—" });
+    var tableRows = rowsData
+      .map(function (r, i) {
+        return emailDetailRow(r.l, r.v, i === rowsData.length - 1);
+      })
+      .join("");
+    var footTxt = "Ante cualquier consulta, comuníquese con conserjería o administración.";
+    var introHtml =
+      "Le informamos que se ha registrado un <strong>ingreso de visita</strong> asociado a su unidad.";
+    var inner =
+      "<p style=\"margin:0 0 14px 0;font-size:16px;font-weight:600;color:" +
+      headDark +
+      ";line-height:1.4;font-family:" +
+      ff +
+      ";\">" +
+      emailHtmlEscape(saludoLine) +
+      "</p>" +
+      "<p style=\"margin:0 0 18px;color:" +
+      (C.innerText || "#3f3f46") +
+      ";font-size:15px;line-height:1.65;font-family:" +
+      ff +
+      ";\">" +
+      introHtml +
+      "</p>" +
+      emailDetailTableOpen("Detalle del ingreso", accRibbon) +
+      tableRows +
+      emailDetailTableClose();
+    return buildEmailShell({
+      title: "Aviso de ingreso de visita",
+      brandLine: G.APP_BRAND_NAME,
+      subtitleHtml:
+        emailHtmlEscape(CG_EMAIL_BUILDING_NAME) +
+        " · Unidad <strong style=\"color:#18181b;\">" +
+        emailHtmlEscape(depto) +
+        "</strong>" +
+        (resName && resName !== "—" ? " · " + emailHtmlEscape(resName) : ""),
+      ribbonText: "Ingreso de visita",
+      ribbonColor: accRibbon,
+      inner: inner,
+      footer: footTxt
+    });
   }
 
   function proveedorById(id) {
@@ -19833,9 +19950,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           (visitorRutStr ? " — RUT " + visitorRutStr : "") +
           (depIng ? " — Depto " + depIng.number : "")
       );
-      var mailIngresoOk = visitIngresoOpenResidentMail(rec);
-      if (mailIngresoOk) {
-        G.toast("Ingreso registrado. Correo de aviso a integrantes de la unidad abierto (revise y envíe).", "success");
+      var infPostIng = visitIngresoNotifyDeptIsResidential(rec.deptId) ? residentEmailsAllForDept(rec.deptId) : { email: "" };
+      if (infPostIng.email) {
+        A.visitIngresoNotifyModal(rec);
+        G.toast("Ingreso registrado. Revise el aviso en el modal (HTML o Abrir correo).", "success");
       } else if (visitIngresoNotifyDeptIsResidential(rec.deptId)) {
         G.toast("Ingreso registrado. Ningún integrante tiene e-mail en el panel para aviso automático.", "warn");
       } else {
