@@ -17501,6 +17501,35 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return { email: "", fuente: "" };
   }
 
+  /**
+   * Todos los correos de la unidad (ficha departamento + cada residente con e-mail), sin duplicados.
+   * Lista separada por comas para un solo mailto a todos los habitantes.
+   */
+  function residentEmailsAllForDept(deptId) {
+    var seen = {};
+    var list = [];
+    function add(raw) {
+      var em = String(raw || "").trim();
+      if (!em) return;
+      var key = em.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = true;
+      list.push(em);
+    }
+    var d = G.deptById(deptId);
+    if (d && String(d.email || "").trim()) add(d.email);
+    var u = (G.state.buildingUnits || []).find(function (x) { return x.id === deptId; });
+    (u && u.residentIds ? u.residentIds : []).forEach(function (rid) {
+      var r = (G.state.buildingResidents || []).find(function (x) { return x.id === rid; });
+      if (r && r.tipo !== "visita" && String(r.email || "").trim()) add(r.email);
+    });
+    return {
+      email: list.join(","),
+      emails: list,
+      fuente: list.length ? list.length + " destinatario(s) en el mismo correo" : ""
+    };
+  }
+
   function cgGetVehVisitAudioContext() {
     try {
       var AC = window.AudioContext || window.webkitAudioContext;
@@ -17602,7 +17631,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   function visitBuildWarn30Mail(v) {
     var dep = G.deptById(v.deptId);
     var deptLbl = dep ? dep.number : "—";
-    var res = residentEmailForDept(v.deptId);
+    var res = residentEmailsAllForDept(v.deptId);
     var subj = "Recordatorio: tiempo máximo estacionamiento de visitas — Depto " + deptLbl;
     return { email: res.email, subj: subj, body: visitVehResidentNotifyBodyText(v, "warn30") };
   }
@@ -17610,7 +17639,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   function visitBuildMultaMail(v) {
     var dep = G.deptById(v.deptId);
     var deptLbl = dep ? dep.number : "—";
-    var res = residentEmailForDept(v.deptId);
+    var res = residentEmailsAllForDept(v.deptId);
     var subj = "Se ha excedido el tiempo máximo del estacionamiento de visitas — Depto " + deptLbl;
     return { email: res.email, subj: subj, body: visitVehResidentNotifyBodyText(v, "multa") };
   }
@@ -17644,7 +17673,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var elapsed = now - start;
       var dep = G.deptById(v.deptId);
       var deptLbl = dep ? dep.number : "—";
-      var resEm = residentEmailForDept(v.deptId).email;
+      var resEm = residentEmailsAllForDept(v.deptId).email;
 
       if (elapsed >= WARN_MS && elapsed < LIMIT_MS) {
         var key = "warned_visit_" + v.id;
@@ -17699,7 +17728,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           var k3 = "multa_mail_toast_" + v.id;
           if (!G.persist.sessionGetRaw(k3)) {
             G.persist.sessionSetRaw(k3, "1");
-            G.toast("Notificación de multa al residente (depto " + deptLbl + "): correo abierto.", "warn");
+            G.toast("Notificación de multa a la unidad (depto " + deptLbl + "): correo abierto a todos los destinatarios.", "warn");
           }
         } else if (!entryM.mailMulta && !resEm && !entryM.mailMultaSkip) {
           entryM.mailMultaSkip = true;
@@ -17748,7 +17777,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var elapsed = now - start;
         var dep = G.deptById(v.deptId);
         var deptLbl = dep ? dep.number : "—";
-        var resEm = residentEmailForDept(v.deptId).email;
+        var resEm = residentEmailsAllForDept(v.deptId).email;
         var phase = "ok";
         if (elapsed >= MULTA_MS) phase = "multa";
         else if (elapsed >= LIMIT_MS) phase = "grace";
@@ -17757,11 +17786,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var dur = fmtDurVisit(mock);
         var msg =
           phase === "warn"
-            ? "Menos de 30 min antes del límite de 5 h. Correo de aviso al residente (si hay e-mail en ficha)."
+            ? "Menos de 30 min antes del límite de 5 h. Aviso por correo a todos los e-mails de la unidad (ficha + residentes)."
             : phase === "grace"
               ? "Superó 5 h — gracia 15 min. Tras finalizar la gracia aplica multa; el parte solo se genera entonces."
               : phase === "multa"
-                ? "Multa aplicable. Puede generar el parte y notificar al residente (correo automático si hay e-mail)."
+                ? "Multa aplicable. Parte y correo a todos los e-mails de la unidad si hay al menos uno registrado."
                 : "Dentro del tiempo permitido.";
         var mailBtns = "";
         if (phase === "warn") {
@@ -17776,7 +17805,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             G.escapeHtml(v.id) +
             "\">Correo multa</button> ";
         }
-        var noMail = !resEm ? "<span class=\"page-desc\" style=\"font-size:0.72rem\">Sin e-mail en ficha.</span> " : "";
+        var noMail = !resEm ? "<span class=\"page-desc\" style=\"font-size:0.72rem\">Sin e-mails en ficha ni residentes.</span> " : "";
         var parteBtn = visitParteMultaApplies(v)
           ? "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"visitParte\" data-cg-id=\"" +
             G.escapeHtml(v.id) +
@@ -17920,13 +17949,26 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return residentEmailForDept(e.deptId);
   }
 
-  /** mailto solo con texto plano (máxima compatibilidad en Gmail, Outlook, móvil). */
+  /** mailto solo con texto plano (máxima compatibilidad en Gmail, Outlook, móvil). Varios Para: separados por coma. */
   function mailtoHrefPlain(toEmail, subject, bodyPlain) {
     var MAX = 32000;
+    function encodeToField(raw) {
+      if (!raw) return "";
+      return String(raw)
+        .split(",")
+        .map(function (x) {
+          return String(x || "").trim();
+        })
+        .filter(Boolean)
+        .map(function (x) {
+          return encodeURIComponent(x);
+        })
+        .join(",");
+    }
     function build(body) {
       return (
         "mailto:" +
-        encodeURIComponent(toEmail) +
+        encodeToField(toEmail) +
         "?subject=" +
         encodeURIComponent(subject) +
         "&body=" +
@@ -18718,10 +18760,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return x.id === visitId;
     });
     if (!v || !v.vehicular || v.outAt || visitIsProveedor(v)) return;
-    var inf = residentEmailForDept(v.deptId);
+    var inf = residentEmailsAllForDept(v.deptId);
     var mail = inf.email;
     if (!mail) {
-      G.toast("No hay correo de residente en la ficha de la unidad", "error");
+      G.toast("No hay correos en la ficha del departamento ni en los residentes de la unidad", "error");
       return;
     }
     var k = kind === "multa" ? "multa" : "warn30";
@@ -18737,16 +18779,20 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var taId = "visit-mail-txt-" + visitId + "-" + k;
     var prevId = "visit-mail-preview-" + visitId + "-" + k;
     var modalTitle =
-      k === "warn30" ? "Aviso al residente — visita vehicular (30 min al límite)" : "Aviso al residente — exceso de tiempo / multa";
+      k === "warn30"
+        ? "Aviso a la unidad — visita vehicular (30 min al límite)"
+        : "Aviso a la unidad — exceso de tiempo / multa";
     var resNm = G.deptResidentDisplayName(v.deptId);
     UI.openModal(
       "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>" + G.escapeHtml(modalTitle) + "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
       "<div class=\"modal-b\"><p class=\"page-desc\">Unidad: <strong>" + G.escapeHtml(deptLbl) + "</strong>" +
       (resNm && resNm !== "—" ? " · " + G.escapeHtml(resNm) : "") +
       "</p>" +
-      "<p class=\"page-desc\" style=\"margin-top:0\">Correo: <strong>" + G.escapeHtml(mail) + "</strong>" +
+      "<p class=\"page-desc\" style=\"margin-top:0\">Destinatarios (mismo correo): <strong>" +
+      G.escapeHtml(mail.replace(/,/g, ", ")) +
+      "</strong>" +
       (inf.fuente ? " <span style=\"opacity:.85\">(" + G.escapeHtml(inf.fuente) + ")</span>" : "") +
-      ". <strong>Abrir correo</strong> inserta el mensaje de abajo en texto plano (compatible con todos los clientes).</p>" +
+      ". <strong>Abrir correo</strong> rellena el mismo mensaje para todos en el campo Para.</p>" +
       "<p class=\"page-desc\" style=\"margin-top:0\">Sin servidor SMTP: envío desde su cliente habitual. Use <em>Copiar diseño HTML</em> para el mismo contenido con el estilo de los avisos de encomiendas (colores al pegar en Gmail, Outlook…).</p>" +
       "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje (texto plano para mailto)</p>" +
       "<textarea id=\"" + taId + "\" style=\"width:100%;min-height:200px;font-family:ui-monospace,monospace;font-size:0.8rem;line-height:1.45;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:0.5rem\">" + G.escapeHtml(plain) + "</textarea>" +
