@@ -2854,39 +2854,47 @@
     /* Dashboard: tarjetas KPI más compactas y fila de gráficos */
     .cg-dash-stat-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(188px, 1fr));
-      gap: 0.65rem;
-      margin-bottom: 0.85rem;
+      grid-template-columns: repeat(auto-fit, minmax(152px, 1fr));
+      gap: 0.45rem;
+      margin-bottom: 0.65rem;
     }
     .cg-dash-stat-card--compact .card-h {
-      padding: 0.5rem 0.7rem;
+      padding: 0.32rem 0.55rem;
     }
     .cg-dash-stat-card--compact .card-h h3 {
-      font-size: 0.82rem;
+      font-size: 0.72rem;
       font-weight: 700;
+      gap: 0.35rem;
+    }
+    .cg-dash-stat-card--compact .card-h h3 > i:first-child {
+      font-size: 0.92em;
+      opacity: 0.9;
     }
     .cg-dash-stat-card--compact .card-b {
-      padding: 0.55rem 0.75rem 0.65rem;
+      padding: 0.38rem 0.55rem 0.48rem;
     }
     .cg-dash-stat-card--compact .cg-dash-stat-val {
-      font-size: 1.28rem;
+      font-size: 1.05rem;
       font-weight: 800;
       color: var(--blue-700);
-      margin: 0 0 0.2rem;
-      line-height: 1.1;
+      margin: 0 0 0.12rem;
+      line-height: 1.08;
     }
     .cg-dash-stat-card--compact .page-desc {
-      font-size: 0.72rem;
-      line-height: 1.35;
+      font-size: 0.64rem;
+      line-height: 1.3;
       margin: 0;
+    }
+    .cg-dash-stat-card--compact .cg-dash-stat-card-b__top .page-desc + .page-desc {
+      margin-top: 0.22rem !important;
     }
     .cg-dash-delta {
       display: inline-block;
-      margin-top: 0.35rem;
-      font-size: 0.72rem;
+      margin-top: 0.22rem;
+      font-size: 0.64rem;
       font-weight: 600;
-      padding: 0.15rem 0.45rem;
-      border-radius: 6px;
+      padding: 0.1rem 0.35rem;
+      border-radius: 5px;
     }
     .cg-dash-delta--up { background: #d1fae5; color: #047857; }
     .cg-dash-delta--down { background: #fee2e2; color: #b91c1c; }
@@ -2907,7 +2915,11 @@
       display: flex;
       justify-content: flex-end;
       align-items: flex-end;
-      padding-top: 0.5rem;
+      padding-top: 0.32rem;
+    }
+    .cg-dash-stat-card--compact .cg-dash-stat-card-b__footer .btn-sm {
+      font-size: 0.68rem;
+      padding: 0.22rem 0.45rem;
     }
     .cg-dash-charts-row {
       display: grid;
@@ -3414,6 +3426,11 @@
     }
     .cg-vis-reg-form .cg-vis-veh-extra .page-desc {
       margin-top: 0.15rem !important;
+    }
+    .cg-vis-reg-form input.cg-vis-plate {
+      text-transform: uppercase;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.04em;
     }
     .cg-vis-open-card {
       border: 1px solid var(--gray-200);
@@ -5287,6 +5304,23 @@
       }
     }
 
+    /** Patente visita vehicular: misma normalización que al validar (mayúsculas, sin espacios). */
+    function __cgNormalizeVisitPlateString(s) {
+      return String(s || "")
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "");
+    }
+    function __cgNormalizeVisitPlatesInArray(arr) {
+      if (!Array.isArray(arr)) return arr;
+      return arr.map(function (v) {
+        if (!v || !v.vehicular) return v;
+        var n = __cgNormalizeVisitPlateString(v.plate);
+        if ((v.plate || "") === n) return v;
+        return Object.assign({}, v, { plate: n });
+      });
+    }
+
     /* ┌─ 6. Estado de aplicación (getters/setters → load/save por clave) ─────────────── */
     const state = {
       session: load("session", null),
@@ -5303,7 +5337,7 @@
       get bodegas() { return load("bodegas", []); },
       set bodegas(v) { save("bodegas", v); },
       get visits() { return load("visits", []); },
-      set visits(v) { save("visits", v); },
+      set visits(v) { save("visits", __cgNormalizeVisitPlatesInArray(v)); },
       get reservas() { return load("reservas", []); },
       set reservas(v) { save("reservas", v); },
       get novedades() { return load("novedades", []); },
@@ -6079,6 +6113,23 @@
       if (P.localGetRaw(LS + "conserjeActivityLog") === null) save("conserjeActivityLog", []);
     }
 
+    /** Una vez: patentes de visitas vehiculares en mayúsculas y sin espacios (alineado con validación). */
+    function migrateVisitPlatesUppercase() {
+      if (load("migrated_visit_plates_upper_v1", false)) return;
+      var vis = load("visits", []);
+      var next = __cgNormalizeVisitPlatesInArray(vis);
+      var i;
+      var changed = false;
+      for (i = 0; i < vis.length; i++) {
+        if (next[i] !== vis[i]) {
+          changed = true;
+          break;
+        }
+      }
+      if (changed) save("visits", next);
+      save("migrated_visit_plates_upper_v1", true);
+    }
+
     /** Orden fijo de migraciones locales (mismo que el arranque en PART 4). Cada paso aislado: un fallo no aborta el resto. */
     function runStartupLocalMigrations() {
       var steps = [
@@ -6091,6 +6142,7 @@
         ["staffChat", migrateStaffChat],
         ["provVisitAdmin", migrateProveedorVisitAdminDept],
         ["visitVehAlert", migrateVisitVehAlertLog],
+        ["visitPlatesUpper", migrateVisitPlatesUppercase],
         ["conserjeActivity", migrateConserjeActivityLog],
         ["staffBirthdays", migrateStaffBirthdays],
         ["dashScheduledAlerts", migrateDashScheduledAlerts]
@@ -6541,7 +6593,7 @@
     /* ┌─ 11. API pública (único objeto global del core) ─────────────────────────────── */
     window.CG = {
       APP_BRAND_NAME, MANUFACTURER_LOGO_URL,
-      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureCloudInstallBaseline, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateProveedoresModule, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
+      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureCloudInstallBaseline, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateProveedoresModule, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateVisitPlatesUppercase, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
       attachVirtualAdminDepartment,
       authEnsureReady, authValidateDeptGateNewPassword, authVerifyLoginPassword, authCreatePasswordVerifier, authDeptGateExists, authVerifyDeptGate, authSetDeptGateFromPasswords, authSetDeptGateInitial,
       shiftLogTramoIsOpen,
@@ -6566,6 +6618,7 @@
       },
       stripLegacyLocalStorageIfCloudOnly: __cgStripLegacyLocalStorageIfCloudOnly,
       __cgHydrateMemLsFromLocalStorageBackup: __cgHydrateMemLsFromLocalStorageBackup,
+      normalizeVisitPlateString: __cgNormalizeVisitPlateString,
       validate: CG_VALIDATE
     };
     applyPersonalizationToDom();
@@ -14295,7 +14348,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       const actTable = buildDashMonthlyConserjeActivityHtml();
       return (
         "<h1 class=\"page-title\">Dashboard</h1>" +
-        "<p class=\"page-desc\">Resumen de actividad en conserjería (visitas, reservas, encomiendas, novedades y registro de operaciones por usuario). Si el administrador programó avisos, aparecen debajo del bloque de cumpleaños.</p>" +
         "<div class=\"card cg-dash-bday-card\" id=\"dash-staff-bday-card\" style=\"display:none;border-left:3px solid #db2777\">" +
         "<div class=\"cg-dash-bday-confetti\" aria-hidden=\"true\">" +
         "<span class=\"cg-dash-bday-confetti-piece\"></span><span class=\"cg-dash-bday-confetti-piece\"></span><span class=\"cg-dash-bday-confetti-piece\"></span><span class=\"cg-dash-bday-confetti-piece\"></span>" +
@@ -14324,7 +14376,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"cg-dash-stat-grid\">" +
         "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-user-group\" aria-hidden=\"true\"></i> Visitas hoy</h3></div><div class=\"card-b\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-visits-today\">" + visitsToday + "</p><p class=\"page-desc\">Entradas registradas con fecha de hoy</p><span id=\"dash-stat-visits-delta\">" + visDelta + "</span></div></div>" +
         "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-calendar-check\" aria-hidden=\"true\"></i> Reservas activas</h3></div><div class=\"card-b\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-reservas-activas\">" + reservasActivas + "</p><p class=\"page-desc\">Espacios comunes con vigencia hoy o futura</p></div></div>" +
-        "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact cg-dash-stat-card--with-footer-btn\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-box\" aria-hidden=\"true\"></i> Encomiendas</h3></div><div class=\"card-b cg-dash-stat-card-b--stack\"><div class=\"cg-dash-stat-card-b__top\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-enc-pend\">" + encPend + "</p><p class=\"page-desc\">Pendientes de retiro en conserjería</p><p class=\"page-desc\" style=\"margin:0.4rem 0 0\">Recibidas hoy: <strong id=\"dash-stat-enc-today\">" + encReceivedToday + "</strong></p><span id=\"dash-stat-enc-delta\">" + encRecDelta + "</span></div>" +
+        "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact cg-dash-stat-card--with-footer-btn\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-box\" aria-hidden=\"true\"></i> Encomiendas</h3></div><div class=\"card-b cg-dash-stat-card-b--stack\"><div class=\"cg-dash-stat-card-b__top\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-enc-pend\">" + encPend + "</p><p class=\"page-desc\">Pendientes de retiro en conserjería</p><p class=\"page-desc\">Recibidas hoy: <strong id=\"dash-stat-enc-today\">" + encReceivedToday + "</strong></p><span id=\"dash-stat-enc-delta\">" + encRecDelta + "</span></div>" +
         (encPend ? "<div class=\"cg-dash-stat-card-b__footer\"><button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"encomiendas\">Ver módulo</button></div>" : "") + "</div></div>" +
         "</div>" +
         "<div class=\"cg-dash-charts-row\">" +
@@ -19121,7 +19173,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"form-group\"><label><input type=\"checkbox\" name=\"vehicular\" class=\"cg-vis-veh\" value=\"1\" /> Visita vehicular</label></div>" +
       "<div class=\"cg-vis-veh-extra\" style=\"display:none\">" +
       "<div class=\"cg-form-grid-2\">" +
-      "<div class=\"form-group\"><label>Patente</label><input name=\"plate\" placeholder=\"Ej: ABCD12\" autocomplete=\"off\" /></div>" +
+      "<div class=\"form-group\"><label>Patente</label><input name=\"plate\" class=\"cg-vis-plate\" placeholder=\"Ej: ABCD12\" autocomplete=\"off\" autocapitalize=\"characters\" spellcheck=\"false\" /></div>" +
       "<div class=\"form-group\"><label>Estacionamiento (visita)</label>" +
       "<input type=\"text\" name=\"visitorParkingCode\" list=\"visitor-parking-suggest\" placeholder=\"Ej: V-2, visitas 5…\" autocomplete=\"off\" /></div></div>" +
       "<p class=\"page-desc\" style=\"margin:0.15rem 0 0;font-size:0.75rem;line-height:1.35\">Texto libre; si configuró sugerencias en Administración, aparecerán al escribir.</p></div></div>" +
@@ -19196,6 +19248,35 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (atEl && !atEl.value) atEl.value = localDatetimeValue(new Date());
     A.visitFormToggleTipoIngresoForm(form);
     visitFormBindRutInputs(form);
+    var plateInp = form.querySelector('input[name="plate"]');
+    if (plateInp) {
+      function normPlateStr(s) {
+        return typeof G.normalizeVisitPlateString === "function"
+          ? G.normalizeVisitPlateString(s)
+          : String(s || "")
+              .trim()
+              .toUpperCase()
+              .replace(/\s+/g, "");
+      }
+      function normPlateField(el) {
+        el.value = normPlateStr(el.value);
+      }
+      plateInp.addEventListener("blur", function () {
+        normPlateField(this);
+      });
+      plateInp.addEventListener("input", function () {
+        var el = this;
+        var raw = el.value;
+        var n = normPlateStr(raw);
+        if (raw !== n) {
+          var pos = el.selectionStart;
+          el.value = n;
+          try {
+            el.setSelectionRange(typeof pos === "number" ? Math.min(pos, n.length) : n.length, typeof pos === "number" ? Math.min(pos, n.length) : n.length);
+          } catch (ePl) {}
+        }
+      });
+    }
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       var fd = new FormData(form);
