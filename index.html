@@ -17967,18 +17967,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "\n" +
       CG_EMAIL_BUILDING_NAME +
       "\n\n" +
-      "Sitio del edificio (desde logo): " +
-      CG_EMAIL_FIRMA_URL_LOGO +
-      "\n" +
-      "Visitar sitio web: " +
-      CG_EMAIL_FIRMA_URL_BOTON +
-      "\n" +
-      "Enlace firma (texto): " +
-      CG_EMAIL_FIRMA_URL_TEXTO +
-      "\n" +
-      "Imagen logo (GIF): " +
-      CG_EMAIL_FIRMA_LOGO_GIF +
-      "\n\n" +
       "Cuidemos el Medio Ambiente, por favor, no imprima este E-Mail si no es necesario.\n"
     );
   }
@@ -18263,14 +18251,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "</p>" +
       emailDetailTableOpen(detailHeaderTitle, detailHeaderBg) +
       tableRows +
-      emailDetailTableClose() +
-      "<p style=\"margin:18px 0 0;color:" +
-      (C.footerMuted || "#52525b") +
-      ";font-size:14px;line-height:1.55;font-family:" +
-      ff +
-      ";\">" +
-      emailHtmlEscape(footTxt) +
-      "</p>";
+      emailDetailTableClose();
     return buildEmailShell({
       title: kind === "llegada" ? "Aviso de encomienda" : "Confirmación de retiro de encomienda",
       brandLine: G.APP_BRAND_NAME,
@@ -18410,14 +18391,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "</p>" +
         emailDetailTableOpen("Detalle", "#c2410c") +
         tableRows +
-        emailDetailTableClose() +
-        "<p style=\"margin:18px 0 0;color:" +
-        (C.footerMuted || "#52525b") +
-        ";font-size:14px;line-height:1.55;font-family:" +
-        ff +
-        ";\">" +
-        emailHtmlEscape(footTxt) +
-        "</p>";
+        emailDetailTableClose();
       return buildEmailShell({
         title: "Recordatorio: estacionamiento de visitas",
         brandLine: G.APP_BRAND_NAME,
@@ -18453,14 +18427,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       ";\">Se ha <strong>excedido el tiempo máximo</strong> para utilizar el estacionamiento de visitas. A continuación el detalle del registro.</p>" +
       emailDetailTableOpen("Detalle", "#b91c1c") +
       tableRows +
-      emailDetailTableClose() +
-      "<p style=\"margin:18px 0 0;color:" +
-      (C.footerMuted || "#52525b") +
-      ";font-size:14px;line-height:1.55;font-family:" +
-      ff +
-      ";\">" +
-      emailHtmlEscape(footTxt) +
-      "</p>";
+      emailDetailTableClose();
     return buildEmailShell({
       title: "Se ha excedido el tiempo máximo del estacionamiento de visitas",
       brandLine: G.APP_BRAND_NAME,
