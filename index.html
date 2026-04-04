@@ -2122,6 +2122,54 @@
       font-size: 1.08em;
       flex-shrink: 0;
     }
+    .cg-dash-bday-card {
+      margin-bottom: 0.85rem;
+      background: linear-gradient(135deg, #fdf2f8 0%, #fff 55%, #fce7f3 100%);
+      box-shadow: 0 4px 20px rgba(219, 39, 119, 0.12);
+    }
+    .cg-dash-bday-card-h {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .cg-dash-bday-card-h h3 {
+      flex: 1;
+      min-width: 0;
+      color: #9d174d;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+    .cg-dash-bday-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .cg-dash-bday-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.45rem 0.65rem;
+      border-radius: 999px;
+      background: #fff;
+      border: 1px solid #f9a8d4;
+      font-weight: 600;
+      font-size: 0.88rem;
+      color: #831843;
+      box-shadow: 0 1px 3px rgba(190, 24, 93, 0.12);
+    }
+    .cg-dash-bday-chip small {
+      font-weight: 500;
+      opacity: 0.85;
+      font-size: 0.78rem;
+    }
+    .cg-dash-bday-card.is-collapsed .cg-dash-bday-detail {
+      display: none;
+    }
     /* Dashboard: tarjetas KPI más compactas y fila de gráficos */
     .cg-dash-stat-grid {
       display: grid;
@@ -4535,7 +4583,9 @@
       get visitVehAlertLog() { return load("visitVehAlertLog", {}); },
       set visitVehAlertLog(v) { save("visitVehAlertLog", v); },
       get conserjeActivityLog() { return load("conserjeActivityLog", []); },
-      set conserjeActivityLog(v) { save("conserjeActivityLog", v); }
+      set conserjeActivityLog(v) { save("conserjeActivityLog", v); },
+      get staffBirthdays() { return load("staffBirthdays", []); },
+      set staffBirthdays(v) { save("staffBirthdays", v); }
     };
 
     /* ┌─ 7. Sesión, permisos por módulo, bloqueo turno conserje ──────────────────────── */
@@ -5293,7 +5343,8 @@
         ["staffChat", migrateStaffChat],
         ["provVisitAdmin", migrateProveedorVisitAdminDept],
         ["visitVehAlert", migrateVisitVehAlertLog],
-        ["conserjeActivity", migrateConserjeActivityLog]
+        ["conserjeActivity", migrateConserjeActivityLog],
+        ["staffBirthdays", migrateStaffBirthdays]
       ];
       var si;
       for (si = 0; si < steps.length; si++) {
@@ -5326,6 +5377,10 @@
     function migrateProveedorVisitAdminDept() {
       attachVirtualAdminDepartment();
       save("migrated_prov_visit_admin_v1", true);
+    }
+
+    function migrateStaffBirthdays() {
+      if (P.localGetRaw(LS + "staffBirthdays") === null) save("staffBirthdays", []);
     }
 
     function migrateStaffChat() {
@@ -5607,10 +5662,36 @@
         }
         return { ok: true, value: s };
       },
+      /**
+       * Nombres en visitas: mayúscula inicial en cada palabra y tras guion (María José, Ana-María).
+       * Usa reglas de mayúsculas en español (ñ, tildes).
+       */
+      visitNameTitleCaseEs: function (s) {
+        var t = String(s || "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!t) return t;
+        function capToken(tok) {
+          if (!tok.length) return tok;
+          var first = tok.charAt(0);
+          var rest = tok.slice(1);
+          return first.toLocaleUpperCase("es") + rest.toLocaleLowerCase("es");
+        }
+        return t
+          .split(" ")
+          .map(function (word) {
+            if (!word) return word;
+            return word
+              .split("-")
+              .map(capToken)
+              .join("-");
+          })
+          .join(" ");
+      },
       visitPersonName: function (name) {
         var r = CG_VALIDATE.textBlock(name, { label: "Nombre del visitante", min: 2, max: 200 });
         if (!r.ok) return r;
-        var t = r.value.replace(/\s+/g, " ");
+        var t = CG_VALIDATE.visitNameTitleCaseEs(r.value);
         return { ok: true, value: t };
       },
       vehiclePlate: function (plate) {
@@ -13462,6 +13543,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return (
         "<h1 class=\"page-title\">Dashboard</h1>" +
         "<p class=\"page-desc\">Resumen de actividad en conserjería (visitas, reservas, encomiendas, novedades y registro de operaciones por usuario).</p>" +
+        "<div class=\"card cg-dash-bday-card\" id=\"dash-staff-bday-card\" style=\"display:none;border-left:4px solid #db2777\">" +
+        "<div class=\"card-h cg-dash-bday-card-h\"><h3><i class=\"fa-solid fa-cake-candles\" style=\"opacity:0.9\"></i> Cumpleaños del personal hoy</h3>" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"dash-staff-bday-toggle\" aria-expanded=\"true\" title=\"Mostrar u ocultar texto de ayuda\">Ocultar ayuda</button></div>" +
+        "<div class=\"card-b\" id=\"dash-staff-bday-body\" aria-live=\"polite\"></div></div>" +
         "<div class=\"card cg-dash-veh-card\" id=\"dash-veh-card\" style=\"display:none;border-left:4px solid #ea580c\">" +
         "<div class=\"card-h\"><h3><i class=\"fa-solid fa-car-side\" style=\"opacity:0.85\"></i> Visitas vehiculares en curso</h3>" +
         "<span class=\"page-desc\" style=\"margin:0;font-size:0.78rem\">Solo visitas <strong>vehiculares de persona</strong>: tiempos en vivo, aviso a 30 min del límite de 5 h y multa tras 15 min de gracia. <strong>Alerta sonora</strong> al cruzar cada umbral (tras un clic o tecla en la app, por política del navegador). Proveedores llevan tiempo sin multas; peatones sin cómputo.</span></div>" +
@@ -13503,6 +13588,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         checkVehicularVisitWarnings();
         if (window.CG_ACTIONS && CG_ACTIONS.updateVisitLiveDurations) CG_ACTIONS.updateVisitLiveDurations();
         if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardVehAlerts) CG_ACTIONS.renderDashboardVehAlerts();
+        if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardStaffBirthdays) CG_ACTIONS.renderDashboardStaffBirthdays();
         if (document.getElementById("dash-chart-visits")) updateDashboardChartsSummaryAndActivity();
       }
       visitAlertsTick();
@@ -13759,7 +13845,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"cg-form-grid-2\">" +
         "<div class=\"form-group\" style=\"margin-bottom:0\"><label for=\"f-visit-visitor\">Nombre visitante</label><input name=\"visitor\" id=\"f-visit-visitor\" autocomplete=\"name\" placeholder=\"Ej: Ana Pérez\" spellcheck=\"true\" /></div>" +
         "<div class=\"form-group\" style=\"margin-bottom:0\"><label for=\"f-visit-rut\">RUT (opcional)</label><input name=\"visitorRut\" id=\"f-visit-rut\" type=\"text\" inputmode=\"text\" autocomplete=\"off\" placeholder=\"12.345.678-9\" maxlength=\"14\" title=\"Formato chileno: 12.345.678-9\" /></div></div>" +
-        "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.74rem;line-height:1.35\">El nombre conserva mayúsculas y minúsculas tal como los escribe. El RUT se formatea al escribir.</p></div>" +
+        "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.74rem;line-height:1.35\">Al registrar, el nombre se ajusta a mayúscula inicial en cada palabra (español). El RUT se formatea al escribir.</p></div>" +
         "<div id=\"vis-row-proveedor\" style=\"display:none\">" +
         "<div class=\"cg-form-grid-2\">" +
         "<div class=\"form-group\"><label>Empresa (registrada)</label><select name=\"proveedorId\" id=\"f-visit-proveedor\">" +
@@ -13888,6 +13974,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"perm\" aria-pressed=\"false\">Control de accesos</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"rep\" aria-pressed=\"false\">Reportes</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"personalizacion\" aria-pressed=\"false\">Personalización</button>" +
+        "<button type=\"button\" class=\"admin-tab\" data-adm=\"rrhh\" aria-pressed=\"false\">RRHH</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"cfg\" aria-pressed=\"false\">Configuración</button></div>" +
         "<div id=\"adm-panel\" role=\"region\" aria-label=\"Contenido de administración\"></div>"
       );
@@ -13914,6 +14001,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         } catch (eDashSync) {}
       }
       if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardVehAlerts) CG_ACTIONS.renderDashboardVehAlerts();
+      if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardStaffBirthdays) CG_ACTIONS.renderDashboardStaffBirthdays();
       renderDashboardCharts();
     }
 
@@ -14075,6 +14163,20 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             var tabPer = document.querySelector(".admin-tab[data-adm=\"personalizacion\"].active");
             if (tabPer) A.renderAdmin("personalizacion");
           } catch (ePe) {}
+        }
+      }
+
+      if (k === "staffBirthdays") {
+        if (dash && A && typeof A.renderDashboardStaffBirthdays === "function") {
+          try {
+            A.renderDashboardStaffBirthdays();
+          } catch (eSb) {}
+        }
+        if (A && typeof A.renderAdmin === "function") {
+          try {
+            var tabRrhh = document.querySelector(".admin-tab[data-adm=\"rrhh\"].active");
+            if (tabRrhh) A.renderAdmin("rrhh");
+          } catch (eRhh) {}
         }
       }
 
@@ -14539,6 +14641,47 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var d2 = new Date(val);
     if (!isNaN(d2.getTime())) return d2.toISOString();
     return new Date().toISOString();
+  }
+  /** Fecha de nacimiento → YYYY-MM-DD o null (RRHH / Excel). */
+  function rrhhParseBirthYmd(val) {
+    function pad2(n) {
+      return n < 10 ? "0" + n : String(n);
+    }
+    if (val == null || val === "") return null;
+    if (val instanceof Date && !isNaN(val.getTime())) {
+      return val.getFullYear() + "-" + pad2(val.getMonth() + 1) + "-" + pad2(val.getDate());
+    }
+    if (typeof val === "number" && !isNaN(val) && typeof XLSX !== "undefined" && XLSX.SSF && XLSX.SSF.parse_date_code) {
+      var parsed = XLSX.SSF.parse_date_code(val);
+      if (parsed && parsed.y) {
+        var d0 = new Date(parsed.y, (parsed.m || 1) - 1, parsed.d || 1);
+        if (!isNaN(d0.getTime())) {
+          return d0.getFullYear() + "-" + pad2(d0.getMonth() + 1) + "-" + pad2(d0.getDate());
+        }
+      }
+    }
+    var s = String(val).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      var t = new Date(s + "T12:00:00");
+      if (!isNaN(t.getTime())) return s;
+    }
+    var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m) {
+      var dd = parseInt(m[1], 10);
+      var mm = parseInt(m[2], 10);
+      var yy = parseInt(m[3], 10);
+      if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31 && yy >= 1920 && yy <= 2100) {
+        var chk = new Date(yy, mm - 1, dd);
+        if (chk.getFullYear() === yy && chk.getMonth() === mm - 1 && chk.getDate() === dd) {
+          return yy + "-" + pad2(mm) + "-" + pad2(dd);
+        }
+      }
+    }
+    var d3 = new Date(s);
+    if (!isNaN(d3.getTime())) {
+      return d3.getFullYear() + "-" + pad2(d3.getMonth() + 1) + "-" + pad2(d3.getDate());
+    }
+    return null;
   }
   function residentTipoToVincLabel(internal) {
     if (internal === "propietario") return "Propietario";
@@ -18236,7 +18379,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
               G.toast(vc.message, "error");
               return;
             }
-            contact = vc.value.replace(/\s+/g, " ");
+            contact = G.validate.visitNameTitleCaseEs(vc.value);
           }
           var vRc = G.validate.chileRutFormattedOrEmpty((fd.get("visitContactRut") || "").toString());
           if (!vRc.ok) {
@@ -19449,6 +19592,440 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     );
   }
 
+  function staffBirthdayIsToday(e, now) {
+    if (!e || !e.dob || typeof e.dob !== "string") return false;
+    var p = e.dob.slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p)) return false;
+    var m = parseInt(p.slice(5, 7), 10);
+    var d = parseInt(p.slice(8, 10), 10);
+    return now.getMonth() + 1 === m && now.getDate() === d;
+  }
+  function staffBirthdayAgeYears(dob, now) {
+    if (!dob || typeof dob !== "string") return null;
+    var p = dob.slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p)) return null;
+    var y = parseInt(p.slice(0, 4), 10);
+    var mo = parseInt(p.slice(5, 7), 10) - 1;
+    var da = parseInt(p.slice(8, 10), 10);
+    var birth = new Date(y, mo, da);
+    if (isNaN(birth.getTime())) return null;
+    var age = now.getFullYear() - birth.getFullYear();
+    var mm = now.getMonth() - birth.getMonth();
+    if (mm < 0 || (mm === 0 && now.getDate() < birth.getDate())) age--;
+    return age;
+  }
+  function staffBirthdayFmtCl(dob) {
+    if (!dob || typeof dob !== "string") return "—";
+    var p = dob.slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p)) return "—";
+    return p.slice(8, 10) + "/" + p.slice(5, 7) + "/" + p.slice(0, 4);
+  }
+
+  A.renderDashboardStaffBirthdays = function () {
+    var card = document.getElementById("dash-staff-bday-card");
+    var body = document.getElementById("dash-staff-bday-body");
+    if (!card || !body) return;
+    var now = new Date();
+    var list = Array.isArray(G.state.staffBirthdays) ? G.state.staffBirthdays : [];
+    var today = list.filter(function (e) {
+      return staffBirthdayIsToday(e, now);
+    });
+    if (!today.length) {
+      card.style.display = "none";
+      body.innerHTML = "";
+      return;
+    }
+    card.style.display = "";
+    var chips = today
+      .map(function (e) {
+        var age = staffBirthdayAgeYears(e.dob, now);
+        return (
+          "<li class=\"cg-dash-bday-chip\" tabindex=\"0\" role=\"group\" aria-label=\"" +
+          G.escapeAttr("Cumpleaños: " + (e.name || "")) +
+          "\"><span>" +
+          G.escapeHtml(e.name || "—") +
+          "</span>" +
+          (e.cargo ? "<small>" + G.escapeHtml(e.cargo) + "</small>" : "") +
+          (age != null ? "<small>" + age + " años</small>" : "") +
+          "</li>"
+        );
+      })
+      .join("");
+    body.innerHTML =
+      "<p class=\"page-desc\" style=\"margin:0 0 0.65rem;font-weight:600;color:#9d174d\">¡Cumpleaños hoy! 🎉</p>" +
+      "<ul class=\"cg-dash-bday-list\">" +
+      chips +
+      "</ul>" +
+      "<div class=\"cg-dash-bday-detail page-desc\" style=\"margin:0.75rem 0 0;font-size:0.82rem;line-height:1.45\">" +
+      "Registro en <strong>Administración → RRHH</strong>. Puede importar listados básicos desde Excel (.xlsx).</div>";
+    var togg = document.getElementById("dash-staff-bday-toggle");
+    if (togg && !togg.getAttribute("data-cg-bday-bound")) {
+      togg.setAttribute("data-cg-bday-bound", "1");
+      togg.addEventListener("click", function () {
+        card.classList.toggle("is-collapsed");
+        var open = !card.classList.contains("is-collapsed");
+        togg.setAttribute("aria-expanded", open ? "true" : "false");
+        togg.textContent = open ? "Ocultar ayuda" : "Mostrar ayuda";
+      });
+    }
+  };
+
+  function buildRenderAdminRrhhHtml() {
+    var list = Array.isArray(G.state.staffBirthdays) ? G.state.staffBirthdays.slice() : [];
+    var now = new Date();
+    list.sort(function (a, b) {
+      return String(a.name || "").localeCompare(String(b.name || ""), "es", { sensitivity: "base" });
+    });
+    var rows =
+      list.length > 0
+        ? list
+            .map(function (e) {
+              var id = G.escapeHtml(e.id || "");
+              return (
+                "<tr><td>" +
+                G.escapeHtml(e.name || "—") +
+                "</td><td>" +
+                G.escapeHtml(e.cargo || "—") +
+                "</td><td>" +
+                G.escapeHtml(staffBirthdayFmtCl(e.dob)) +
+                "</td><td>" +
+                (staffBirthdayIsToday(e, now) ? "<span class=\"badge\" style=\"background:#fce7f3;color:#9d174d\">Hoy</span>" : "—") +
+                "</td><td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"staffBirthdayOpen\" data-cg-id=\"" +
+                id +
+                "\"><i class=\"fa-solid fa-pen\"></i></button> " +
+                "<button type=\"button\" class=\"btn btn-danger btn-sm\" data-cg-act=\"staffBirthdayDel\" data-cg-id=\"" +
+                id +
+                "\"><i class=\"fa-solid fa-trash\"></i></button></td></tr>"
+              );
+            })
+            .join("")
+        : "<tr><td colspan=\"5\" class=\"page-desc\">Sin registros. Use <strong>Nuevo</strong> o importe un Excel básico.</td></tr>";
+    return (
+      "<div class=\"card\"><div class=\"card-h\"><h3>RRHH — Cumpleaños del personal</h3>" +
+      "<div class=\"toolbar\" style=\"gap:0.5rem;flex-wrap:wrap\">" +
+      "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"staffBirthdayOpen\" data-cg-empty=\"1\"><i class=\"fa-solid fa-user-plus\"></i> Nuevo</button>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"btn-rrhh-xlsx\"><i class=\"fa-solid fa-file-import\"></i> Importar Excel</button>" +
+      "<input type=\"file\" id=\"input-rrhh-xlsx\" class=\"hidden\" accept=\".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\" />" +
+      "</div></div>" +
+      "<div class=\"card-b\">" +
+      "<p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.86rem\">" +
+      "Registro de <strong>fecha de nacimiento</strong> del equipo (conserjes y otros). El <strong>panel de control</strong> muestra una alerta el día del cumpleaños. " +
+      "Excel: primera fila con encabezados; columnas reconocidas: <em>Nombre</em> (o Empleado), <em>Cargo</em> (opcional), <em>Cumpleaños / Fecha nacimiento / Nacimiento</em> (dd/mm/aaaa o aaaa-mm-dd o fecha de Excel).</p>" +
+      "<table class=\"data-table\"><thead><tr><th>Nombre</th><th>Cargo</th><th>Fecha nac.</th><th>Hoy</th><th></th></tr></thead><tbody>" +
+      rows +
+      "</tbody></table></div></div>"
+    );
+  }
+
+  A.staffBirthdayOpen = function (id) {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede editar RRHH.", "error");
+      return;
+    }
+    var list = Array.isArray(G.state.staffBirthdays) ? G.state.staffBirthdays : [];
+    var e = id ? list.find(function (x) { return x.id === id; }) : null;
+    if (id && !e) return;
+    var dobVal = e && e.dob ? String(e.dob).slice(0, 10) : "";
+    UI.openModal(
+      "<div class=\"modal\"><div class=\"modal-h\"><h4>" +
+      (id ? "Editar cumpleaños" : "Nuevo registro") +
+      "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
+      "<div class=\"modal-b\"><form id=\"f-staff-bday\">" +
+      "<div class=\"form-group\"><label>Nombre completo</label><input name=\"name\" required maxlength=\"200\" value=\"" +
+      G.escapeAttr(e ? e.name : "") +
+      "\" /></div>" +
+      "<div class=\"form-group\"><label>Cargo o área (opcional)</label><input name=\"cargo\" maxlength=\"120\" value=\"" +
+      G.escapeAttr(e ? e.cargo || "" : "") +
+      "\" placeholder=\"Ej: Conserje, Supervisor…\" /></div>" +
+      "<div class=\"form-group\"><label>Fecha de nacimiento</label><input name=\"dob\" type=\"date\" required value=\"" +
+      G.escapeAttr(dobVal) +
+      "\" /></div>" +
+      "<input type=\"hidden\" name=\"rid\" value=\"" +
+      G.escapeAttr(id && e ? e.id : "") +
+      "\" /></form>" +
+      "<p class=\"page-desc\" style=\"margin:0.75rem 0 0;font-size:0.82rem\">La fecha no se muestra en el panel; solo se usa el día y mes para el aviso anual y el cálculo de edad el día del cumpleaños.</p></div>" +
+      "<div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
+      "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"staffBirthdaySave\"><i class=\"fa-solid fa-floppy-disk\"></i> Guardar</button></div></div>"
+    );
+  };
+
+  A.staffBirthdaySave = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede editar RRHH.", "error");
+      return;
+    }
+    var f = document.getElementById("f-staff-bday");
+    if (!f) return;
+    var fd = new FormData(f);
+    var nm = G.validate.textBlock((fd.get("name") || "").toString(), { label: "Nombre", min: 2, max: 200 });
+    if (!nm.ok) {
+      G.toast(nm.message, "error");
+      return;
+    }
+    var name = nm.value.replace(/\s+/g, " ");
+    var cargo = (fd.get("cargo") || "").toString().trim();
+    if (cargo) {
+      var cg = G.validate.textBlock(cargo, { label: "Cargo", min: 1, max: 120 });
+      if (!cg.ok) {
+        G.toast(cg.message, "error");
+        return;
+      }
+      cargo = cg.value.replace(/\s+/g, " ");
+    }
+    var dobRaw = (fd.get("dob") || "").toString().trim();
+    var ymd = rrhhParseBirthYmd(dobRaw);
+    if (!ymd) {
+      G.toast("Indique una fecha de nacimiento válida.", "error");
+      return;
+    }
+    var rid = (fd.get("rid") || "").toString().trim();
+    var list = Array.isArray(G.state.staffBirthdays) ? G.state.staffBirthdays.slice() : [];
+    var rec = { id: rid || G.uid(), name: name, cargo: cargo, dob: ymd };
+    if (rid) {
+      var ix = list.findIndex(function (x) { return x.id === rid; });
+      if (ix >= 0) list[ix] = rec;
+      else list.push(rec);
+    } else {
+      list.push(rec);
+    }
+    G.state.staffBirthdays = list;
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffBirthdays");
+    G.logConserjeActivity("rrhh_bday_save", (rid ? "Actualizó" : "Añadió") + " cumpleaños — " + name);
+    G.toast("Registro guardado");
+    UI.closeModal();
+    A.renderAdmin("rrhh");
+    A.renderDashboardStaffBirthdays();
+  };
+
+  A.staffBirthdayDel = function (id) {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador.", "error");
+      return;
+    }
+    if (!id || !confirm("¿Eliminar este registro de cumpleaños?")) return;
+    var list = (Array.isArray(G.state.staffBirthdays) ? G.state.staffBirthdays : []).filter(function (x) {
+      return x.id !== id;
+    });
+    G.state.staffBirthdays = list;
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffBirthdays");
+    G.logConserjeActivity("rrhh_bday_del", "Eliminó registro RRHH cumpleaños");
+    G.toast("Eliminado");
+    A.renderAdmin("rrhh");
+    A.renderDashboardStaffBirthdays();
+  };
+
+  A.rrhhXlsxCancelImport = function () {
+    window.__cgRrhhExcelImportPending = null;
+    UI.closeModal();
+  };
+
+  A.rrhhXlsxConfirmImport = function () {
+    var p = window.__cgRrhhExcelImportPending;
+    window.__cgRrhhExcelImportPending = null;
+    UI.closeModal();
+    if (!p || !Array.isArray(p.rows) || !p.rows.length) {
+      G.toast("No hay filas para importar.", "warn");
+      return;
+    }
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") return;
+    var existing = Array.isArray(G.state.staffBirthdays) ? G.state.staffBirthdays.slice() : [];
+    var keyOf = function (name, dob) {
+      return String(name || "")
+        .trim()
+        .toLowerCase() +
+        "\0" +
+        String(dob || "");
+    };
+    var keys = {};
+    existing.forEach(function (x) {
+      keys[keyOf(x.name, x.dob)] = true;
+    });
+    var added = 0;
+    var skip = 0;
+    p.rows.forEach(function (r) {
+      var k = keyOf(r.name, r.dob);
+      if (keys[k]) {
+        skip++;
+        return;
+      }
+      keys[k] = true;
+      existing.push({ id: G.uid(), name: r.name, cargo: r.cargo || "", dob: r.dob });
+      added++;
+    });
+    G.state.staffBirthdays = existing;
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffBirthdays");
+    G.logConserjeActivity("rrhh_bday_import", "Importó Excel RRHH: +" + added + " filas" + (skip ? " (" + skip + " duplicadas omitidas)" : ""));
+    G.toast("Importación: " + added + " nuevo(s)" + (skip ? ", " + skip + " omitido(s)" : ""));
+    A.renderAdmin("rrhh");
+    A.renderDashboardStaffBirthdays();
+  };
+
+  A.processRrhhExcelArrayBuffer = function (buf) {
+    if (typeof XLSX === "undefined") {
+      G.toast("No se cargó la librería Excel (XLSX).", "error");
+      return;
+    }
+    var wb;
+    try {
+      wb = XLSX.read(buf, { type: "array" });
+    } catch (eW) {
+      G.toast("No se pudo leer el archivo Excel.", "error");
+      return;
+    }
+    var sn = wb.SheetNames[0];
+    var sh = wb.Sheets[sn];
+    if (!sh) {
+      G.toast("El archivo no tiene hojas.", "error");
+      return;
+    }
+    var rows = XLSX.utils.sheet_to_json(sh, { header: 1, defval: "" });
+    if (!rows || rows.length < 2) {
+      G.toast("El Excel debe tener encabezados y al menos una fila de datos.", "warn");
+      return;
+    }
+    var hdr = rows[0].map(function (c) {
+      return String(c == null ? "" : c)
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ");
+    });
+    function findCol(names) {
+      var ni;
+      for (ni = 0; ni < hdr.length; ni++) {
+        var h = hdr[ni];
+        var j;
+        for (j = 0; j < names.length; j++) {
+          if (h === names[j] || h.indexOf(names[j]) >= 0) return ni;
+        }
+      }
+      return -1;
+    }
+    var iName = findCol(["nombre", "empleado", "name", "personal", "colaborador", "trabajador"]);
+    var iCargo = findCol(["cargo", "puesto", "rol", "area", "área", "departamento"]);
+    var iDate = findCol([
+      "cumpleaños",
+      "cumpleanos",
+      "nacimiento",
+      "fecha nacimiento",
+      "fecha de nacimiento",
+      "fecha_nacimiento",
+      "birth",
+      "dob",
+      "fnacimiento",
+      "f. nac"
+    ]);
+    if (iName < 0 || iDate < 0) {
+      G.toast("Faltan columnas: se requiere nombre y fecha de nacimiento (o cumpleaños).", "error");
+      return;
+    }
+    var out = [];
+    var err = 0;
+    var ri;
+    for (ri = 1; ri < rows.length; ri++) {
+      var row = rows[ri];
+      if (!row || !row.length) continue;
+      var rawName = row[iName];
+      var nm = G.validate.textBlock(String(rawName == null ? "" : rawName).trim(), { label: "Nombre", min: 2, max: 200 });
+      if (!nm.ok) {
+        err++;
+        continue;
+      }
+      var rawDt = row[iDate];
+      var ymd = rrhhParseBirthYmd(rawDt);
+      if (!ymd) {
+        err++;
+        continue;
+      }
+      var cg = "";
+      if (iCargo >= 0 && row[iCargo] != null && String(row[iCargo]).trim()) {
+        var cgt = G.validate.textBlock(String(row[iCargo]).trim(), { label: "Cargo", min: 1, max: 120 });
+        cg = cgt.ok ? cgt.value.replace(/\s+/g, " ") : "";
+      }
+      out.push({ name: nm.value.replace(/\s+/g, " "), cargo: cg, dob: ymd });
+    }
+    if (!out.length) {
+      G.toast("No se importó ninguna fila válida." + (err ? " Revise fechas y nombres." : ""), "warn");
+      return;
+    }
+    var prevHtml = out
+      .slice(0, 40)
+      .map(function (r, idx) {
+        return (
+          "<tr><td>" +
+          (idx + 2) +
+          "</td><td>" +
+          G.escapeHtml(r.name) +
+          "</td><td>" +
+          G.escapeHtml(r.cargo || "—") +
+          "</td><td>" +
+          G.escapeHtml(r.dob) +
+          "</td></tr>"
+        );
+      })
+      .join("");
+    window.__cgRrhhExcelImportPending = { rows: out };
+    var html =
+      "<div class=\"modal\"><div class=\"modal-h\"><h4>Importar cumpleaños (Excel)</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
+      "<div class=\"modal-b\"><p class=\"page-desc\" style=\"margin:0 0 0.65rem\">Se importarán <strong>" +
+      out.length +
+      "</strong> fila(s). " +
+      (err ? "<span style=\"color:#b45309\">" + err + " fila(s) omitidas por datos inválidos.</span> " : "") +
+      "No se duplican registros con el mismo nombre y fecha.</p>" +
+      "<div class=\"data-table-wrap\" style=\"overflow:auto;max-height:220px;border:1px solid var(--gray-200);border-radius:8px\">" +
+      "<table class=\"data-table\"><thead><tr><th>Fila</th><th>Nombre</th><th>Cargo</th><th>Fecha (ISO)</th></tr></thead><tbody>" +
+      prevHtml +
+      (out.length > 40 ? "<tr><td colspan=\"4\" style=\"text-align:center;opacity:0.85\">… vista previa limitada</td></tr>" : "") +
+      "</tbody></table></div></div>" +
+      "<div class=\"modal-f\" style=\"display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:flex-end;width:100%\">" +
+      "<button type=\"button\" class=\"btn btn-secondary\" data-cg-act=\"rrhhXlsxCancelImport\">Cancelar</button>" +
+      "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"rrhhXlsxConfirmImport\"><i class=\"fa-solid fa-check\"></i> Confirmar importación</button></div></div>";
+    UI.openModal(html);
+  };
+
+  A.bindRrhhExcelImport = function () {
+    var btn = document.getElementById("btn-rrhh-xlsx");
+    var inp = document.getElementById("input-rrhh-xlsx");
+    if (!btn || !inp) return;
+    btn.onclick = function () {
+      inp.click();
+    };
+    inp.onchange = function () {
+      if (!inp.files || !inp.files[0]) return;
+      var f = inp.files[0];
+      inp.value = "";
+      var run = function () {
+        try {
+          var reader = new FileReader();
+          reader.onload = function (e) {
+            try {
+              A.processRrhhExcelArrayBuffer(e.target.result);
+            } catch (err) {
+              console.error(err);
+              G.toast("Error al importar: " + (err.message || String(err)), "error");
+            }
+          };
+          reader.onerror = function () {
+            G.toast("No se pudo leer el archivo.", "error");
+          };
+          reader.readAsArrayBuffer(f);
+        } catch (eR) {
+          G.toast(String(eR.message || eR), "error");
+        }
+      };
+      if (window.CG_lazy && typeof window.CG_lazy.ensureXlsx === "function") {
+        window.CG_lazy.ensureXlsx().then(run).catch(function () {
+          G.toast("No se pudo cargar SheetJS (XLSX). Revisa la conexión.", "error");
+        });
+      } else {
+        run();
+      }
+    };
+  };
+
   A.renderAdmin = function (tab) {
     var p = renderAdminBindActiveTab(tab);
     if (!p) return;
@@ -19687,6 +20264,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div style=\"max-width:28rem\">" +
         palCards +
         "</div></div></div>";
+    } else if (tab === "rrhh") {
+      p.innerHTML = buildRenderAdminRrhhHtml();
+      A.bindRrhhExcelImport();
     } else if (tab === "cfg") {
       var pkRaw = G.state.parkingConfig;
       var cfg =
