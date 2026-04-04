@@ -14263,8 +14263,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"card-b\" id=\"dash-staff-bday-body\" aria-live=\"polite\"></div></div>" +
         "<div id=\"dash-scheduled-alerts-mount\" class=\"cg-dash-sched-mount\" aria-live=\"polite\"></div>" +
         "<div class=\"card cg-dash-veh-card\" id=\"dash-veh-card\" style=\"display:none;border-left:4px solid #ea580c\">" +
-        "<div class=\"card-h\"><h3><i class=\"fa-solid fa-car-side\" style=\"opacity:0.85\"></i> Visitas vehiculares en curso</h3>" +
-        "<span class=\"page-desc\" style=\"margin:0;font-size:0.78rem\">Solo visitas <strong>vehiculares de persona</strong>: tiempos en vivo, aviso a 30 min del límite de 5 h y multa tras 15 min de gracia. <strong>Alerta sonora</strong> al cruzar cada umbral (tras un clic o tecla en la app, por política del navegador). Proveedores llevan tiempo sin multas; peatones sin cómputo.</span></div>" +
+        "<div class=\"card-h\"><h3><i class=\"fa-solid fa-car-side\" style=\"opacity:0.85\"></i> Visitas vehiculares en curso</h3></div>" +
         "<div class=\"card-b\" id=\"dash-veh-alerts\" aria-live=\"polite\"></div></div>" +
         "<div class=\"cg-dash-stat-grid\">" +
         "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-user-group\" aria-hidden=\"true\"></i> Visitas hoy</h3></div><div class=\"card-b\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-visits-today\">" + visitsToday + "</p><p class=\"page-desc\">Entradas registradas con fecha de hoy</p><span id=\"dash-stat-visits-delta\">" + visDelta + "</span></div></div>" +
@@ -15004,7 +15003,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"cg-page-compact\">" +
         "<h1 class=\"page-title\">Encomiendas</h1>" +
         "<div class=\"cg-module-intro\">" +
-        "<p class=\"page-desc\">Registro de paquetes y correspondencia. Indique el <strong>número de departamento</strong>, pulse <strong>Buscar</strong> y elija el <strong>destinatario</strong> en la lista (datos del módulo Departamentos). Al <strong>registrar el retiro</strong> puede enviarse un correo aparte. Envío vía <code>mailto</code>; no hay SMTP en la app.</p>" +
         "<div class=\"cg-module-stats\" id=\"enc-module-stats\" aria-live=\"polite\"></div></div>" +
         "<div class=\"card cg-card-accent--enc\"><div class=\"card-h\"><h3>Listado</h3>" +
         "<div class=\"toolbar\" style=\"flex-wrap:wrap\">" +
@@ -20187,7 +20185,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var orphan =
         openAdm
           ? "<p class=\"page-desc\" style=\"margin-top:0.5rem\">Hay un <strong>tramo de turno abierto</strong> asociado a este usuario (datos antiguos). El administrador <strong>no acumula horas</strong> de control. Elimine ese tramo en <strong>Administración → Turnos</strong> si desea limpiar el listado.</p>"
-          : "<p class=\"page-desc\" style=\"margin-top:0.5rem\">El <strong>control horario</strong> (abrir/cerrar turno y horas en el resumen) es solo para <strong>conserjes</strong>.</p>";
+          : "";
       el.innerHTML =
         "<p class=\"page-desc\" style=\"margin:0\"><strong>" +
         G.escapeHtml(u.name) +
