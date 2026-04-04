@@ -1615,6 +1615,183 @@
       display: flex;
       flex-direction: column;
     }
+    #login-screen .login-manual-btn {
+      width: 100%;
+      margin-top: 0.85rem;
+      padding: 0.65rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      font-family: var(--login-font);
+      color: rgba(255, 255, 255, 0.95);
+      background: color-mix(in srgb, var(--cg-login-p) 28%, rgba(15, 23, 42, 0.5));
+      border: 1px solid color-mix(in srgb, #fff 22%, transparent);
+      border-radius: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      transition: background 0.2s, transform 0.2s;
+    }
+    #login-screen .login-manual-btn:hover {
+      background: color-mix(in srgb, var(--cg-login-p) 40%, rgba(15, 23, 42, 0.45));
+      transform: translateY(-1px);
+    }
+    #login-screen .login-manual-btn:focus-visible {
+      outline: 3px solid #fbbf24;
+      outline-offset: 2px;
+    }
+    #cg-user-manual-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100000;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 1rem;
+      padding-top: max(1rem, env(safe-area-inset-top));
+      box-sizing: border-box;
+      overflow: auto;
+      background: rgba(15, 23, 42, 0.58);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    #cg-user-manual-overlay[hidden] {
+      display: none !important;
+    }
+    #cg-user-manual-overlay .cg-user-manual-dialog {
+      width: 100%;
+      max-width: 920px;
+      max-height: min(92vh, 900px);
+      margin-bottom: 1.5rem;
+      background: var(--gray-50, #f8fafc);
+      border-radius: 16px;
+      border: 1px solid var(--gray-200, #e2e8f0);
+      box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.35);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #cg-user-manual-overlay .cg-user-manual-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.85rem 1.1rem;
+      background: #fff;
+      border-bottom: 1px solid var(--gray-200, #e2e8f0);
+    }
+    #cg-user-manual-overlay .cg-user-manual-head h2 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--gray-800, #1e293b);
+    }
+    #cg-user-manual-overlay .cg-user-manual-body {
+      padding: 0.75rem 1rem 1rem;
+      overflow: auto;
+      flex: 1;
+      min-height: 0;
+    }
+    .cg-manual-root {
+      --cg-manual-accent: var(--blue-600, #2563eb);
+    }
+    .cg-manual-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+      gap: 1rem;
+      align-items: start;
+    }
+    @media (max-width: 720px) {
+      .cg-manual-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+    .cg-manual-toc {
+      background: #fff;
+      border: 1px solid var(--gray-200, #e2e8f0);
+      border-radius: 12px;
+      padding: 0.5rem 0;
+      position: sticky;
+      top: 0;
+    }
+    .cg-manual-toc ol {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .cg-manual-toc li {
+      margin: 0;
+    }
+    .cg-manual-toc button {
+      width: 100%;
+      text-align: left;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.78rem;
+      line-height: 1.35;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--gray-700, #334155);
+      border-left: 3px solid transparent;
+    }
+    .cg-manual-toc button:hover {
+      background: var(--gray-100, #f1f5f9);
+    }
+    .cg-manual-toc button.cg-manual-toc--active {
+      border-left-color: var(--cg-manual-accent);
+      background: color-mix(in srgb, var(--cg-manual-accent) 10%, transparent);
+      font-weight: 700;
+      color: var(--gray-900, #0f172a);
+    }
+    .cg-manual-panel {
+      background: #fff;
+      border: 1px solid var(--gray-200, #e2e8f0);
+      border-radius: 12px;
+      padding: 1rem 1.1rem;
+      min-height: 280px;
+    }
+    .cg-manual-step h3 {
+      margin: 0 0 0.65rem;
+      font-size: 1.05rem;
+      color: var(--gray-900, #0f172a);
+    }
+    .cg-manual-step p,
+    .cg-manual-step li {
+      font-size: 0.9rem;
+      line-height: 1.55;
+      color: var(--gray-700, #334155);
+    }
+    .cg-manual-step ul,
+    .cg-manual-step ol {
+      margin: 0.35rem 0 0.5rem 1.1rem;
+      padding: 0;
+    }
+    .cg-manual-step[hidden] {
+      display: none !important;
+    }
+    .cg-manual-progress {
+      height: 4px;
+      background: var(--gray-200, #e2e8f0);
+      border-radius: 4px;
+      margin-bottom: 0.85rem;
+      overflow: hidden;
+    }
+    .cg-manual-progress-bar {
+      height: 100%;
+      background: var(--cg-manual-accent);
+      border-radius: 4px;
+      transition: width 0.25s ease;
+    }
+    .cg-manual-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: space-between;
+      margin-top: 1.1rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--gray-100, #f1f5f9);
+    }
     #login-screen .login-box .btn-login {
       width: 100%;
       margin-top: 0.25rem;
@@ -4518,6 +4695,10 @@
           </div>
           <button type="submit" class="btn-login" id="login-submit">Iniciar sesión</button>
         </form>
+        <button type="button" class="login-manual-btn" id="btn-login-open-manual" aria-haspopup="dialog">
+          <i class="fa-solid fa-book-open" aria-hidden="true"></i>
+          Manual de usuario (sin iniciar sesión)
+        </button>
         <div id="cg-login-first-setup" class="hidden">
           <p class="subtitle" style="margin-top: 0.5rem; margin-bottom: 1.25rem; text-align: left">
             Primer uso en este navegador: registre el administrador del edificio. Luego podrá crear más usuarios en Administración.
@@ -4727,6 +4908,7 @@
       { id: "bodegas", label: "Bodegas", icon: "fa-box" },
       { id: "proveedores", label: "Proveedores", icon: "fa-truck" },
       { id: "reservas", label: "Reservas", icon: "fa-calendar-check" },
+      { id: "manual", label: "Manual de usuario", icon: "fa-book-open", skipShiftLock: true },
       { id: "admin", label: "Administración", icon: "fa-user-shield", adminOnly: true }
     ];
 
@@ -6292,6 +6474,27 @@
       if (P.localGetRaw(LS + "conserjeActivityLog") === null) save("conserjeActivityLog", []);
     }
 
+    /** Añade el módulo Manual de usuario a permisos existentes (admin y conserje). */
+    function migrateManualUsuarioModule() {
+      if (load("migrated_manual_usuario_v1", false)) return;
+      var mid = "manual";
+      if (!MODULES.some(function (m) { return m.id === mid; })) {
+        save("migrated_manual_usuario_v1", true);
+        return;
+      }
+      var rm = load("roleModules", { admin: [], conserje: [] });
+      var ch = false;
+      ["admin", "conserje"].forEach(function (role) {
+        var arr = Array.isArray(rm[role]) ? rm[role].slice() : [];
+        if (arr.indexOf(mid) < 0) {
+          rm[role] = arr.concat([mid]);
+          ch = true;
+        }
+      });
+      if (ch) save("roleModules", rm);
+      save("migrated_manual_usuario_v1", true);
+    }
+
     /** Una vez: patentes de visitas vehiculares en mayúsculas y sin espacios (alineado con validación). */
     function migrateVisitPlatesUppercase() {
       if (load("migrated_visit_plates_upper_v1", false)) return;
@@ -6323,6 +6526,7 @@
         ["visitVehAlert", migrateVisitVehAlertLog],
         ["visitPlatesUpper", migrateVisitPlatesUppercase],
         ["conserjeActivity", migrateConserjeActivityLog],
+        ["manualUsuario", migrateManualUsuarioModule],
         ["staffBirthdays", migrateStaffBirthdays],
         ["dashScheduledAlerts", migrateDashScheduledAlerts]
       ];
@@ -6772,7 +6976,7 @@
     /* ┌─ 11. API pública (único objeto global del core) ─────────────────────────────── */
     window.CG = {
       APP_BRAND_NAME, MANUFACTURER_LOGO_URL,
-      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureCloudInstallBaseline, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateProveedoresModule, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateVisitPlatesUppercase, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
+      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureCloudInstallBaseline, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateManualUsuarioModule, migrateProveedoresModule, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateVisitPlatesUppercase, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
       attachVirtualAdminDepartment,
       authEnsureReady, authValidateDeptGateNewPassword, authVerifyLoginPassword, authCreatePasswordVerifier, authDeptGateExists, authVerifyDeptGate, authSetDeptGateFromPasswords, authSetDeptGateInitial,
       shiftLogTramoIsOpen,
@@ -13959,6 +14163,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       app.classList.remove("hidden");
       ls.setAttribute("aria-hidden", "true");
       app.removeAttribute("aria-hidden");
+      var cgMo = document.getElementById("cg-user-manual-overlay");
+      if (cgMo) cgMo.remove();
+      document.body.style.overflow = "";
       if (window.CG && typeof window.CG.applyPersonalizationToDom === "function") window.CG.applyPersonalizationToDom();
       if (!G.currentUser()) {
         showLogin();
@@ -13990,7 +14197,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (!G.canSeeModule(m.id)) return;
         const a = document.createElement("button");
         a.type = "button";
-        var locked = shiftLocked && m.id !== "novedades";
+        var locked = shiftLocked && m.id !== "novedades" && !m.skipShiftLock;
         a.className = "nav-item" + (currentView === m.id ? " active" : "") + (locked ? " nav-item--shift-locked" : "");
         var icn = document.createElement("i");
         icn.className = "fa-solid " + G.sanitizeFaIconClass(m.icon);
@@ -14109,7 +14316,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
     /** Regla de negocio: vista efectiva si el conserje debe abrir turno primero. */
     function cgNavigateEffectiveView(view, silentShiftRedirect) {
-      if (conserjeMustOpenShiftBeforeModules() && view !== "novedades") {
+      if (conserjeMustOpenShiftBeforeModules() && view !== "novedades" && view !== "manual") {
         if (!silentShiftRedirect) G.toast("Abra su turno en Libro de novedades para usar los demás módulos.", "warn");
         return "novedades";
       }
@@ -14128,6 +14335,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (view === "reservas") return pageReservas();
       if (view === "novedades") return pageNovedades();
       if (view === "admin") return pageAdmin();
+      if (view === "manual") return pageManual();
       return "";
     }
 
@@ -14549,6 +14757,201 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           : "<p class=\"page-desc\" style=\"margin:0.65rem 0 0\">Bitácora: sin entradas aún (se llena al usar visitas, encomiendas, novedades, turno o al registrar una unidad nueva en Departamentos).</p>";
 
       return leaderTable + logSection;
+    }
+
+    function cgUserManualWizardMarkup() {
+      var steps = [
+        {
+          t: "Bienvenida",
+          h:
+            "<p>Esta aplicación centraliza el trabajo diario de conserjería: visitas, encomiendas, libro de novedades, reservas, proveedores y consulta de departamentos y estacionamientos.</p>" +
+            "<p><strong>Sin iniciar sesión</strong> puede abrir este mismo manual desde el botón en la pantalla de login. <strong>Dentro de la app</strong>, use el módulo <strong>Manual de usuario</strong> en el menú lateral.</p>"
+        },
+        {
+          t: "Inicio de sesión",
+          h:
+            "<p>Ingrese su <strong>usuario</strong> y <strong>contraseña</strong> y pulse <strong>Iniciar sesión</strong>. Si olvida la contraseña, un administrador puede restablecerla desde <strong>Administración</strong>.</p>" +
+            "<ul><li>No deje espacios antes ni después del usuario.</li><li>Respete mayúsculas en la contraseña si las usó al crearla.</li><li>Si otro conserje tiene el turno abierto, el sistema puede impedir que usted entre: debe cerrarse ese turno primero.</li></ul>"
+        },
+        {
+          t: "Turno de conserjería",
+          h:
+            "<p>Los conserjes deben <strong>abrir su turno</strong> en el módulo <strong>Libro de novedades</strong> antes de usar el resto de módulos (visitas, encomiendas, etc.).</p>" +
+            "<ul><li>Entre a <strong>Libro de novedades</strong> y registre la apertura de turno según las indicaciones en pantalla.</li><li>El módulo <strong>Manual de usuario</strong> y el propio libro de novedades están disponibles aunque el turno no esté abierto.</li><li>Al terminar, cierre el turno en el mismo libro o siga la normativa del edificio.</li></ul>"
+        },
+        {
+          t: "Panel de control",
+          h:
+            "<p>El <strong>Panel de control</strong> resume actividad reciente: visitas y encomiendas del día, alertas de visitas vehiculares prolongadas y accesos rápidos.</p>" +
+            "<ul><li>Revise los avisos en tarjetas de color según gravedad.</li><li>Use los botones para ir al módulo correspondiente.</li></ul>"
+        },
+        {
+          t: "Visitas",
+          h:
+            "<p>Registre <strong>ingreso</strong> de visitantes o proveedores y, cuando corresponda, <strong>salida</strong>. Las visitas peatonales pueden cerrarse automáticamente según la configuración.</p>" +
+            "<ul><li><strong>Registrar:</strong> complete tipo de ingreso, datos del visitante, departamento y, si aplica, patente y estacionamiento de visitas.</li><li><strong>Historial:</strong> filtre por abierto, hoy o todos; busque por nombre, RUT o depto.</li><li><strong>Correo a la unidad:</strong> al avisar por correo, use <strong>Abrir correo</strong>; el sistema deja una constancia (check) en el historial. Si solo copia y pega el texto, use <strong>Marcar correo enviado</strong>.</li></ul>"
+        },
+        {
+          t: "Encomiendas",
+          h:
+            "<p>Registre paquetes recibidos, asocie <strong>departamento</strong> y destinatario cuando exista en el panel, y marque la <strong>entrega</strong> al retirar.</p>" +
+            "<ul><li>Puede enviar avisos por correo (llegada y confirmación de retiro) a los integrantes de la unidad con e-mail.</li><li>Al usar <strong>Abrir correo</strong> se registra la constancia en el listado (iconos de check).</li></ul>"
+        },
+        {
+          t: "Libro de novedades",
+          h:
+            "<p>Además del turno, aquí se documentan incidencias, mantenimiento, seguridad y mensajes entre turnos.</p>" +
+            "<ul><li>Elija categoría y redacte con claridad para el siguiente conserje o administración.</li><li>Use filtros por fecha o texto para encontrar entradas antiguas.</li></ul>"
+        },
+        {
+          t: "Reservas y proveedores",
+          h:
+            "<p><strong>Reservas:</strong> gestione espacios comunes definidos por administración (fechas, unidad asociada, nota).</p>" +
+            "<p><strong>Proveedores:</strong> mantenga el catálogo de empresas que ingresan al edificio; facilita registrar visitas de proveedor.</p>" +
+            "<p><strong>Departamentos, estacionamientos y bodegas:</strong> suelen usarse para consulta y registro según los permisos que le asigne un administrador.</p>"
+        },
+        {
+          t: "Ayuda, correo y salir",
+          h:
+            "<p>Los avisos por correo se abren en su programa de correo (Outlook, Gmail, etc.); la aplicación no envía mensajes sola.</p>" +
+            "<ul><li>Siempre que pueda, use el botón <strong>Abrir correo</strong> para dejar constancia automática.</li><li>Para dudas técnicas del sistema puede usar el enlace de contacto en la pantalla de inicio (logo inferior).</li><li><strong>Cerrar sesión</strong> al terminar su turno o si deja el puesto desatendido.</li></ul>"
+        }
+      ];
+      var toc = "";
+      var panels = "";
+      var i;
+      for (i = 0; i < steps.length; i++) {
+        toc +=
+          "<li><button type=\"button\" data-cg-manual-go=\"" +
+          i +
+          "\">" +
+          (i + 1) +
+          ". " +
+          G.escapeHtml(steps[i].t) +
+          "</button></li>";
+        panels +=
+          "<section class=\"cg-manual-step\"" +
+          (i === 0 ? "" : " hidden") +
+          " data-cg-manual-step=\"" +
+          i +
+          "\" aria-labelledby=\"cg-ms-" +
+          i +
+          "\"><h3 id=\"cg-ms-" +
+          i +
+          "\">" +
+          (i + 1) +
+          ". " +
+          G.escapeHtml(steps[i].t) +
+          "</h3>" +
+          steps[i].h +
+          "</section>";
+      }
+      return (
+        "<div id=\"cg-manual-root\" class=\"cg-manual-root\">" +
+        "<div class=\"cg-manual-layout\">" +
+        "<nav class=\"cg-manual-toc\" aria-label=\"Pasos del manual\"><ol>" +
+        toc +
+        "</ol></nav>" +
+        "<div class=\"cg-manual-panel\">" +
+        "<div class=\"cg-manual-progress\" aria-hidden=\"true\"><div class=\"cg-manual-progress-bar\" id=\"cg-manual-progress-bar\" style=\"width:0%\"></div></div>" +
+        panels +
+        "<div class=\"cg-manual-nav\">" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"cg-manual-prev\">Anterior</button>" +
+        "<span class=\"page-desc\" style=\"margin:0;align-self:center;font-size:0.78rem\" id=\"cg-manual-counter\"></span>" +
+        "<button type=\"button\" class=\"btn btn-primary btn-sm\" id=\"cg-manual-next\">Siguiente</button>" +
+        "</div></div></div></div>"
+      );
+    }
+
+    function cgBindUserManualWizard(root) {
+      if (!root || root.getAttribute("data-cg-manual-bound") === "1") return;
+      root.setAttribute("data-cg-manual-bound", "1");
+      var stepEls = root.querySelectorAll(".cg-manual-step");
+      var n = stepEls.length;
+      var tocBtns = root.querySelectorAll(".cg-manual-toc button[data-cg-manual-go]");
+      var bar = root.querySelector("#cg-manual-progress-bar");
+      var ctr = root.querySelector("#cg-manual-counter");
+      var prev = root.querySelector("#cg-manual-prev");
+      var next = root.querySelector("#cg-manual-next");
+      var cur = 0;
+      function show(idx) {
+        cur = Math.max(0, Math.min(idx, n - 1));
+        var j;
+        for (j = 0; j < stepEls.length; j++) {
+          stepEls[j].hidden = j !== cur;
+        }
+        tocBtns.forEach(function (btn, j) {
+          btn.classList.toggle("cg-manual-toc--active", j === cur);
+        });
+        if (bar) bar.style.width = ((100 * (cur + 1)) / n).toFixed(1) + "%";
+        if (ctr) ctr.textContent = "Paso " + (cur + 1) + " de " + n;
+        if (prev) prev.disabled = cur === 0;
+        if (next) next.textContent = cur >= n - 1 ? "Fin del recorrido" : "Siguiente";
+      }
+      tocBtns.forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          show(parseInt(btn.getAttribute("data-cg-manual-go"), 10));
+        });
+      });
+      if (prev) prev.addEventListener("click", function () { show(cur - 1); });
+      if (next) next.addEventListener("click", function () { show(cur + 1); });
+      show(0);
+    }
+
+    function openUserManualOverlay() {
+      var ex = document.getElementById("cg-user-manual-overlay");
+      if (!ex) {
+        ex = document.createElement("div");
+        ex.id = "cg-user-manual-overlay";
+        ex.setAttribute("aria-hidden", "false");
+        ex.innerHTML =
+          "<div class=\"cg-user-manual-dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"cg-user-manual-title\">" +
+          "<div class=\"cg-user-manual-head\">" +
+          "<h2 id=\"cg-user-manual-title\">Manual de usuario — Conserjes</h2>" +
+          "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"cg-user-manual-close\" aria-label=\"Cerrar manual\">Cerrar</button>" +
+          "</div>" +
+          "<div class=\"cg-user-manual-body\">" +
+          cgUserManualWizardMarkup() +
+          "</div></div>";
+        document.body.appendChild(ex);
+        function closeOv() {
+          ex.hidden = true;
+          ex.setAttribute("aria-hidden", "true");
+          document.body.style.overflow = "";
+        }
+        document.getElementById("cg-user-manual-close").addEventListener("click", closeOv);
+        ex.addEventListener("click", function (ev) {
+          if (ev.target === ex) closeOv();
+        });
+        if (!window.__cgUserManualEsc) {
+          window.__cgUserManualEsc = true;
+          document.addEventListener("keydown", function (evK) {
+            if (evK.key !== "Escape") return;
+            var o = document.getElementById("cg-user-manual-overlay");
+            if (!o || o.hidden) return;
+            o.hidden = true;
+            o.setAttribute("aria-hidden", "true");
+            document.body.style.overflow = "";
+          });
+        }
+        cgBindUserManualWizard(ex.querySelector("#cg-manual-root"));
+      }
+      ex.hidden = false;
+      ex.removeAttribute("aria-hidden");
+      document.body.style.overflow = "hidden";
+      try {
+        document.getElementById("cg-user-manual-close").focus();
+      } catch (eFm) {}
+    }
+
+    function pageManual() {
+      return (
+        "<div class=\"cg-page-compact\">" +
+        "<h1 class=\"page-title\">Manual de usuario</h1>" +
+        "<p class=\"page-desc\" style=\"margin-top:0\">Guía paso a paso para conserjes. Elija un tema a la izquierda o avance con <strong>Siguiente</strong> y <strong>Anterior</strong>.</p>" +
+        cgUserManualWizardMarkup() +
+        "</div>"
+      );
     }
 
     function pageDashboard() {
@@ -15048,6 +15451,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (view === "admin" && window.CG_ACTIONS && CG_ACTIONS.renderAdmin) {
         CG_ACTIONS.renderAdmin("staff");
       }
+      if (view === "manual") {
+        var mc = document.getElementById("main-content");
+        var mroot = mc ? mc.querySelector("#cg-manual-root") : null;
+        if (mroot) cgBindUserManualWizard(mroot);
+      }
     }
 
     /**
@@ -15353,8 +15761,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
 
     window.CG_UI = {
-      showLogin, showApp, navigate, renderNav, openModal, closeModal, getCurrentView,
-      pageDepartamentos, pageEstacionamientos, pageBodegas, pageProveedores, pageVisitas, pageEncomiendas, pageReservas, pageNovedades, pageAdmin,
+      showLogin, showApp, navigate, renderNav, openModal, closeModal, getCurrentView, openUserManualOverlay,
+      pageDepartamentos, pageEstacionamientos, pageBodegas, pageProveedores, pageVisitas, pageEncomiendas, pageReservas, pageNovedades, pageAdmin, pageManual,
       bindPageEvents, checkVehicularVisitWarnings, renderDashboardCharts,
       refreshAfterRemoteLsKey
     };
@@ -24005,6 +24413,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         });
     }
   });
+
+  var btnLoginManual = document.getElementById("btn-login-open-manual");
+  if (btnLoginManual && window.CG_UI && typeof window.CG_UI.openUserManualOverlay === "function") {
+    btnLoginManual.addEventListener("click", function () {
+      window.CG_UI.openUserManualOverlay();
+    });
+  }
 
   var cgFirstAdminForm = document.getElementById("cg-first-admin-form");
   if (cgFirstAdminForm) {
