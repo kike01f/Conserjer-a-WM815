@@ -2533,6 +2533,134 @@
 
     /* App shell — sidebar opaco (sin vidrio / traslucidez) */
     #app-main { display: flex; min-height: 100vh; }
+    /* Ambientación festiva (administrable; fecha según Chile) */
+    .cg-festive-banner {
+      flex-shrink: 0;
+      padding: 0.65rem 1rem;
+      border-bottom: 1px solid color-mix(in srgb, var(--blue-500) 22%, var(--border-color));
+      background: linear-gradient(105deg, color-mix(in srgb, var(--blue-100) 88%, var(--blue-500)), var(--gray-50));
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--blue-500) 12%, transparent);
+    }
+    .cg-festive-banner__inner {
+      max-width: 72rem;
+      margin: 0 auto;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+    .cg-festive-banner__icon {
+      width: 2.25rem;
+      height: 2.25rem;
+      border-radius: 10px;
+      flex-shrink: 0;
+      margin-top: 0.1rem;
+      background: color-mix(in srgb, var(--blue-500) 22%, var(--white));
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue-500) 25%, transparent);
+    }
+    .cg-festive-banner__text { flex: 1; min-width: 0; }
+    .cg-festive-banner__title {
+      display: block;
+      font-size: 0.98rem;
+      color: var(--gray-800);
+      letter-spacing: -0.02em;
+    }
+    .cg-festive-banner__msg {
+      margin: 0.35rem 0 0;
+      font-size: 0.86rem;
+      line-height: 1.45;
+      color: var(--secondary-text);
+    }
+    .cg-festive-banner__close {
+      flex-shrink: 0;
+      line-height: 1;
+      padding: 0.2rem 0.5rem;
+      min-width: 2rem;
+      font-size: 1.15rem;
+    }
+    #app-main.cg-festive-theme--labor .cg-festive-banner {
+      background: linear-gradient(110deg, #fff7ed 0%, #ffedd5 40%, #fef3c7 100%);
+      border-bottom-color: color-mix(in srgb, #d97706 35%, var(--border-color));
+    }
+    #app-main.cg-festive-theme--labor .cg-festive-banner__icon {
+      background: linear-gradient(145deg, #fbbf24, #f59e0b);
+      box-shadow: inset 0 0 0 1px rgba(180, 83, 9, 0.35);
+    }
+    #app-main.cg-festive-theme--patrias .cg-festive-banner {
+      background: linear-gradient(115deg, #eff6ff 0%, #dbeafe 35%, #fee2e2 100%);
+      border-bottom-color: color-mix(in srgb, #2563eb 28%, #dc2626 18%, var(--border-color));
+    }
+    #app-main.cg-festive-theme--patrias .cg-festive-banner__icon {
+      background: linear-gradient(145deg, #3b82f6, #dc2626);
+      box-shadow: inset 0 0 0 1px rgba(30, 64, 175, 0.35);
+    }
+    #app-main.cg-festive-theme--navidad .cg-festive-banner {
+      background: linear-gradient(120deg, #ecfdf5 0%, #d1fae5 30%, #fee2e2 85%);
+      border-bottom-color: color-mix(in srgb, #059669 25%, #b91c1c 20%, var(--border-color));
+    }
+    #app-main.cg-festive-theme--navidad .cg-festive-banner__icon {
+      background: linear-gradient(145deg, #10b981, #dc2626);
+      box-shadow: inset 0 0 0 1px rgba(5, 150, 105, 0.35);
+    }
+    #app-main.cg-festive-theme--newyear .cg-festive-banner {
+      background: linear-gradient(125deg, #1e1b4b 0%, #312e81 40%, #4c1d95 100%);
+      border-bottom-color: rgba(250, 204, 21, 0.35);
+    }
+    #app-main.cg-festive-theme--newyear .cg-festive-banner__title { color: #fef9c3; }
+    #app-main.cg-festive-theme--newyear .cg-festive-banner__msg { color: color-mix(in srgb, #fde68a 85%, #e2e8f0); }
+    #app-main.cg-festive-theme--newyear .cg-festive-banner__close {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fef9c3;
+      border: 1px solid rgba(250, 204, 21, 0.35);
+    }
+    #app-main.cg-festive-theme--newyear .cg-festive-banner__icon {
+      background: linear-gradient(145deg, #facc15, #eab308);
+      box-shadow: inset 0 0 0 1px rgba(113, 63, 18, 0.4);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--neutral .main-wrap {
+      box-shadow: inset 0 3px 0 color-mix(in srgb, var(--blue-500) 45%, transparent);
+    }
+    #app-main.cg-festive-on .main-wrap {
+      position: relative;
+    }
+    #app-main.cg-festive-on .main-wrap::before {
+      content: "";
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      opacity: 0.07;
+      background-image: radial-gradient(circle at 12% 8%, currentColor 0, transparent 42%),
+        radial-gradient(circle at 88% 18%, currentColor 0, transparent 38%);
+      color: var(--blue-500);
+    }
+    #app-main.cg-festive-theme--patrias .main-wrap::before {
+      opacity: 0.09;
+      color: #2563eb;
+      background-image: radial-gradient(circle at 10% 0%, #dc2626 0, transparent 35%),
+        radial-gradient(circle at 92% 12%, #2563eb 0, transparent 40%);
+    }
+    #app-main.cg-festive-theme--navidad .main-wrap::before {
+      opacity: 0.08;
+      color: #059669;
+      background-image: radial-gradient(circle at 15% 10%, #10b981 0, transparent 36%),
+        radial-gradient(circle at 80% 20%, #dc2626 0, transparent 32%);
+    }
+    #app-main.cg-festive-theme--newyear .main-wrap::before {
+      opacity: 0.12;
+      color: #facc15;
+      background-image: radial-gradient(circle at 20% 0%, #facc15 0, transparent 30%),
+        radial-gradient(circle at 95% 8%, #a78bfa 0, transparent 35%);
+    }
+    #app-main.cg-festive-theme--labor .main-wrap::before {
+      opacity: 0.08;
+      color: #d97706;
+    }
+    #app-main.cg-festive-on .main-wrap > .topbar,
+    #app-main.cg-festive-on .main-wrap > #cg-festive-banner,
+    #app-main.cg-festive-on .main-wrap > .content {
+      position: relative;
+      z-index: 1;
+    }
     .sidebar {
       --cg-sidebar-p: var(--blue-500);
       --cg-sidebar-p-dark: var(--accent-dark);
@@ -5289,6 +5417,7 @@
     </aside>
     <div class="overlay-mobile" id="sidebar-overlay"></div>
     <div class="main-wrap">
+      <div id="cg-festive-banner" class="cg-festive-banner hidden" aria-hidden="true"></div>
       <header class="topbar">
         <button type="button" class="menu-toggle" id="menu-toggle" aria-label="Abrir o cerrar menú lateral" aria-expanded="false" aria-controls="sidebar"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
         <div class="topbar-user" id="topbar-user"></div>
@@ -6257,7 +6386,9 @@
       get staffBirthdays() { return load("staffBirthdays", []); },
       set staffBirthdays(v) { save("staffBirthdays", v); },
       get dashScheduledAlerts() { return load("dashScheduledAlerts", []); },
-      set dashScheduledAlerts(v) { save("dashScheduledAlerts", v); }
+      set dashScheduledAlerts(v) { save("dashScheduledAlerts", v); },
+      get festiveAmbience() { return load("festiveAmbience", { globalEnabled: true, rules: [] }); },
+      set festiveAmbience(v) { save("festiveAmbience", v); }
     };
 
     /* ┌─ 7. Sesión, permisos por módulo, bloqueo turno conserje ──────────────────────── */
@@ -7057,7 +7188,8 @@
         ["conserjeActivity", migrateConserjeActivityLog],
         ["manualUsuario", migrateManualUsuarioModule],
         ["staffBirthdays", migrateStaffBirthdays],
-        ["dashScheduledAlerts", migrateDashScheduledAlerts]
+        ["dashScheduledAlerts", migrateDashScheduledAlerts],
+        ["festiveAmbience", migrateFestiveAmbience]
       ];
       var si;
       for (si = 0; si < steps.length; si++) {
@@ -7098,6 +7230,194 @@
 
     function migrateDashScheduledAlerts() {
       if (P.localGetRaw(LS + "dashScheduledAlerts") === null) save("dashScheduledAlerts", []);
+    }
+
+    function defaultFestiveAmbienceObject() {
+      var iso = new Date().toISOString();
+      function rulePreset(preset, title, message, theme) {
+        return {
+          id: uid(),
+          kind: "preset",
+          preset: preset,
+          enabled: true,
+          title: title,
+          message: message,
+          theme: theme,
+          createdAt: iso
+        };
+      }
+      return {
+        globalEnabled: true,
+        rules: [
+          rulePreset(
+            "labor_may1",
+            "Día del Trabajador",
+            "Feliz Día del Trabajador a todo el equipo. Gracias por su dedicación en la conserjería y el cuidado de la comunidad.",
+            "labor"
+          ),
+          rulePreset(
+            "patrias_sep",
+            "Fiestas Patrias",
+            "¡Felices Fiestas Patrias! Chile celebra; mantengamos la seguridad, el orden y un trato cordial a residentes y visitas.",
+            "patrias"
+          ),
+          rulePreset(
+            "navidad",
+            "Navidad",
+            "Les deseamos una muy feliz Navidad en compañía de quienes más quieren. Gracias por su trabajo durante el año.",
+            "navidad"
+          ),
+          rulePreset(
+            "ano_nuevo",
+            "Año Nuevo",
+            "¡Feliz Año Nuevo! Que sea un año de trabajo en equipo, buena convivencia y éxitos para todos.",
+            "newyear"
+          )
+        ]
+      };
+    }
+
+    function migrateFestiveAmbience() {
+      if (P.localGetRaw(LS + "festiveAmbience") !== null) return;
+      save("festiveAmbience", defaultFestiveAmbienceObject());
+    }
+
+    var CG_FESTIVE_PRESET_META = {
+      labor_may1: { label: "Día del Trabajador", hint: "Automático: 1 de mayo (Chile)", start: "05-01", end: "05-01" },
+      patrias_sep: { label: "Fiestas Patrias", hint: "Automático: 18 y 19 de septiembre (Chile)", start: "09-18", end: "09-19" },
+      navidad: { label: "Navidad", hint: "Automático: 20–26 de diciembre", start: "12-20", end: "12-26" },
+      ano_nuevo: { label: "Año Nuevo", hint: "Automático: 31 dic – 2 ene", start: "12-31", end: "01-02" }
+    };
+
+    function cgChileYmdParts(d) {
+      var dt = d instanceof Date ? d : new Date(d);
+      if (isNaN(dt.getTime())) return null;
+      var s = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Santiago",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).format(dt);
+      var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+      if (!m) return null;
+      return { y: +m[1], m: +m[2], day: +m[3], ymd: s, mmdd: s.slice(5) };
+    }
+
+    function cgMmddInRange(mmdd, startMmdd, endMmdd) {
+      if (!mmdd || !startMmdd || !endMmdd) return false;
+      if (startMmdd <= endMmdd) return mmdd >= startMmdd && mmdd <= endMmdd;
+      return mmdd >= startMmdd || mmdd <= endMmdd;
+    }
+
+    function cgFestiveRuleEffectiveRange(rule) {
+      if (!rule || rule.enabled === false) return null;
+      if (rule.kind === "preset" && rule.preset && CG_FESTIVE_PRESET_META[rule.preset]) {
+        var pr = CG_FESTIVE_PRESET_META[rule.preset];
+        return { start: pr.start, end: pr.end };
+      }
+      if (rule.kind === "range" && rule.startMmdd && rule.endMmdd) {
+        return { start: String(rule.startMmdd), end: String(rule.endMmdd) };
+      }
+      return null;
+    }
+
+    function getFestiveAmbienceNormalized() {
+      var raw = state.festiveAmbience;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        return { globalEnabled: true, rules: [] };
+      }
+      var rules = Array.isArray(raw.rules) ? raw.rules.slice() : [];
+      return {
+        globalEnabled: raw.globalEnabled !== false,
+        rules: rules
+      };
+    }
+
+    function resolveFestiveAmbienceRule(now, fa) {
+      fa = fa || getFestiveAmbienceNormalized();
+      if (!fa.globalEnabled) return null;
+      var parts = cgChileYmdParts(now);
+      if (!parts) return null;
+      var mmdd = parts.mmdd;
+      var i;
+      for (i = 0; i < fa.rules.length; i++) {
+        var r = fa.rules[i];
+        if (!r || r.enabled === false) continue;
+        var rg = cgFestiveRuleEffectiveRange(r);
+        if (!rg) continue;
+        if (cgMmddInRange(mmdd, rg.start, rg.end)) {
+          return { rule: r, ymd: parts.ymd, mmdd: mmdd };
+        }
+      }
+      return null;
+    }
+
+    function cgFestiveThemeClass(theme) {
+      var t = String(theme || "neutral").toLowerCase();
+      if (t === "labor" || t === "patrias" || t === "navidad" || t === "newyear" || t === "neutral") return t;
+      return "neutral";
+    }
+
+    function applyFestiveAmbienceToDom() {
+      var app = document.getElementById("app-main");
+      var banner = document.getElementById("cg-festive-banner");
+      if (!app || !banner) return;
+      var themeClasses = ["labor", "patrias", "navidad", "newyear", "neutral"];
+      var ti;
+      for (ti = 0; ti < themeClasses.length; ti++) {
+        app.classList.remove("cg-festive-theme--" + themeClasses[ti]);
+      }
+      app.classList.remove("cg-festive-on");
+      function hideBanner() {
+        banner.classList.add("hidden");
+        banner.innerHTML = "";
+        banner.setAttribute("aria-hidden", "true");
+      }
+      if (!currentUser()) {
+        hideBanner();
+        return;
+      }
+      var fa = getFestiveAmbienceNormalized();
+      if (!fa.globalEnabled) {
+        hideBanner();
+        return;
+      }
+      var hit = resolveFestiveAmbienceRule(new Date(), fa);
+      if (!hit || !hit.rule) {
+        hideBanner();
+        return;
+      }
+      var th = cgFestiveThemeClass(hit.rule.theme);
+      app.classList.add("cg-festive-on");
+      app.classList.add("cg-festive-theme--" + th);
+      var dismissKey = "cgFestiveDismiss_" + hit.rule.id + "_" + hit.ymd;
+      try {
+        if (sessionStorage.getItem(dismissKey) === "1") {
+          hideBanner();
+          return;
+        }
+      } catch (eD) {}
+      var title = escapeHtml(String(hit.rule.title || "Celebración").trim() || "Celebración");
+      var msgRaw = String(hit.rule.message || "").trim();
+      var msgEsc = escapeHtml(msgRaw).replace(/\n/g, "<br>");
+      var rid = escapeAttr(String(hit.rule.id || ""));
+      var ymdEsc = escapeAttr(String(hit.ymd || ""));
+      banner.classList.remove("hidden");
+      banner.setAttribute("aria-hidden", "false");
+      banner.innerHTML =
+        "<div class=\"cg-festive-banner__inner\" role=\"region\" aria-label=\"Mensaje festivo\">" +
+        "<div class=\"cg-festive-banner__icon\" aria-hidden=\"true\"></div>" +
+        "<div class=\"cg-festive-banner__text\">" +
+        "<strong class=\"cg-festive-banner__title\">" +
+        title +
+        "</strong>" +
+        (msgEsc ? "<p class=\"cg-festive-banner__msg\">" + msgEsc + "</p>" : "") +
+        "</div>" +
+        "<button type=\"button\" class=\"cg-festive-banner__close btn btn-sm btn-secondary\" data-cg-act=\"festiveBannerDismiss\" data-cg-id=\"" +
+        rid +
+        "\" data-cg-param=\"" +
+        ymdEsc +
+        "\" title=\"Ocultar hasta mañana\">×</button></div>";
     }
 
     function migrateStaffChat() {
@@ -7518,6 +7838,7 @@
       uid, load, save, LS, persist: P,
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
       getPersonalization, setPersonalization, applyPersonalizationToDom,
+      CG_FESTIVE_PRESET_META, getFestiveAmbienceNormalized, resolveFestiveAmbienceRule, applyFestiveAmbienceToDom, cgChileYmdParts, cgFestiveRuleEffectiveRange, cgMmddInRange, defaultFestiveAmbienceObject,
       hexToRgb, snapshotThemeForExport, buildExportThemeRootCss, getExportAccentHex, getEmailShellThemeColors,
       initCloudSync, stopCloudSyncListener, attachStaffChatRemoteSync, detachStaffChatRemoteSync, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPullSingleLsKey, cloudPushAllKeysOnce,
       flushPendingCloudWritesNow, cloudPushKeyImmediate, cloudPushLsKeyPromise, armLsKeyPullQuiet, getCloudSyncLastInitResult,
@@ -7534,6 +7855,22 @@
       validate: CG_VALIDATE
     };
     applyPersonalizationToDom();
+    (function cgFestiveReapplyTick() {
+      if (window.__cgFestiveReapplyTick) return;
+      window.__cgFestiveReapplyTick = true;
+      var lastYmd = "";
+      setInterval(function () {
+        try {
+          if (!window.CG || typeof window.CG.currentUser !== "function" || !window.CG.currentUser()) return;
+          if (typeof window.CG.cgChileYmdParts !== "function" || typeof window.CG.applyFestiveAmbienceToDom !== "function") return;
+          var p = window.CG.cgChileYmdParts(new Date());
+          if (!p) return;
+          if (p.ymd === lastYmd) return;
+          lastYmd = p.ymd;
+          window.CG.applyFestiveAmbienceToDom();
+        } catch (eFt) {}
+      }, 60000);
+    })();
     (function cgBindCloudResyncOnFocus() {
       if (window.__cgCloudResyncOnFocusBound) return;
       window.__cgCloudResyncOnFocusBound = true;
@@ -14678,6 +15015,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       app.setAttribute("aria-hidden", "true");
       staffPresenceStop();
       staffChatSetDockVisible(false);
+      if (window.CG && typeof window.CG.applyFestiveAmbienceToDom === "function") window.CG.applyFestiveAmbienceToDom();
       if (window.CG && typeof window.CG.syncLoginFirstAdminPanel === "function") window.CG.syncLoginFirstAdminPanel();
     }
     function showApp() {
@@ -14886,6 +15224,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       bindPageEvents(view);
       runVisitAlerts();
       renderNav();
+      if (typeof G.applyFestiveAmbienceToDom === "function") G.applyFestiveAmbienceToDom();
     }
 
     function dashCompareDelta(todayN, yestN) {
@@ -16108,6 +16447,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"personalizacion\" aria-pressed=\"false\">Personalización</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"rrhh\" aria-pressed=\"false\">RRHH</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"dashAlerts\" aria-pressed=\"false\">Alertas panel de control</button>" +
+        "<button type=\"button\" class=\"admin-tab\" data-adm=\"festive\" aria-pressed=\"false\">Ambientación festiva</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"cfg\" aria-pressed=\"false\">Configuración</button></div>" +
         "<div id=\"adm-panel\" role=\"region\" aria-label=\"Contenido de administración\"></div>"
       );
@@ -16335,6 +16675,20 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             var tabDa = document.querySelector(".admin-tab[data-adm=\"dashAlerts\"].active");
             if (tabDa) A.renderAdmin("dashAlerts");
           } catch (eDa) {}
+        }
+      }
+
+      if (k === "festiveAmbience") {
+        if (typeof G.applyFestiveAmbienceToDom === "function") {
+          try {
+            G.applyFestiveAmbienceToDom();
+          } catch (eFest) {}
+        }
+        if (A && typeof A.renderAdmin === "function") {
+          try {
+            var tabFe = document.querySelector(".admin-tab[data-adm=\"festive\"].active");
+            if (tabFe) A.renderAdmin("festive");
+          } catch (eFe) {}
         }
       }
 
@@ -23540,6 +23894,468 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (typeof A.renderDashboardScheduledAlerts === "function") A.renderDashboardScheduledAlerts();
   };
 
+  A.festiveBannerDismiss = function (id, ymd) {
+    try {
+      sessionStorage.setItem("cgFestiveDismiss_" + String(id || "") + "_" + String(ymd || ""), "1");
+    } catch (eFd) {}
+    if (typeof G.applyFestiveAmbienceToDom === "function") G.applyFestiveAmbienceToDom();
+  };
+
+  function festiveAdminRowStatus(r, now) {
+    if (!r || r.enabled === false) {
+      return { label: "Desactivada", cls: "cg-adm-dash-alert-status--off" };
+    }
+    var rg = G.cgFestiveRuleEffectiveRange(r);
+    if (!rg) return { label: "Sin rango", cls: "cg-adm-dash-alert-status--bad" };
+    var p = G.cgChileYmdParts(now);
+    if (!p) return { label: "—", cls: "" };
+    if (G.cgMmddInRange(p.mmdd, rg.start, rg.end)) {
+      return { label: "En periodo (Chile)", cls: "cg-adm-dash-alert-status--ok" };
+    }
+    return { label: "Fuera de fecha", cls: "cg-adm-dash-alert-status--wait" };
+  }
+
+  function festiveSplitMmdd(x) {
+    var m = /^(\d{2})-(\d{2})$/.exec(String(x || ""));
+    return m ? { mm: m[1], dd: m[2] } : { mm: "", dd: "" };
+  }
+
+  function festivePad2(n) {
+    var k = parseInt(String(n), 10);
+    if (!isFinite(k)) return "";
+    return k < 10 ? "0" + k : String(k);
+  }
+
+  function festiveMmddFromInputs(mm, dd) {
+    var m = parseInt(String(mm), 10);
+    var d = parseInt(String(dd), 10);
+    if (!isFinite(m) || !isFinite(d) || m < 1 || m > 12 || d < 1 || d > 31) return null;
+    return festivePad2(m) + "-" + festivePad2(d);
+  }
+
+  function buildRenderAdminFestiveHtml() {
+    var pf = A._festiveFormPrefill;
+    A._festiveFormPrefill = null;
+    var fa = G.getFestiveAmbienceNormalized();
+    var globalChk = fa.globalEnabled !== false ? " checked" : "";
+    var now = new Date();
+    var rows =
+      fa.rules.length > 0
+        ? fa.rules
+            .map(function (r) {
+              if (!r) return "";
+              var st = festiveAdminRowStatus(r, now);
+              var idA = G.escapeAttr(String(r.id || ""));
+              var kind = r.kind === "range" ? "Personalizado" : "Automático";
+              var rangeLbl = "—";
+              if (r.kind === "preset" && r.preset && G.CG_FESTIVE_PRESET_META[r.preset]) {
+                var pm = G.CG_FESTIVE_PRESET_META[r.preset];
+                rangeLbl = pm.hint || pm.label;
+              } else if (r.kind === "range") {
+                rangeLbl = String(r.startMmdd || "—") + " → " + String(r.endMmdd || "—");
+              }
+              var prev = String(r.message || "").replace(/\s+/g, " ").trim();
+              if (prev.length > 70) prev = prev.slice(0, 70) + "…";
+              var delBtn =
+                r.kind === "range"
+                  ? "<button type=\"button\" class=\"btn btn-danger btn-sm\" data-cg-act=\"festiveRuleDel\" data-cg-id=\"" +
+                    idA +
+                    "\"><i class=\"fa-solid fa-trash\"></i></button>"
+                  : "";
+              return (
+                "<tr><td><span class=\"cg-adm-dash-alert-status " +
+                st.cls +
+                "\">" +
+                G.escapeHtml(st.label) +
+                "</span></td><td>" +
+                G.escapeHtml(kind) +
+                "</td><td style=\"max-width:14rem;font-size:0.82rem\">" +
+                G.escapeHtml(rangeLbl) +
+                "</td><td>" +
+                G.escapeHtml(r.title || "—") +
+                "</td><td style=\"max-width:12rem;font-size:0.8rem\">" +
+                G.escapeHtml(prev || "—") +
+                "</td><td style=\"white-space:nowrap\">" +
+                "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"festiveRuleToggle\" data-cg-id=\"" +
+                idA +
+                "\" title=\"Activar o desactivar\"><i class=\"fa-solid fa-power-off\"></i></button> " +
+                "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"festiveRuleEdit\" data-cg-id=\"" +
+                idA +
+                "\"><i class=\"fa-solid fa-pen\"></i></button> " +
+                delBtn +
+                "</td></tr>"
+              );
+            })
+            .join("")
+        : "<tr><td colspan=\"6\" class=\"page-desc\">Sin reglas. Use los valores por defecto o añada un período personalizado.</td></tr>";
+    var pfRule = pf && pf.rule ? pf.rule : null;
+    var vId = pfRule && pfRule.id != null ? G.escapeAttr(String(pfRule.id)) : "";
+    var vKind = pfRule && pfRule.kind === "preset" ? "preset" : "range";
+    var vPreset = pfRule && pfRule.kind === "preset" && pfRule.preset ? G.escapeAttr(String(pfRule.preset)) : "";
+    var sp = pfRule && pfRule.kind === "range" ? festiveSplitMmdd(pfRule.startMmdd) : { mm: "", dd: "" };
+    var ep = pfRule && pfRule.kind === "range" ? festiveSplitMmdd(pfRule.endMmdd) : { mm: "", dd: "" };
+    var vTitle = pfRule ? G.escapeAttr(String(pfRule.title || "")) : "";
+    var vMsg = pfRule ? G.escapeHtml(String(pfRule.message || "")) : "";
+    var vTheme = pfRule && pfRule.theme ? String(pfRule.theme) : "neutral";
+    var chkRule = !pfRule || pfRule.enabled !== false ? " checked" : "";
+    var themeOpts = [
+      { v: "labor", l: "Trabajo (dorado / mayo)" },
+      { v: "patrias", l: "Fiestas Patrias (azul y rojo)" },
+      { v: "navidad", l: "Navidad (verde y rojo)" },
+      { v: "newyear", l: "Año Nuevo (nocturno dorado)" },
+      { v: "neutral", l: "Neutro (acento institucional)" }
+    ];
+    var themeHtml = themeOpts
+      .map(function (o) {
+        return (
+          "<option value=\"" +
+          G.escapeAttr(o.v) +
+          "\"" +
+          (vTheme === o.v ? " selected" : "") +
+          ">" +
+          G.escapeHtml(o.l) +
+          "</option>"
+        );
+      })
+      .join("");
+    var presetHint =
+      vKind === "preset"
+        ? "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Las <strong>fechas</strong> de esta regla son <strong>automáticas</strong> según el calendario en Chile. Solo edita título, mensaje y estilo visual.</p>"
+        : "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Período <strong>personalizado</strong> recurrente cada año (mes y día). La primera regla activa que coincida con la fecha en Chile tiene prioridad (orden de la tabla de arriba).</p>";
+    var rangeFields =
+      vKind === "preset"
+        ? "<input type=\"hidden\" id=\"adm-festive-sm\" value=\"\" /><input type=\"hidden\" id=\"adm-festive-sd\" value=\"\" /><input type=\"hidden\" id=\"adm-festive-em\" value=\"\" /><input type=\"hidden\" id=\"adm-festive-ed\" value=\"\" />"
+        : "<div class=\"toolbar\" style=\"gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:0.75rem\">" +
+          "<div class=\"form-group\" style=\"margin:0\"><label>Inicio (mes / día)</label><div style=\"display:flex;gap:0.35rem\">" +
+          "<input type=\"number\" id=\"adm-festive-sm\" min=\"1\" max=\"12\" placeholder=\"MM\" style=\"width:4rem\" value=\"" +
+          G.escapeAttr(sp.mm) +
+          "\" />" +
+          "<input type=\"number\" id=\"adm-festive-sd\" min=\"1\" max=\"31\" placeholder=\"DD\" style=\"width:4rem\" value=\"" +
+          G.escapeAttr(sp.dd) +
+          "\" /></div></div>" +
+          "<div class=\"form-group\" style=\"margin:0\"><label>Término (mes / día)</label><div style=\"display:flex;gap:0.35rem\">" +
+          "<input type=\"number\" id=\"adm-festive-em\" min=\"1\" max=\"12\" placeholder=\"MM\" style=\"width:4rem\" value=\"" +
+          G.escapeAttr(ep.mm) +
+          "\" />" +
+          "<input type=\"number\" id=\"adm-festive-ed\" min=\"1\" max=\"31\" placeholder=\"DD\" style=\"width:4rem\" value=\"" +
+          G.escapeAttr(ep.dd) +
+          "\" /></div></div></div>" +
+          "<p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.82rem\">Para cruzar Año Nuevo use por ejemplo inicio <strong>31/12</strong> y término <strong>02/01</strong>.</p>";
+    return (
+      "<div class=\"card\"><div class=\"card-h\"><h3>Ambientación festiva</h3></div><div class=\"card-b\">" +
+      "<p class=\"page-desc\" style=\"margin:0 0 1rem;font-size:0.86rem\">" +
+      "Mensaje y diseño en toda la app para <strong>Día del Trabajador</strong>, <strong>Fiestas Patrias</strong>, <strong>Navidad</strong>, <strong>Año Nuevo</strong> y <strong>períodos propios</strong>. " +
+      "La fecha efectiva es la de <strong>Chile</strong> (zona horaria América/Santiago). " +
+      "Los conserjes pueden ocultar la cinta solo hasta el día siguiente (no afecta la ambientación de fondo).</p>" +
+      "<div class=\"toolbar\" style=\"gap:0.75rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem\">" +
+      "<label style=\"display:flex;align-items:center;gap:0.4rem;margin:0\"><input type=\"checkbox\" id=\"adm-festive-global\"" +
+      globalChk +
+      " /> <span>Ambientación festiva activa</span></label>" +
+      "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"festiveGlobalSave\" data-cg-empty=\"1\"><i class=\"fa-solid fa-floppy-disk\"></i> Guardar opción general</button>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"festiveRestorePresetCopy\" data-cg-empty=\"1\" title=\"Restaurar textos sugeridos en reglas automáticas\">Restaurar textos sugeridos</button></div></div></div>" +
+      "<div class=\"card\" style=\"margin-top:1rem\"><div class=\"card-h\"><h3 style=\"font-size:0.98rem\">Reglas (orden = prioridad)</h3></div><div class=\"card-b\">" +
+      "<div class=\"data-table-wrap\" style=\"overflow:auto\"><table class=\"data-table\"><thead><tr><th>Estado</th><th>Tipo</th><th>Periodo</th><th>Título</th><th>Mensaje</th><th></th></tr></thead><tbody>" +
+      rows +
+      "</tbody></table></div></div></div>" +
+      "<div class=\"card\" style=\"margin-top:1rem\"><div class=\"card-h\"><h3 style=\"font-size:0.98rem\">Editar regla o período personalizado</h3>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"festiveFormNewRange\" data-cg-empty=\"1\">Nuevo período personalizado</button></div><div class=\"card-b\">" +
+      "<input type=\"hidden\" id=\"adm-festive-rule-id\" value=\"" +
+      vId +
+      "\" />" +
+      "<input type=\"hidden\" id=\"adm-festive-kind\" value=\"" +
+      G.escapeAttr(vKind) +
+      "\" />" +
+      "<input type=\"hidden\" id=\"adm-festive-preset\" value=\"" +
+      vPreset +
+      "\" />" +
+      presetHint +
+      rangeFields +
+      "<div class=\"form-group\"><label for=\"adm-festive-title\">Título</label>" +
+      "<input type=\"text\" id=\"adm-festive-title\" maxlength=\"120\" style=\"width:100%;max-width:28rem\" value=\"" +
+      vTitle +
+      "\" /></div>" +
+      "<div class=\"form-group\"><label for=\"adm-festive-msg\">Mensaje</label>" +
+      "<textarea id=\"adm-festive-msg\" rows=\"4\" style=\"width:100%;max-width:36rem\">" +
+      vMsg +
+      "</textarea></div>" +
+      "<div class=\"form-group\"><label for=\"adm-festive-theme\">Estilo visual</label>" +
+      "<select id=\"adm-festive-theme\" style=\"min-width:18rem\">" +
+      themeHtml +
+      "</select></div>" +
+      "<label style=\"display:flex;align-items:center;gap:0.35rem;margin:0 0 0.75rem\"><input type=\"checkbox\" id=\"adm-festive-enabled\"" +
+      chkRule +
+      " /> <span>Regla activa</span></label>" +
+      "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"festiveRuleSave\" data-cg-empty=\"1\"><i class=\"fa-solid fa-floppy-disk\"></i> Guardar regla</button></div></div>"
+    );
+  }
+
+  A.festiveGlobalSave = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede cambiar la ambientación festiva.", "error");
+      return;
+    }
+    var el = document.getElementById("adm-festive-global");
+    var fa = G.getFestiveAmbienceNormalized();
+    fa.globalEnabled = el ? !!el.checked : true;
+    G.state.festiveAmbience = fa;
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("festiveAmbience");
+    if (typeof G.logConserjeActivity === "function") G.logConserjeActivity("festive_global", fa.globalEnabled ? "on" : "off");
+    G.toast("Opción general guardada");
+    A.renderAdmin("festive");
+    if (typeof G.applyFestiveAmbienceToDom === "function") G.applyFestiveAmbienceToDom();
+  };
+
+  A.festiveRestorePresetCopy = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede restaurar textos.", "error");
+      return;
+    }
+    if (!confirm("¿Restaurar los textos y estilos sugeridos en todas las reglas automáticas (presets)? No borra períodos personalizados.")) return;
+    var def = G.defaultFestiveAmbienceObject();
+    var byPreset = {};
+    var i;
+    for (i = 0; i < def.rules.length; i++) {
+      var dr = def.rules[i];
+      if (dr && dr.kind === "preset" && dr.preset) byPreset[dr.preset] = dr;
+    }
+    var fa = G.getFestiveAmbienceNormalized();
+    fa.rules = fa.rules.map(function (r) {
+      if (!r || r.kind !== "preset" || !r.preset || !byPreset[r.preset]) return r;
+      var src = byPreset[r.preset];
+      return Object.assign({}, r, {
+        title: src.title,
+        message: src.message,
+        theme: src.theme
+      });
+    });
+    G.state.festiveAmbience = fa;
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("festiveAmbience");
+    G.toast("Textos sugeridos restaurados en reglas automáticas");
+    A.renderAdmin("festive");
+    if (typeof G.applyFestiveAmbienceToDom === "function") G.applyFestiveAmbienceToDom();
+  };
+
+  A.festiveFormNewRange = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede editar la ambientación.", "error");
+      return;
+    }
+    A._festiveFormPrefill = {
+      rule: { id: "", kind: "range", startMmdd: "", endMmdd: "", title: "", message: "", theme: "neutral", enabled: true }
+    };
+    A.renderAdmin("festive");
+  };
+
+  A.festiveRuleEdit = function (id) {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede editar reglas.", "error");
+      return;
+    }
+    var fa = G.getFestiveAmbienceNormalized();
+    var r = null;
+    var j;
+    for (j = 0; j < fa.rules.length; j++) {
+      if (fa.rules[j] && String(fa.rules[j].id) === String(id)) {
+        r = fa.rules[j];
+        break;
+      }
+    }
+    if (!r) {
+      G.toast("Regla no encontrada.", "warn");
+      return;
+    }
+    A._festiveFormPrefill = { rule: Object.assign({}, r) };
+    A.renderAdmin("festive");
+  };
+
+  A.festiveRuleToggle = function (id) {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede cambiar reglas.", "error");
+      return;
+    }
+    var fa = G.getFestiveAmbienceNormalized();
+    var found = false;
+    fa.rules = fa.rules.map(function (x) {
+      if (!x || String(x.id) !== String(id)) return x;
+      found = true;
+      var nx = Object.assign({}, x);
+      nx.enabled = x.enabled === false;
+      return nx;
+    });
+    if (!found) {
+      G.toast("Regla no encontrada.", "warn");
+      return;
+    }
+    G.state.festiveAmbience = fa;
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("festiveAmbience");
+    G.toast("Estado de regla actualizado");
+    A.renderAdmin("festive");
+    if (typeof G.applyFestiveAmbienceToDom === "function") G.applyFestiveAmbienceToDom();
+  };
+
+  A.festiveRuleDel = function (id) {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede eliminar reglas.", "error");
+      return;
+    }
+    if (!confirm("¿Eliminar este período personalizado?")) return;
+    var fa = G.getFestiveAmbienceNormalized();
+    var target = null;
+    var k;
+    for (k = 0; k < fa.rules.length; k++) {
+      if (fa.rules[k] && String(fa.rules[k].id) === String(id)) {
+        target = fa.rules[k];
+        break;
+      }
+    }
+    if (!target || target.kind !== "range") {
+      G.toast("Solo se pueden eliminar períodos personalizados.", "warn");
+      return;
+    }
+    fa.rules = fa.rules.filter(function (x) {
+      return !x || String(x.id) !== String(id);
+    });
+    G.state.festiveAmbience = fa;
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("festiveAmbience");
+    G.toast("Período eliminado");
+    A._festiveFormPrefill = null;
+    A.renderAdmin("festive");
+    if (typeof G.applyFestiveAmbienceToDom === "function") G.applyFestiveAmbienceToDom();
+  };
+
+  A.festiveRuleSave = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede guardar reglas.", "error");
+      return;
+    }
+    var idEl = document.getElementById("adm-festive-rule-id");
+    var kindEl = document.getElementById("adm-festive-kind");
+    var presetEl = document.getElementById("adm-festive-preset");
+    var titleEl = document.getElementById("adm-festive-title");
+    var msgEl = document.getElementById("adm-festive-msg");
+    var themeEl = document.getElementById("adm-festive-theme");
+    var enEl = document.getElementById("adm-festive-enabled");
+    if (!titleEl || !msgEl || !kindEl) return;
+    var kind = String(kindEl.value || "range").trim();
+    var title = String(titleEl.value || "").trim();
+    if (!title) {
+      G.toast("Indique un título.", "warn");
+      return;
+    }
+    var message = String(msgEl.value || "").trim();
+    if (message.length > 2000) {
+      G.toast("El mensaje es demasiado largo (máx. 2000 caracteres).", "warn");
+      return;
+    }
+    var theme = themeEl && themeEl.value ? String(themeEl.value) : "neutral";
+    var enabled = enEl ? !!enEl.checked : true;
+    var nowIso = new Date().toISOString();
+    var fa = G.getFestiveAmbienceNormalized();
+    var ruleId = idEl && idEl.value ? String(idEl.value).trim() : "";
+
+    if (kind === "preset") {
+      var presetKey = presetEl && presetEl.value ? String(presetEl.value).trim() : "";
+      if (!presetKey || !G.CG_FESTIVE_PRESET_META[presetKey]) {
+        G.toast("Preset no válido.", "warn");
+        return;
+      }
+      if (!ruleId) {
+        G.toast("Falta el identificador de la regla.", "warn");
+        return;
+      }
+      var idx = -1;
+      var i;
+      for (i = 0; i < fa.rules.length; i++) {
+        if (fa.rules[i] && String(fa.rules[i].id) === ruleId) {
+          idx = i;
+          break;
+        }
+      }
+      if (idx < 0) {
+        G.toast("Regla no encontrada.", "warn");
+        return;
+      }
+      var cur = fa.rules[idx];
+      if (!cur || cur.kind !== "preset") {
+        G.toast("La regla no es un preset.", "warn");
+        return;
+      }
+      fa.rules[idx] = Object.assign({}, cur, {
+        title: title,
+        message: message,
+        theme: theme,
+        enabled: enabled,
+        preset: presetKey
+      });
+    } else {
+      var smEl = document.getElementById("adm-festive-sm");
+      var sdEl = document.getElementById("adm-festive-sd");
+      var emEl = document.getElementById("adm-festive-em");
+      var edEl = document.getElementById("adm-festive-ed");
+      var startMmdd = festiveMmddFromInputs(smEl && smEl.value, sdEl && sdEl.value);
+      var endMmdd = festiveMmddFromInputs(emEl && emEl.value, edEl && edEl.value);
+      if (!startMmdd || !endMmdd) {
+        G.toast("Indique mes y día válidos para inicio y término (1–12 y 1–31).", "warn");
+        return;
+      }
+      if (ruleId) {
+        var j = -1;
+        var k;
+        for (k = 0; k < fa.rules.length; k++) {
+          if (fa.rules[k] && String(fa.rules[k].id) === ruleId) {
+            j = k;
+            break;
+          }
+        }
+        if (j < 0) {
+          G.toast("Regla no encontrada.", "warn");
+          return;
+        }
+        var prevR = fa.rules[j];
+        if (!prevR || prevR.kind !== "range") {
+          G.toast("No se puede sobrescribir un preset desde este formulario.", "warn");
+          return;
+        }
+        fa.rules[j] = Object.assign({}, prevR, {
+          title: title,
+          message: message,
+          theme: theme,
+          enabled: enabled,
+          startMmdd: startMmdd,
+          endMmdd: endMmdd,
+          kind: "range"
+        });
+      } else {
+        fa.rules.push({
+          id: G.uid(),
+          kind: "range",
+          startMmdd: startMmdd,
+          endMmdd: endMmdd,
+          title: title,
+          message: message,
+          theme: theme,
+          enabled: enabled,
+          createdAt: nowIso
+        });
+      }
+    }
+
+    G.state.festiveAmbience = fa;
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("festiveAmbience");
+    if (typeof G.logConserjeActivity === "function") G.logConserjeActivity("festive_rule_save", title.slice(0, 120));
+    G.toast("Regla guardada");
+    A._festiveFormPrefill = null;
+    A.renderAdmin("festive");
+    if (typeof G.applyFestiveAmbienceToDom === "function") G.applyFestiveAmbienceToDom();
+  };
+
   function buildRenderAdminRrhhHtml() {
     var list = Array.isArray(G.state.staffBirthdays) ? G.state.staffBirthdays.slice() : [];
     var now = new Date();
@@ -24148,6 +24964,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "</div></div></div>";
     } else if (tab === "dashAlerts") {
       p.innerHTML = buildRenderAdminDashAlertsHtml();
+    } else if (tab === "festive") {
+      p.innerHTML = buildRenderAdminFestiveHtml();
     } else if (tab === "rrhh") {
       p.innerHTML = buildRenderAdminRrhhHtml();
       A.bindRrhhExcelImport();
