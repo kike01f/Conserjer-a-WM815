@@ -3059,17 +3059,26 @@
     }
     /* Pastilla usuario: fondo opaco (sin vidrio / blur) */
     .cg-topbar-user-chip {
+      position: relative;
+      z-index: 0;
+      isolation: isolate;
       display: flex;
       align-items: center;
       gap: 0.65rem;
-      max-width: min(100%, 19rem);
+      max-width: min(100%, 20.5rem);
       padding: 0.3rem 0.75rem 0.3rem 0.35rem;
       border-radius: 999px;
       background: var(--white);
       border: 1px solid var(--gray-200);
       box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+      transition:
+        transform 0.25s ease,
+        box-shadow 0.25s ease,
+        border-color 0.35s ease;
     }
     .cg-topbar-user-avatar {
+      position: relative;
+      z-index: 1;
       flex-shrink: 0;
       width: 2.35rem;
       height: 2.35rem;
@@ -3145,6 +3154,235 @@
     .cg-topbar-user-role-badge i {
       font-size: 0.68rem;
       opacity: 0.95;
+    }
+    .cg-topbar-user-avatar-wrap {
+      position: relative;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .cg-topbar-user-vibe {
+      font-size: 0.66rem;
+      font-weight: 500;
+      font-style: italic;
+      color: #4d6636;
+      margin: 0.12rem 0 0;
+      padding: 0;
+      line-height: 1.28;
+      max-width: 14.5rem;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .cg-topbar-user-chip--admin .cg-topbar-user-vibe {
+      color: #3d5a8a;
+    }
+    .cg-topbar-user-chip--other .cg-topbar-user-vibe {
+      color: #5c667a;
+    }
+    @keyframes cg-topbar-avatar-nod {
+      0%,
+      100% {
+        transform: translateY(0) rotate(0deg);
+      }
+      35% {
+        transform: translateY(-3px) rotate(-5deg);
+      }
+      65% {
+        transform: translateY(0) rotate(3deg);
+      }
+    }
+    @keyframes cg-topbar-badge-glow {
+      0%,
+      100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+      }
+      50% {
+        transform: scale(1.04);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+      }
+    }
+    .cg-topbar-user-chip:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+    }
+    .cg-topbar-user-chip--conserje:hover .cg-topbar-user-avatar-wrap {
+      animation: cg-topbar-avatar-nod 0.55s ease;
+    }
+    .cg-topbar-user-chip--admin:hover .cg-topbar-user-role-badge {
+      animation: cg-topbar-badge-glow 0.5s ease;
+    }
+    .cg-topbar-user-chip--other:hover .cg-topbar-user-avatar {
+      filter: brightness(1.06) saturate(1.08);
+    }
+    /* Sombreros / detalles por tema festivo (avatar) */
+    #app-main.cg-festive-on.cg-festive-theme--navidad .cg-topbar-user-avatar-wrap::before {
+      content: "";
+      position: absolute;
+      top: -0.62rem;
+      left: 50%;
+      margin-left: -0.45rem;
+      width: 0;
+      height: 0;
+      border-left: 0.48rem solid transparent;
+      border-right: 0.48rem solid transparent;
+      border-bottom: 0.85rem solid #b91c1c;
+      transform: rotate(-8deg);
+      z-index: 2;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
+    }
+    #app-main.cg-festive-on.cg-festive-theme--navidad .cg-topbar-user-avatar-wrap::after {
+      content: "";
+      position: absolute;
+      top: -0.12rem;
+      left: 50%;
+      transform: translateX(-50%) rotate(-5deg);
+      width: 1.35rem;
+      height: 0.38rem;
+      background: linear-gradient(180deg, #fff 0%, #f1f5f9 100%);
+      border-radius: 999px;
+      z-index: 3;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--patrias .cg-topbar-user-avatar-wrap::before {
+      content: "";
+      position: absolute;
+      top: -0.55rem;
+      left: 50%;
+      transform: translateX(-50%) rotate(-6deg);
+      width: 1.5rem;
+      height: 0.42rem;
+      background: linear-gradient(90deg, #ca8a04 0%, #eab308 35%, #fde047 50%, #eab308 65%, #ca8a04 100%);
+      border-radius: 50% 50% 40% 40% / 60% 60% 40% 40%;
+      box-shadow: inset 0 -1px 0 rgba(120, 53, 15, 0.25);
+      z-index: 2;
+    }
+    #app-main.cg-festive-on.cg-festive-theme--labor .cg-topbar-user-avatar-wrap::before {
+      content: "";
+      position: absolute;
+      top: -0.48rem;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 1.15rem;
+      height: 0.4rem;
+      background: linear-gradient(180deg, #facc15 0%, #eab308 100%);
+      border-radius: 4px 4px 2px 2px;
+      border: 1px solid rgba(180, 83, 9, 0.35);
+      z-index: 2;
+    }
+    #app-main.cg-festive-on.cg-festive-theme--newyear .cg-topbar-user-chip {
+      animation: cg-topbar-ny-glow 3.2s ease-in-out infinite;
+    }
+    @keyframes cg-topbar-ny-glow {
+      0%,
+      100% {
+        box-shadow:
+          0 1px 3px rgba(15, 23, 42, 0.06),
+          0 0 0 0 rgba(250, 204, 21, 0);
+      }
+      50% {
+        box-shadow:
+          0 4px 14px rgba(15, 23, 42, 0.09),
+          0 0 22px 3px rgba(250, 204, 21, 0.18),
+          0 0 0 1px rgba(167, 139, 250, 0.12);
+      }
+    }
+    #app-main.cg-festive-on.cg-festive-theme--neutral .cg-topbar-user-chip--conserje .cg-topbar-user-avatar-wrap::before {
+      content: "";
+      position: absolute;
+      inset: -3px;
+      border-radius: 50%;
+      background: conic-gradient(from 210deg, transparent, color-mix(in srgb, var(--blue-500) 45%, transparent), transparent);
+      opacity: 0.55;
+      z-index: 0;
+      animation: cg-topbar-neutral-ring 5s linear infinite;
+    }
+    @keyframes cg-topbar-neutral-ring {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+    /* Pastilla: acentos por tema */
+    #app-main.cg-festive-on.cg-festive-theme--patrias .cg-topbar-user-chip--conserje {
+      border-color: color-mix(in srgb, #2563eb 28%, var(--gray-200));
+      box-shadow:
+        0 2px 10px rgba(37, 99, 235, 0.08),
+        0 0 0 1px color-mix(in srgb, #dc2626 12%, transparent);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--patrias .cg-topbar-user-chip--conserje .cg-topbar-user-avatar {
+      background: linear-gradient(145deg, #1d4ed8 0%, #15803d 52%, #b91c1c 100%);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--patrias .cg-topbar-user-chip--conserje .cg-topbar-user-role-badge {
+      background: rgba(37, 99, 235, 0.1);
+      color: #1e3a8a;
+      border-color: color-mix(in srgb, #2563eb 25%, #dc2626 25%, transparent);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--navidad .cg-topbar-user-chip--conserje {
+      border-color: color-mix(in srgb, #059669 22%, var(--gray-200));
+    }
+    #app-main.cg-festive-on.cg-festive-theme--navidad .cg-topbar-user-chip--conserje .cg-topbar-user-avatar {
+      background: linear-gradient(145deg, #047857 0%, #b91c1c 95%);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--navidad .cg-topbar-user-chip--conserje .cg-topbar-user-role-badge {
+      background: rgba(185, 28, 28, 0.1);
+      color: #991b1b;
+      border-color: rgba(5, 150, 105, 0.25);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--labor .cg-topbar-user-chip--conserje {
+      border-color: color-mix(in srgb, #d97706 25%, var(--gray-200));
+    }
+    #app-main.cg-festive-on.cg-festive-theme--labor .cg-topbar-user-chip--conserje .cg-topbar-user-avatar {
+      background: linear-gradient(145deg, #ea580c 0%, #ca8a04 100%);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--labor .cg-topbar-user-chip--conserje .cg-topbar-user-role-badge {
+      background: rgba(217, 119, 6, 0.12);
+      color: #9a3412;
+      border-color: rgba(217, 119, 6, 0.28);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--newyear .cg-topbar-user-chip--conserje .cg-topbar-user-avatar {
+      background: linear-gradient(145deg, #4c1d95 0%, #312e81 55%, #ca8a04 100%);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--newyear .cg-topbar-user-chip--conserje .cg-topbar-user-role-badge {
+      background: rgba(250, 204, 21, 0.15);
+      color: #713f12;
+      border-color: rgba(250, 204, 21, 0.35);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--neutral .cg-topbar-user-chip--conserje .cg-topbar-user-role-badge {
+      background: color-mix(in srgb, var(--blue-500) 12%, transparent);
+      border-color: color-mix(in srgb, var(--blue-500) 22%, transparent);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--navidad .topbar-user .cg-topbar-user-chip--conserje {
+      margin-top: 0.12rem;
+    }
+    #app-main.cg-festive-on.cg-festive-theme--patrias .cg-topbar-user-chip--admin {
+      border-color: color-mix(in srgb, #2563eb 22%, var(--gray-200));
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.06);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--navidad .cg-topbar-user-chip--admin {
+      border-color: color-mix(in srgb, #059669 20%, var(--gray-200));
+    }
+    #app-main.cg-festive-on.cg-festive-theme--labor .cg-topbar-user-chip--admin {
+      border-color: color-mix(in srgb, #d97706 22%, var(--gray-200));
+    }
+    #app-main.cg-festive-on.cg-festive-theme--labor .cg-topbar-user-chip--other {
+      border-color: color-mix(in srgb, #ca8a04 18%, var(--gray-200));
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cg-topbar-user-chip:hover,
+      .cg-topbar-user-chip--conserje:hover .cg-topbar-user-avatar-wrap,
+      .cg-topbar-user-chip--admin:hover .cg-topbar-user-role-badge,
+      #app-main.cg-festive-on.cg-festive-theme--newyear .cg-topbar-user-chip,
+      #app-main.cg-festive-on.cg-festive-theme--neutral .cg-topbar-user-chip--conserje .cg-topbar-user-avatar-wrap::before {
+        animation: none !important;
+        transition: none !important;
+      }
+      .cg-topbar-user-chip:hover {
+        transform: none;
+      }
     }
     @media (max-width: 520px) {
       .cg-topbar-user-chip {
@@ -7680,7 +7918,13 @@
     function applyFestiveAmbienceToDom() {
       var app = document.getElementById("app-main");
       var mount = document.getElementById("dash-festive-mount");
-      if (!app) return;
+      function syncTopbarPersonality() {
+        if (typeof cgUpdateTopbarUserPersonality === "function") cgUpdateTopbarUserPersonality();
+      }
+      if (!app) {
+        syncTopbarPersonality();
+        return;
+      }
       var themeClasses = ["labor", "patrias", "navidad", "newyear", "neutral"];
       var ti;
       for (ti = 0; ti < themeClasses.length; ti++) {
@@ -7693,21 +7937,25 @@
       }
       if (!currentUser()) {
         clearFestiveMount();
+        syncTopbarPersonality();
         return;
       }
       var fa = getFestiveAmbienceNormalized();
       if (!fa.globalEnabled) {
         clearFestiveMount();
+        syncTopbarPersonality();
         return;
       }
       var ctx = getFestiveAmbienceChileYmdParts();
       if (!ctx) {
         clearFestiveMount();
+        syncTopbarPersonality();
         return;
       }
       var hit = resolveFestiveAmbienceRuleFromParts(ctx.mmdd, ctx.ymd, fa);
       if (!hit || !hit.rule) {
         clearFestiveMount();
+        syncTopbarPersonality();
         return;
       }
       var th = cgFestiveThemeClass(hit.rule.theme);
@@ -7725,6 +7973,7 @@
         : "";
       var mainIconInner = cgFestiveBannerMainIconHtml(th);
       var floatsHtml = cgFestiveBannerFloatsHtml(th);
+      syncTopbarPersonality();
       if (!mount) return;
       mount.innerHTML =
         "<div class=\"card cg-dash-festive-card\" role=\"status\">" +
@@ -15451,6 +15700,138 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (role === "conserje") return "fa-solid fa-id-badge";
       return "fa-solid fa-user";
     }
+    function cgTopbarPickStableVibePhrase(storageKey, phrases) {
+      if (!phrases || !phrases.length) return "";
+      try {
+        var k = "cg_vibe_" + storageKey;
+        var raw = sessionStorage.getItem(k);
+        if (raw !== null) {
+          var idx = parseInt(raw, 10);
+          if (!isNaN(idx) && idx >= 0 && idx < phrases.length) {
+            return phrases[idx];
+          }
+        }
+        var n = Math.floor(Math.random() * phrases.length);
+        sessionStorage.setItem(k, String(n));
+        return phrases[n];
+      } catch (err) {
+        return phrases[Math.floor(Math.random() * phrases.length)];
+      }
+    }
+    function cgTopbarUserVibePhrases() {
+      return {
+        base: {
+          conserje: [
+            "Recepción encendida: buena onda garantizada.",
+            "Quien abre la puerta hoy también abre el día.",
+            "Modo conserjería: atento, humano, imparable.",
+            "El edificio respira; usted pone el ritmo."
+          ],
+          admin: [
+            "Panel listo: visión clara, decisiones serenas.",
+            "Orden y calma: su impronta en el sistema.",
+            "Sin sorpresas que no pueda visualizar con tiempo."
+          ],
+          other: [
+            "Bienvenido: este espacio también es suyo.",
+            "Aquí para recorrer el edificio con confianza.",
+            "Un acceso amable por donde empezar el día."
+          ]
+        },
+        labor: {
+          conserje: [
+            "Hoy el trabajo se festeja: gracias por lo que hace.",
+            "Oficio noble, turno con brillo propio.",
+            "Manos que ordenan el mundo, una entrada a la vez."
+          ],
+          admin: [
+            "Coordinar también es trabajar; hoy se nota más.",
+            "Liderazgo merece aplauso entre planilla y corazón."
+          ],
+          other: ["Un día para honrar el esfuerzo de quienes lo hacen posible todo."]
+        },
+        patrias: {
+          conserje: [
+            "¡Chile en el pecho y el pasillo impecable!",
+            "Rojo, azul y un «buenos días» que suena a patria.",
+            "Cueca opcional; cariño y respeto, obligatorios."
+          ],
+          admin: ["Bajo su gestión, la comunidad también es patria chica."],
+          other: ["¡Fiestas Patrias! Que este acceso se sienta como hogar."]
+        },
+        navidad: {
+          conserje: [
+            "Paz, pan de pascua y visitas con sello de cariño.",
+            "El espíritu navideño pasó por conserjería primero.",
+            "Luces afuera, calidez en la entrada: misión cumplida."
+          ],
+          admin: ["Calendario lleno, corazón en modo abrazo colectivo."],
+          other: ["Brilla el árbol; aquí brilla también su bienvenida."]
+        },
+        newyear: {
+          conserje: [
+            "Doce campanadas, una conserjería que no afloja.",
+            "Año nuevo: mismas llaves, energías renovadas.",
+            "Brindis mental por turnos tranquilos y buenos vecinos."
+          ],
+          admin: ["Nuevo ciclo: datos limpios, ilusiones en alza."],
+          other: ["Página en blanco: que la escriba con buen pie."]
+        },
+        neutral: {
+          conserje: [
+            "Hoy el edificio vibra distinto, y usted también.",
+            "Celebración a la medida: siga brillando en la entrada."
+          ],
+          admin: ["Un toque festivo en el sistema; usted marca el compás."],
+          other: ["Algo especial en el aire; disfrútelo con calma."]
+        }
+      };
+    }
+    function cgTopbarFestiveBadgeIconNames() {
+      return {
+        labor: { conserje: "fa-helmet-safety", admin: "fa-award", other: "fa-hands-clapping" },
+        patrias: { conserje: "fa-flag", admin: "fa-landmark", other: "fa-star" },
+        navidad: { conserje: "fa-gift", admin: "fa-tree", other: "fa-snowflake" },
+        newyear: { conserje: "fa-champagne-glasses", admin: "fa-clock", other: "fa-music" },
+        neutral: { conserje: "fa-sparkles", admin: "fa-wand-magic-sparkles", other: "fa-heart" }
+      };
+    }
+    function cgUpdateTopbarUserPersonality() {
+      var chip = document.querySelector("#topbar-user .cg-topbar-user-chip");
+      var vibeEl = document.getElementById("cg-topbar-user-vibe");
+      if (!chip || !vibeEl) return;
+      var app = document.getElementById("app-main");
+      var role = chip.getAttribute("data-cg-topbar-role") || "other";
+      var sig = chip.getAttribute("data-cg-topbar-sig") || "guest";
+      var festiveOn = app && app.classList.contains("cg-festive-on");
+      var themeKey = "base";
+      if (festiveOn) {
+        var ths = ["labor", "patrias", "navidad", "newyear", "neutral"];
+        for (var ti = 0; ti < ths.length; ti++) {
+          if (app.classList.contains("cg-festive-theme--" + ths[ti])) {
+            themeKey = ths[ti];
+            break;
+          }
+        }
+      }
+      chip.setAttribute("data-cg-festive-vibe", festiveOn ? themeKey : "");
+      var P = cgTopbarUserVibePhrases();
+      var pool = (P[themeKey] && P[themeKey][role]) || P.base[role] || P.base.other;
+      vibeEl.textContent = cgTopbarPickStableVibePhrase(themeKey + "_" + role + "_" + sig, pool);
+      var icon = chip.querySelector(".cg-topbar-user-role-badge i");
+      if (icon) {
+        if (festiveOn) {
+          var FM = cgTopbarFestiveBadgeIconNames()[themeKey];
+          if (FM && FM[role]) {
+            icon.className = "fa-solid " + sanitizeFaIconClass(FM[role]);
+          } else {
+            icon.className = cgTopbarUserRoleIconClass(role);
+          }
+        } else {
+          icon.className = cgTopbarUserRoleIconClass(role);
+        }
+      }
+    }
     function renderTopUser() {
       const u = G.currentUser();
       var tb = document.getElementById("topbar-user");
@@ -15466,10 +15847,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var roleLbl = cgTopbarUserRoleLabel(roleKey);
       var initials = cgTopbarUserInitials(u.name);
       var iconCls = cgTopbarUserRoleIconClass(roleKey);
+      var topbarSig =
+        String(u.id != null && u.id !== "" ? u.id : "anon") + "_" + String((u.name || "").length);
       var ariaUser =
         (G.escapeAttr ? G.escapeAttr(u.name) : G.escapeHtml(u.name)) +
         ", " +
         (G.escapeAttr ? G.escapeAttr(roleLbl) : G.escapeHtml(roleLbl));
+      var sigAttr = G.escapeAttr ? G.escapeAttr(topbarSig) : topbarSig.replace(/"/g, "&quot;");
+      var roleAttr = G.escapeAttr ? G.escapeAttr(roleKey || "other") : String(roleKey || "other").replace(/"/g, "&quot;");
       if (tb) {
         tb.setAttribute("role", "status");
         tb.setAttribute("aria-live", "polite");
@@ -15478,10 +15863,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           chipMod +
           "\" aria-label=\"" +
           ariaUser +
+          "\" data-cg-topbar-role=\"" +
+          roleAttr +
+          "\" data-cg-topbar-sig=\"" +
+          sigAttr +
           "\">" +
+          "<span class=\"cg-topbar-user-avatar-wrap\">" +
           "<span class=\"cg-topbar-user-avatar\" aria-hidden=\"true\">" +
           G.escapeHtml(initials) +
-          "</span>" +
+          "</span></span>" +
           "<div class=\"cg-topbar-user-body\">" +
           "<span class=\"cg-topbar-user-name\">" +
           G.escapeHtml(u.name) +
@@ -15492,9 +15882,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           iconCls +
           "\" aria-hidden=\"true\"></i> " +
           G.escapeHtml(roleLbl) +
-          "</span></div></div></div>";
+          "</span></div>" +
+          "<p class=\"cg-topbar-user-vibe\" id=\"cg-topbar-user-vibe\" aria-hidden=\"true\"></p>" +
+          "</div></div>";
       }
       if (sb) sb.textContent = u.name + " · " + roleLbl;
+      cgUpdateTopbarUserPersonality();
     }
 
     function closeSidebarMobile() {
