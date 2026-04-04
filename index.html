@@ -2716,6 +2716,52 @@
       opacity: 0.55;
       z-index: 0;
     }
+    /* Franjas tipo cinta de seguridad / precaución (arriba y abajo) */
+    #dash-scheduled-alerts-mount .cg-dash-sched-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.9;
+      background-image: repeating-linear-gradient(
+          -45deg,
+          #ca8a04 0,
+          #ca8a04 7px,
+          #1c1917 7px,
+          #1c1917 14px
+        ),
+        repeating-linear-gradient(
+          -45deg,
+          #ca8a04 0,
+          #ca8a04 7px,
+          #1c1917 7px,
+          #1c1917 14px
+        );
+      background-size: 20px 20px, 20px 20px;
+      background-position: 0 0, 0 calc(100% - 7px);
+      background-repeat: repeat, repeat;
+      -webkit-mask-image: linear-gradient(
+        to bottom,
+        #000 0,
+        #000 7px,
+        transparent 7px,
+        transparent calc(100% - 7px),
+        #000 calc(100% - 7px),
+        #000 100%
+      );
+      mask-image: linear-gradient(
+        to bottom,
+        #000 0,
+        #000 7px,
+        transparent 7px,
+        transparent calc(100% - 7px),
+        #000 calc(100% - 7px),
+        #000 100%
+      );
+      animation: cg-dash-sched-tape-slide 11s linear infinite;
+    }
     @keyframes cg-dash-sched-enter {
       from {
         opacity: 0;
@@ -2759,6 +2805,11 @@
         box-shadow: 0 5px 22px rgba(202, 138, 4, 0.26);
       }
     }
+    @keyframes cg-dash-sched-tape-slide {
+      to {
+        background-position: 20px 0, -20px calc(100% - 7px);
+      }
+    }
     @media (prefers-reduced-motion: reduce) {
       #dash-scheduled-alerts-mount .cg-dash-sched-card,
       #dash-scheduled-alerts-mount .cg-dash-sched-card::before,
@@ -2770,6 +2821,11 @@
       }
       #dash-scheduled-alerts-mount .cg-dash-sched-card::before {
         display: none;
+      }
+      #dash-scheduled-alerts-mount .cg-dash-sched-card::after {
+        animation: none !important;
+        background-position: 0 0, 0 calc(100% - 7px);
+        opacity: 0.88;
       }
     }
     .cg-adm-dash-alert-status {
@@ -15048,7 +15104,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"cg-reg-por-cell\"><span class=\"cg-reg-por-line\"><span class=\"cg-reg-por-k\">Ingreso:</span> " +
       G.escapeHtml(ing) +
       "</span>";
-    if (v.outAt) {
+    if (v.outAt && !visitIsPeatonalPersona(v)) {
       var sal = (v.salidaRegistradoPor && String(v.salidaRegistradoPor).trim()) || "—";
       html +=
         "<span class=\"cg-reg-por-line\"><span class=\"cg-reg-por-k\">Salida:</span> " +
@@ -19239,6 +19295,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         }
         vpc = vpk.value;
       }
+      var outAtPeatonal = null;
+      if (visitKind === "persona" && !veh) {
+        outAtPeatonal = vAt.iso;
+      }
       var rec = {
         id: G.uid(),
         visitor: visitor,
@@ -19249,7 +19309,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         plate: plateNorm,
         visitorParkingCode: vpc,
         parkingSlotId: "",
-        outAt: null,
+        outAt: outAtPeatonal,
         visitKind: visitKind,
         proveedorId: proveedorId || "",
         registradoPor: conserjeNombreSesion(),
@@ -19297,8 +19357,21 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (!w) return;
     var todayD = new Date();
     var allVis = Array.isArray(G.state.visits) ? G.state.visits : [];
+    var peatonalLegacyFix = false;
+    var allVisNorm = allVis.map(function (v) {
+      if (visitIsPeatonalPersona(v) && !v.outAt) {
+        peatonalLegacyFix = true;
+        return Object.assign({}, v, { outAt: v.at });
+      }
+      return v;
+    });
+    if (peatonalLegacyFix) {
+      G.state.visits = allVisNorm;
+      allVis = allVisNorm;
+      if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("visits");
+    }
     var rows = allVis.slice().sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
-    if (scope === "open") rows = rows.filter(function (v) { return !v.outAt; });
+    if (scope === "open") rows = rows.filter(function (v) { return !v.outAt && !visitIsPeatonalPersona(v); });
     else if (scope === "today") rows = rows.filter(function (v) { return G.isSameDay(v.at, todayD); });
     else if (scope === "prov")
       rows = rows.filter(function (v) {
@@ -19336,7 +19409,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (openListEl) {
       var openVis = allVis
         .filter(function (v) {
-          return !v.outAt;
+          return !v.outAt && !visitIsPeatonalPersona(v);
         })
         .slice()
         .sort(function (a, b) {
@@ -19344,7 +19417,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         });
       if (!openVis.length) {
         openListEl.innerHTML =
-          "<p class=\"page-desc\" style=\"margin:0;font-size:0.85rem\">Nadie registrado dentro. Los ingresos sin salida aparecerán aquí con acceso directo a <strong>Salida</strong>.</p>";
+          "<p class=\"page-desc\" style=\"margin:0;font-size:0.85rem\">Nadie dentro que requiera <strong>salida</strong> (visitas vehiculares o proveedores en curso). Las visitas peatonales no usan salida.</p>";
       } else {
         openListEl.innerHTML =
           "<ul class=\"cg-vis-open-list\">" +
@@ -19362,21 +19435,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 : "";
               var liveT = "";
               if (!v.outAt) {
-                if (visitIsPeatonalPersona(v)) {
-                  liveT =
-                    " · <span class=\"page-desc\" style=\"color:var(--gray-600)\">Peatonal (sin tiempo)</span>";
-                } else {
-                  var mv = { at: v.at };
-                  var tlab = v.vehicular ? fmtDurVisit(mv) : fmtDurOpenVisit(mv);
-                  liveT =
-                    " · <span data-cg-visit-live=\"1\" data-at=\"" +
-                    String(v.at).replace(/"/g, "&quot;") +
-                    "\" data-veh=\"" +
-                    (v.vehicular ? "1" : "0") +
-                    "\" data-out=\"0\" style=\"font-weight:600;color:var(--blue-800)\">" +
-                    G.escapeHtml(tlab) +
-                    "</span>";
-                }
+                var mv = { at: v.at };
+                var tlab = v.vehicular ? fmtDurVisit(mv) : fmtDurOpenVisit(mv);
+                liveT =
+                  " · <span data-cg-visit-live=\"1\" data-at=\"" +
+                  String(v.at).replace(/"/g, "&quot;") +
+                  "\" data-veh=\"" +
+                  (v.vehicular ? "1" : "0") +
+                  "\" data-out=\"0\" style=\"font-weight:600;color:var(--blue-800)\">" +
+                  G.escapeHtml(tlab) +
+                  "</span>";
               }
               return (
                 "<li>" +
@@ -19402,7 +19470,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var stVis = document.getElementById("vis-module-stats");
     if (stVis) {
       var visToday = allVis.filter(function (v) { return G.isSameDay(v.at, todayD); }).length;
-      var openN = allVis.filter(function (v) { return !v.outAt; }).length;
+      var openN = allVis.filter(function (v) { return !v.outAt && !visitIsPeatonalPersona(v); }).length;
       var vehOpenN = allVis.filter(function (v) { return !v.outAt && v.vehicular; }).length;
       stVis.innerHTML =
         "<div class=\"cg-stat-chip cg-stat-chip--visit\"><span class=\"cg-stat-chip-val\">" + visToday + "</span><span class=\"cg-stat-chip-lbl\">Visitas hoy</span></div>" +
@@ -19477,9 +19545,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "</strong></td><td>" +
         G.fmtDate(v.at) +
         "</td>";
-      html += "<td>" + veh + "</td><td>" + timeCell + "</td><td>" + (v.outAt ? G.fmtDate(v.outAt) : "—") + "</td>";
+      html +=
+        "<td>" +
+        veh +
+        "</td><td>" +
+        timeCell +
+        "</td><td>" +
+        (visitIsPeatonalPersona(v) ? "—" : v.outAt ? G.fmtDate(v.outAt) : "—") +
+        "</td>";
       html += "<td>" + visitRegistroConserjeCellHtml(v) + "</td><td>";
-      if (!v.outAt) {
+      if (!v.outAt && !visitIsPeatonalPersona(v)) {
         html +=
           "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"visitOut\" data-cg-id=\"" +
           G.escapeHtml(v.id) +
@@ -19585,6 +19660,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.visitOut = function (id) {
+    var vHit = (G.state.visits || []).find(function (x) { return x.id === id; });
+    if (vHit && visitIsPeatonalPersona(vHit)) {
+      G.toast("Las visitas peatonales no llevan registro de salida.", "warn");
+      return;
+    }
     var cn = conserjeNombreSesion();
     var list = G.state.visits.map(function (v) {
       if (v.id !== id) return v;
