@@ -2577,6 +2577,29 @@
       min-width: 2rem;
       font-size: 1.15rem;
     }
+    .cg-festive-banner__preview-note {
+      margin: 0 0 0.4rem;
+      font-size: 0.78rem;
+      color: var(--secondary-text);
+      line-height: 1.35;
+    }
+    .cg-festive-banner__preview-pill {
+      display: inline-block;
+      margin-right: 0.35rem;
+      padding: 0.12rem 0.45rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: color-mix(in srgb, var(--warning, #d97706) 22%, var(--gray-200));
+      color: var(--gray-800);
+    }
+    #app-main.cg-festive-theme--newyear .cg-festive-banner__preview-note { color: color-mix(in srgb, #fde68a 75%, #fff); }
+    #app-main.cg-festive-theme--newyear .cg-festive-banner__preview-pill {
+      background: rgba(250, 204, 21, 0.25);
+      color: #fef9c3;
+    }
     #app-main.cg-festive-theme--labor .cg-festive-banner {
       background: linear-gradient(110deg, #fff7ed 0%, #ffedd5 40%, #fef3c7 100%);
       border-bottom-color: color-mix(in srgb, #d97706 35%, var(--border-color));
@@ -7313,12 +7336,44 @@
       if (!rule || rule.enabled === false) return null;
       if (rule.kind === "preset" && rule.preset && CG_FESTIVE_PRESET_META[rule.preset]) {
         var pr = CG_FESTIVE_PRESET_META[rule.preset];
-        return { start: pr.start, end: pr.end };
+        var st = pr.start;
+        var en = pr.end;
+        if (rule.startMmdd && /^\d{2}-\d{2}$/.test(String(rule.startMmdd))) st = String(rule.startMmdd);
+        if (rule.endMmdd && /^\d{2}-\d{2}$/.test(String(rule.endMmdd))) en = String(rule.endMmdd);
+        return { start: st, end: en };
       }
       if (rule.kind === "range" && rule.startMmdd && rule.endMmdd) {
         return { start: String(rule.startMmdd), end: String(rule.endMmdd) };
       }
       return null;
+    }
+
+    var CG_FESTIVE_PREVIEW_SS = "cgFestivePreviewYmd";
+
+    function getFestivePreviewChileYmd() {
+      try {
+        var s = sessionStorage.getItem(CG_FESTIVE_PREVIEW_SS);
+        if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      } catch (ePv) {}
+      return "";
+    }
+
+    function setFestivePreviewChileYmd(ymd) {
+      try {
+        if (ymd && /^\d{4}-\d{2}-\d{2}$/.test(String(ymd))) {
+          sessionStorage.setItem(CG_FESTIVE_PREVIEW_SS, String(ymd));
+        } else {
+          sessionStorage.removeItem(CG_FESTIVE_PREVIEW_SS);
+        }
+      } catch (ePs) {}
+    }
+
+    /** Fecha civil Chile usada para ambientación: vista previa (sessionStorage) o reloj real. */
+    function getFestiveAmbienceChileYmdParts() {
+      var py = getFestivePreviewChileYmd();
+      if (py) return { ymd: py, mmdd: py.slice(5), preview: true };
+      var live = cgChileYmdParts(new Date());
+      return live ? { ymd: live.ymd, mmdd: live.mmdd, preview: false } : null;
     }
 
     function getFestiveAmbienceNormalized() {
@@ -7333,12 +7388,10 @@
       };
     }
 
-    function resolveFestiveAmbienceRule(now, fa) {
+    function resolveFestiveAmbienceRuleFromParts(mmdd, ymd, fa) {
       fa = fa || getFestiveAmbienceNormalized();
       if (!fa.globalEnabled) return null;
-      var parts = cgChileYmdParts(now);
-      if (!parts) return null;
-      var mmdd = parts.mmdd;
+      if (!mmdd || !ymd) return null;
       var i;
       for (i = 0; i < fa.rules.length; i++) {
         var r = fa.rules[i];
@@ -7346,10 +7399,16 @@
         var rg = cgFestiveRuleEffectiveRange(r);
         if (!rg) continue;
         if (cgMmddInRange(mmdd, rg.start, rg.end)) {
-          return { rule: r, ymd: parts.ymd, mmdd: mmdd };
+          return { rule: r, ymd: ymd, mmdd: mmdd };
         }
       }
       return null;
+    }
+
+    function resolveFestiveAmbienceRule(now, fa) {
+      var parts = cgChileYmdParts(now);
+      if (!parts) return null;
+      return resolveFestiveAmbienceRuleFromParts(parts.mmdd, parts.ymd, fa);
     }
 
     function cgFestiveThemeClass(theme) {
@@ -7368,6 +7427,7 @@
         app.classList.remove("cg-festive-theme--" + themeClasses[ti]);
       }
       app.classList.remove("cg-festive-on");
+      app.classList.remove("cg-festive-preview-active");
       function hideBanner() {
         banner.classList.add("hidden");
         banner.innerHTML = "";
@@ -7382,7 +7442,12 @@
         hideBanner();
         return;
       }
-      var hit = resolveFestiveAmbienceRule(new Date(), fa);
+      var ctx = getFestiveAmbienceChileYmdParts();
+      if (!ctx) {
+        hideBanner();
+        return;
+      }
+      var hit = resolveFestiveAmbienceRuleFromParts(ctx.mmdd, ctx.ymd, fa);
       if (!hit || !hit.rule) {
         hideBanner();
         return;
@@ -7390,6 +7455,8 @@
       var th = cgFestiveThemeClass(hit.rule.theme);
       app.classList.add("cg-festive-on");
       app.classList.add("cg-festive-theme--" + th);
+      if (ctx.preview) app.classList.add("cg-festive-preview-active");
+      else app.classList.remove("cg-festive-preview-active");
       var dismissKey = "cgFestiveDismiss_" + hit.rule.id + "_" + hit.ymd;
       try {
         if (sessionStorage.getItem(dismissKey) === "1") {
@@ -7404,10 +7471,16 @@
       var ymdEsc = escapeAttr(String(hit.ymd || ""));
       banner.classList.remove("hidden");
       banner.setAttribute("aria-hidden", "false");
+      var previewNote = ctx.preview
+        ? "<p class=\"cg-festive-banner__preview-note\"><span class=\"cg-festive-banner__preview-pill\">Vista previa</span> Simulando fecha Chile <strong>" +
+          escapeHtml(ctx.ymd) +
+          "</strong> (solo este navegador).</p>"
+        : "";
       banner.innerHTML =
         "<div class=\"cg-festive-banner__inner\" role=\"region\" aria-label=\"Mensaje festivo\">" +
         "<div class=\"cg-festive-banner__icon\" aria-hidden=\"true\"></div>" +
         "<div class=\"cg-festive-banner__text\">" +
+        previewNote +
         "<strong class=\"cg-festive-banner__title\">" +
         title +
         "</strong>" +
@@ -7838,7 +7911,8 @@
       uid, load, save, LS, persist: P,
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
       getPersonalization, setPersonalization, applyPersonalizationToDom,
-      CG_FESTIVE_PRESET_META, getFestiveAmbienceNormalized, resolveFestiveAmbienceRule, applyFestiveAmbienceToDom, cgChileYmdParts, cgFestiveRuleEffectiveRange, cgMmddInRange, defaultFestiveAmbienceObject,
+      CG_FESTIVE_PRESET_META, getFestiveAmbienceNormalized, resolveFestiveAmbienceRule, resolveFestiveAmbienceRuleFromParts, applyFestiveAmbienceToDom, cgChileYmdParts, cgFestiveRuleEffectiveRange, cgMmddInRange, defaultFestiveAmbienceObject,
+      getFestivePreviewChileYmd, setFestivePreviewChileYmd, getFestiveAmbienceChileYmdParts,
       hexToRgb, snapshotThemeForExport, buildExportThemeRootCss, getExportAccentHex, getEmailShellThemeColors,
       initCloudSync, stopCloudSyncListener, attachStaffChatRemoteSync, detachStaffChatRemoteSync, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPullSingleLsKey, cloudPushAllKeysOnce,
       flushPendingCloudWritesNow, cloudPushKeyImmediate, cloudPushLsKeyPromise, armLsKeyPullQuiet, getCloudSyncLastInitResult,
@@ -23901,16 +23975,23 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (typeof G.applyFestiveAmbienceToDom === "function") G.applyFestiveAmbienceToDom();
   };
 
-  function festiveAdminRowStatus(r, now) {
+  /** chileParts: { ymd, mmdd } o null = fecha real Chile ahora */
+  function festiveAdminRowStatus(r, chileParts) {
     if (!r || r.enabled === false) {
       return { label: "Desactivada", cls: "cg-adm-dash-alert-status--off" };
     }
     var rg = G.cgFestiveRuleEffectiveRange(r);
     if (!rg) return { label: "Sin rango", cls: "cg-adm-dash-alert-status--bad" };
-    var p = G.cgChileYmdParts(now);
-    if (!p) return { label: "—", cls: "" };
+    var p =
+      chileParts && chileParts.mmdd && chileParts.ymd
+        ? chileParts
+        : G.cgChileYmdParts(new Date());
+    if (!p || !p.mmdd) return { label: "—", cls: "" };
     if (G.cgMmddInRange(p.mmdd, rg.start, rg.end)) {
-      return { label: "En periodo (Chile)", cls: "cg-adm-dash-alert-status--ok" };
+      return {
+        label: chileParts && chileParts.preview ? "En periodo (vista previa)" : "En periodo (Chile)",
+        cls: "cg-adm-dash-alert-status--ok"
+      };
     }
     return { label: "Fuera de fecha", cls: "cg-adm-dash-alert-status--wait" };
   }
@@ -23938,19 +24019,33 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     A._festiveFormPrefill = null;
     var fa = G.getFestiveAmbienceNormalized();
     var globalChk = fa.globalEnabled !== false ? " checked" : "";
-    var now = new Date();
+    var ctxRows =
+      typeof G.getFestiveAmbienceChileYmdParts === "function" ? G.getFestiveAmbienceChileYmdParts() : null;
+    var chilePartsForRows =
+      ctxRows && ctxRows.mmdd && ctxRows.ymd
+        ? { ymd: ctxRows.ymd, mmdd: ctxRows.mmdd, preview: !!ctxRows.preview }
+        : null;
+    var previewYmdActive =
+      typeof G.getFestivePreviewChileYmd === "function" ? G.getFestivePreviewChileYmd() : "";
     var rows =
       fa.rules.length > 0
         ? fa.rules
             .map(function (r) {
               if (!r) return "";
-              var st = festiveAdminRowStatus(r, now);
+              var st = festiveAdminRowStatus(r, chilePartsForRows);
               var idA = G.escapeAttr(String(r.id || ""));
               var kind = r.kind === "range" ? "Personalizado" : "Automático";
               var rangeLbl = "—";
               if (r.kind === "preset" && r.preset && G.CG_FESTIVE_PRESET_META[r.preset]) {
                 var pm = G.CG_FESTIVE_PRESET_META[r.preset];
-                rangeLbl = pm.hint || pm.label;
+                var hasOv =
+                  r.startMmdd &&
+                  r.endMmdd &&
+                  /^\d{2}-\d{2}$/.test(String(r.startMmdd)) &&
+                  /^\d{2}-\d{2}$/.test(String(r.endMmdd));
+                rangeLbl = hasOv
+                  ? "Personalizado en regla: " + String(r.startMmdd) + " → " + String(r.endMmdd)
+                  : pm.hint || pm.label;
               } else if (r.kind === "range") {
                 rangeLbl = String(r.startMmdd || "—") + " → " + String(r.endMmdd || "—");
               }
@@ -24018,10 +24113,28 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         );
       })
       .join("");
+    var vOvStart =
+      pfRule && pfRule.kind === "preset" && pfRule.startMmdd
+        ? G.escapeAttr(String(pfRule.startMmdd))
+        : "";
+    var vOvEnd =
+      pfRule && pfRule.kind === "preset" && pfRule.endMmdd ? G.escapeAttr(String(pfRule.endMmdd)) : "";
     var presetHint =
       vKind === "preset"
-        ? "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Las <strong>fechas</strong> de esta regla son <strong>automáticas</strong> según el calendario en Chile. Solo edita título, mensaje y estilo visual.</p>"
+        ? "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Por defecto las fechas siguen el <strong>calendario Chile</strong>. Puede sustituir el periodo con <strong>MM-DD</strong> abajo para publicar en otras fechas o probar el diseño. Título, mensaje y estilo se editan siempre aquí.</p>"
         : "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Período <strong>personalizado</strong> recurrente cada año (mes y día). La primera regla activa que coincida con la fecha en Chile tiene prioridad (orden de la tabla de arriba).</p>";
+    var presetOvFields =
+      vKind === "preset"
+        ? "<div class=\"form-group\" style=\"max-width:32rem;margin-bottom:0.75rem\"><label>Fechas del periodo (opcional, preset)</label>" +
+          "<p class=\"page-desc\" style=\"margin:0 0 0.5rem;font-size:0.82rem\">Vacío = fechas por defecto de esta conmemoración. Formato <strong>MM-DD</strong> (ej. <code>12-25</code>). Ambos campos obligatorios si sustituye fechas.</p>" +
+          "<div class=\"toolbar\" style=\"gap:0.75rem;flex-wrap:wrap;align-items:center\">" +
+          "<label style=\"margin:0\">Inicio <input type=\"text\" id=\"adm-festive-preset-ov-start\" maxlength=\"5\" placeholder=\"05-01\" style=\"width:5.5rem;font:inherit\" value=\"" +
+          vOvStart +
+          "\" /></label>" +
+          "<label style=\"margin:0\">Término <input type=\"text\" id=\"adm-festive-preset-ov-end\" maxlength=\"5\" placeholder=\"05-01\" style=\"width:5.5rem;font:inherit\" value=\"" +
+          vOvEnd +
+          "\" /></label></div></div>"
+        : "<input type=\"hidden\" id=\"adm-festive-preset-ov-start\" value=\"\" /><input type=\"hidden\" id=\"adm-festive-preset-ov-end\" value=\"\" />";
     var rangeFields =
       vKind === "preset"
         ? "<input type=\"hidden\" id=\"adm-festive-sm\" value=\"\" /><input type=\"hidden\" id=\"adm-festive-sd\" value=\"\" /><input type=\"hidden\" id=\"adm-festive-em\" value=\"\" /><input type=\"hidden\" id=\"adm-festive-ed\" value=\"\" />"
@@ -24053,6 +24166,19 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       " /> <span>Ambientación festiva activa</span></label>" +
       "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"festiveGlobalSave\" data-cg-empty=\"1\"><i class=\"fa-solid fa-floppy-disk\"></i> Guardar opción general</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"festiveRestorePresetCopy\" data-cg-empty=\"1\" title=\"Restaurar textos sugeridos en reglas automáticas\">Restaurar textos sugeridos</button></div></div></div>" +
+      "<div class=\"card\" style=\"margin-top:1rem;border-style:dashed;border-color:color-mix(in srgb,var(--blue-500) 35%,var(--border-color))\"><div class=\"card-h\"><h3 style=\"font-size:0.98rem\">Probar cómo se ve ahora</h3></div><div class=\"card-b\">" +
+      (previewYmdActive
+        ? "<p class=\"page-desc\" style=\"margin:0 0 0.75rem;color:#b45309\"><strong>Vista previa activa:</strong> la app usa la fecha civil <code>" +
+          G.escapeHtml(previewYmdActive) +
+          "</code> en Chile en <strong>esta pestaña</strong> (no se guarda en la nube ni afecta a otros equipos).</p>"
+        : "<p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.86rem\">Elija una fecha y pulse <strong>Aplicar vista previa</strong> para ver la cinta y la ambientación como si fuera ese día, sin cambiar el reloj del sistema.</p>") +
+      "<div class=\"toolbar\" style=\"gap:0.75rem;flex-wrap:wrap;align-items:center\">" +
+      "<label style=\"margin:0\">Fecha de prueba <input type=\"date\" id=\"adm-festive-preview-date\" value=\"" +
+      G.escapeAttr(previewYmdActive || "") +
+      "\" /></label>" +
+      "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"festivePreviewApply\" data-cg-empty=\"1\"><i class=\"fa-solid fa-eye\"></i> Aplicar vista previa</button>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"festivePreviewClear\" data-cg-empty=\"1\">Usar fecha real (Chile)</button></div>" +
+      "<p class=\"page-desc\" style=\"margin:0.65rem 0 0;font-size:0.8rem\">También puede editar una regla <strong>Automática</strong> y fijar inicio/término <strong>MM-DD</strong> para que coincida con hoy (se guarda y sincroniza con el equipo).</p></div></div>" +
       "<div class=\"card\" style=\"margin-top:1rem\"><div class=\"card-h\"><h3 style=\"font-size:0.98rem\">Reglas (orden = prioridad)</h3></div><div class=\"card-b\">" +
       "<div class=\"data-table-wrap\" style=\"overflow:auto\"><table class=\"data-table\"><thead><tr><th>Estado</th><th>Tipo</th><th>Periodo</th><th>Título</th><th>Mensaje</th><th></th></tr></thead><tbody>" +
       rows +
@@ -24070,6 +24196,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "\" />" +
       presetHint +
       rangeFields +
+      presetOvFields +
       "<div class=\"form-group\"><label for=\"adm-festive-title\">Título</label>" +
       "<input type=\"text\" id=\"adm-festive-title\" maxlength=\"120\" style=\"width:100%;max-width:28rem\" value=\"" +
       vTitle +
@@ -24102,6 +24229,36 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("festiveAmbience");
     if (typeof G.logConserjeActivity === "function") G.logConserjeActivity("festive_global", fa.globalEnabled ? "on" : "off");
     G.toast("Opción general guardada");
+    A.renderAdmin("festive");
+    if (typeof G.applyFestiveAmbienceToDom === "function") G.applyFestiveAmbienceToDom();
+  };
+
+  A.festivePreviewApply = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede usar la vista previa.", "error");
+      return;
+    }
+    var dEl = document.getElementById("adm-festive-preview-date");
+    var v = dEl && dEl.value ? String(dEl.value).trim() : "";
+    if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      G.toast("Elija una fecha válida en el selector.", "warn");
+      return;
+    }
+    if (typeof G.setFestivePreviewChileYmd === "function") G.setFestivePreviewChileYmd(v);
+    G.toast("Vista previa: fecha Chile " + v + ". Abra otro módulo o recargue la tabla si sigue en Administración.");
+    A.renderAdmin("festive");
+    if (typeof G.applyFestiveAmbienceToDom === "function") G.applyFestiveAmbienceToDom();
+  };
+
+  A.festivePreviewClear = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede quitar la vista previa.", "error");
+      return;
+    }
+    if (typeof G.setFestivePreviewChileYmd === "function") G.setFestivePreviewChileYmd("");
+    G.toast("Se usa de nuevo la fecha real en Chile.");
     A.renderAdmin("festive");
     if (typeof G.applyFestiveAmbienceToDom === "function") G.applyFestiveAmbienceToDom();
   };
@@ -24287,13 +24444,31 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         G.toast("La regla no es un preset.", "warn");
         return;
       }
-      fa.rules[idx] = Object.assign({}, cur, {
+      var ovStEl = document.getElementById("adm-festive-preset-ov-start");
+      var ovEnEl = document.getElementById("adm-festive-preset-ov-end");
+      var ovS = ovStEl ? String(ovStEl.value || "").trim() : "";
+      var ovE = ovEnEl ? String(ovEnEl.value || "").trim() : "";
+      if (ovS || ovE) {
+        if (!/^\d{2}-\d{2}$/.test(ovS) || !/^\d{2}-\d{2}$/.test(ovE)) {
+          G.toast("Si sustituye fechas del preset, indique inicio y término en formato MM-DD (ej. 12-25).", "warn");
+          return;
+        }
+      }
+      var nx = Object.assign({}, cur, {
         title: title,
         message: message,
         theme: theme,
         enabled: enabled,
         preset: presetKey
       });
+      if (ovS && ovE) {
+        nx.startMmdd = ovS;
+        nx.endMmdd = ovE;
+      } else {
+        delete nx.startMmdd;
+        delete nx.endMmdd;
+      }
+      fa.rules[idx] = nx;
     } else {
       var smEl = document.getElementById("adm-festive-sm");
       var sdEl = document.getElementById("adm-festive-sd");
