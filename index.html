@@ -17570,6 +17570,21 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return visitVehLimitMs() + 15 * 60 * 1000;
   }
 
+  /** Instantánea de fin de estadía para cómputo de tiempos (salida o ahora). */
+  function visitStayEndMs(v) {
+    if (!v || !v.at) return Date.now();
+    if (v.outAt) return new Date(v.outAt).getTime();
+    return Date.now();
+  }
+
+  /** Vehicular de persona: estadía (hasta salida o ahora) alcanzó umbral de multa (5 h + 15 min gracia). */
+  function visitVehMultaStayReached(v) {
+    if (!v || !v.vehicular || visitIsProveedor(v)) return false;
+    var t0 = new Date(v.at).getTime();
+    if (isNaN(t0)) return false;
+    return visitStayEndMs(v) - t0 >= visitVehMultaMs();
+  }
+
   function visitIsProveedor(v) {
     return !!(v && (v.visitKind === "proveedor" || v.proveedorId));
   }
@@ -17579,10 +17594,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return !!(v && !v.vehicular && !visitIsProveedor(v));
   }
 
-  /** Parte / multa: solo vehicular de persona, tras 5 h + 15 min de gracia. */
+  /** Parte / multa: vehicular de persona que superó 5 h + 15 min (sigue visible tras registrar salida). */
   function visitParteMultaApplies(v) {
-    if (!v || v.outAt || !v.vehicular || visitIsProveedor(v)) return false;
-    return Date.now() - new Date(v.at).getTime() >= visitVehMultaMs();
+    return visitVehMultaStayReached(v);
   }
 
   function visitBuildWarn30Mail(v) {
@@ -18373,7 +18387,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       { l: "Tiempo aprox. en edificio", v: (hours != null ? hours : 0).toFixed(2) + " h" },
       { l: "Fecha de emisión", v: new Date().toLocaleString("es-CL") }
     );
-    var excede5h = new Date().getTime() - new Date(v.at).getTime() >= visitVehMultaMs();
+    var excede5h = visitVehMultaStayReached(v);
     if (excede5h) {
       parteRows.push(
         { l: "Límite 5 h", v: "Superado — periodo de gracia 15 min aplicado según protocolo." },
@@ -19793,15 +19807,18 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         elapsed = "Salida " + G.fmtDate(v.outAt);
       }
       var rowCls = "";
-      if (!v.outAt) {
-        if (v.vehicular && !visitIsProveedor(v)) {
-          var hOpen = (new Date() - new Date(v.at)) / 3600000;
-          var limH = visitVehLimitMs() / 3600000;
-          var multaH = visitVehMultaMs() / 3600000;
-          if (hOpen >= multaH) rowCls = "cg-row-visit-multa";
-          else if (hOpen >= limH) rowCls = "cg-row-visit-grace";
-          else if (hOpen >= 4.5) rowCls = "cg-row-visit-warn";
+      if (v.vehicular && !visitIsProveedor(v)) {
+        var endMs = visitStayEndMs(v);
+        var stayH = (endMs - new Date(v.at).getTime()) / 3600000;
+        var limH = visitVehLimitMs() / 3600000;
+        var multaH = visitVehMultaMs() / 3600000;
+        if (!v.outAt) {
+          if (stayH >= multaH) rowCls = "cg-row-visit-multa";
+          else if (stayH >= limH) rowCls = "cg-row-visit-grace";
+          else if (stayH >= 4.5) rowCls = "cg-row-visit-warn";
           else rowCls = "cg-row-visit-open";
+        } else if (stayH >= multaH) {
+          rowCls = "cg-row-visit-multa";
         }
       }
       var timeCell;
@@ -19851,7 +19868,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         html +=
           "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"visitParte\" data-cg-id=\"" +
           G.escapeHtml(v.id) +
-          "\" title=\"Solo tras multa (5 h + 15 min gracia)\">Parte (multa)</button>";
+          "\" title=\"Parte por estadía ≥ 5 h + 15 min de gracia (disponible aunque ya haya salida)\">Parte (multa)</button>";
       }
       if (isAdmVis) {
         html +=
@@ -20013,13 +20030,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.toast("Los proveedores llevan tiempo de registro pero no multa ni parte de estacionamiento.", "warn");
       return;
     }
-    if (Date.now() - new Date(v.at).getTime() < visitVehMultaMs()) {
+    if (!visitVehMultaStayReached(v)) {
       G.toast("El parte solo se genera cuando aplica multa: tras 5 h y 15 min de gracia desde el ingreso.", "warn");
       return;
     }
     var dep = G.deptById(v.deptId);
     var estVis = visitVisitorParkingDisplay(v) || "—";
-    var h = (new Date() - new Date(v.at)) / 3600000;
+    var h = (visitStayEndMs(v) - new Date(v.at).getTime()) / 3600000;
     var resNm = G.deptResidentDisplayName(v.deptId);
     var pvParte = proveedorById(v.proveedorId);
     var provPlain = "";
@@ -20068,7 +20085,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "  ⏱️  Tiempo aprox. en edificio\n      " +
       h.toFixed(2) +
       " h\n\n" +
-      (Date.now() - new Date(v.at).getTime() >= visitVehMultaMs()
+      (visitVehMultaStayReached(v)
         ? bar +
           "  MULTA — límite 5 h + 15 min de gracia vencidos\n" +
           bar +
