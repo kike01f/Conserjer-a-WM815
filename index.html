@@ -2534,27 +2534,6 @@
     /* App shell — sidebar opaco (sin vidrio / traslucidez) */
     #app-main { display: flex; min-height: 100vh; }
     /* Ambientación festiva (administrable; fecha según Chile) */
-    @keyframes cg-festive-shimmer {
-      0% { transform: translateX(-55%) skewX(-14deg); opacity: 0; }
-      18% { opacity: 0.22; }
-      100% { transform: translateX(155%) skewX(-14deg); opacity: 0; }
-    }
-    @keyframes cg-festive-icon-breathe {
-      0%, 100% { transform: scale(1) rotate(-2deg); filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.12)); }
-      50% { transform: scale(1.08) rotate(2deg); filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.18)); }
-    }
-    @keyframes cg-festive-float-bob {
-      0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.25; }
-      50% { transform: translateY(-7px) rotate(15deg); opacity: 0.75; }
-    }
-    @keyframes cg-festive-title-in {
-      from { opacity: 0; transform: translateY(4px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes cg-festive-aura-pulse {
-      0%, 100% { opacity: 0.07; }
-      50% { opacity: 0.12; }
-    }
     /* Tarjeta festiva en panel de control (misma zona que cumpleaños / alertas) */
     #dash-festive-mount:not(:empty) {
       margin-bottom: 0.55rem;
@@ -2573,20 +2552,7 @@
       overflow: hidden;
     }
     .cg-festive-banner__shimmer {
-      position: absolute;
-      top: -40%;
-      left: 0;
-      width: 42%;
-      height: 180%;
-      background: linear-gradient(
-        100deg,
-        transparent 0%,
-        rgba(255, 255, 255, 0.1) 40%,
-        rgba(255, 255, 255, 0.55) 50%,
-        rgba(255, 255, 255, 0.1) 60%,
-        transparent 100%
-      );
-      animation: cg-festive-shimmer 5.5s ease-in-out infinite;
+      display: none;
     }
     .cg-festive-banner__floats {
       position: absolute;
@@ -2596,14 +2562,14 @@
       position: absolute;
       font-size: 0.95rem;
       line-height: 1;
-      animation: cg-festive-float-bob 3.2s ease-in-out infinite;
+      opacity: 0.5;
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
     }
     .cg-festive-float--1 { top: 12%; right: 8%; }
-    .cg-festive-float--2 { top: 38%; right: 18%; font-size: 0.78rem; animation-duration: 2.7s; }
-    .cg-festive-float--3 { bottom: 14%; right: 28%; font-size: 0.72rem; animation-duration: 3.8s; }
-    .cg-festive-float--4 { top: 22%; right: 38%; font-size: 0.68rem; animation-duration: 2.4s; }
-    .cg-festive-float--5 { bottom: 20%; right: 12%; font-size: 0.62rem; animation-duration: 4.1s; }
+    .cg-festive-float--2 { top: 38%; right: 18%; font-size: 0.78rem; }
+    .cg-festive-float--3 { bottom: 14%; right: 28%; font-size: 0.72rem; }
+    .cg-festive-float--4 { top: 22%; right: 38%; font-size: 0.68rem; }
+    .cg-festive-float--5 { bottom: 20%; right: 12%; font-size: 0.62rem; }
     .cg-dash-festive-card > .card-h,
     .cg-dash-festive-card > .card-b {
       position: relative;
@@ -2621,7 +2587,6 @@
       align-items: center;
       flex-wrap: wrap;
       gap: 0.35rem 0.5rem;
-      animation: cg-festive-title-in 0.55s ease-out both;
     }
     .cg-festive-dash-h-icon {
       display: inline-flex;
@@ -2638,13 +2603,9 @@
       box-shadow:
         inset 0 0 0 1px color-mix(in srgb, var(--blue-500) 28%, transparent),
         0 4px 12px -3px rgba(0, 0, 0, 0.18);
-      animation: cg-festive-icon-breathe 2.8s ease-in-out infinite;
     }
     .cg-festive-dash-h-icon i {
       filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
-    }
-    .cg-dash-festive-card .card-b .cg-dash-bday-msg {
-      animation: cg-festive-title-in 0.55s ease-out 0.08s both;
     }
     .cg-festive-banner__preview-note {
       margin: 0 0 0.4rem;
@@ -2729,11 +2690,10 @@
       position: absolute;
       inset: 0;
       z-index: 0;
-      opacity: 0.07;
+      opacity: 0.09;
       background-image: radial-gradient(circle at 12% 8%, currentColor 0, transparent 42%),
         radial-gradient(circle at 88% 18%, currentColor 0, transparent 38%);
       color: var(--blue-500);
-      animation: cg-festive-aura-pulse 10s ease-in-out infinite;
     }
     #app-main.cg-festive-theme--patrias .main-wrap::before {
       opacity: 0.09;
@@ -2752,7 +2712,6 @@
       color: #facc15;
       background-image: radial-gradient(circle at 20% 0%, #facc15 0, transparent 30%),
         radial-gradient(circle at 95% 8%, #a78bfa 0, transparent 35%);
-      animation: cg-festive-aura-pulse 7s ease-in-out infinite;
     }
     #app-main.cg-festive-theme--labor .main-wrap::before {
       opacity: 0.08;
@@ -2786,22 +2745,9 @@
         inset 0 0 0 1px color-mix(in srgb, var(--blue-500) 40%, transparent),
         0 4px 14px -4px color-mix(in srgb, var(--blue-500) 45%, transparent);
     }
-    #app-main.cg-festive-preview-active .cg-dash-festive-card .cg-festive-banner__shimmer {
-      animation-duration: 3.8s;
-    }
     @media (prefers-reduced-motion: reduce) {
-      .cg-festive-banner__shimmer,
-      .cg-festive-float,
-      .cg-festive-dash-h-icon,
-      .cg-dash-festive-card .card-h h3,
-      .cg-dash-festive-card .card-b .cg-dash-bday-msg,
-      #app-main.cg-festive-on .main-wrap::before {
-        animation: none !important;
-      }
-      .cg-dash-festive-card .card-h h3,
-      .cg-dash-festive-card .card-b .cg-dash-bday-msg {
-        opacity: 1;
-        transform: none;
+      .cg-festive-float {
+        opacity: 0.45;
       }
     }
     @media (max-width: 540px) {
@@ -7637,7 +7583,7 @@
         ["staffBirthdays", migrateStaffBirthdays],
         ["dashScheduledAlerts", migrateDashScheduledAlerts],
         ["festiveAmbience", migrateFestiveAmbience],
-        ["festiveAmistadJul20", migrateFestiveMenuFxRemovalAndAmistadJul20]
+        ["festiveAmorAmistadFeb12", migrateFestiveAmorAmistadFeb12]
       ];
       var si;
       for (si = 0; si < steps.length; si++) {
@@ -7704,9 +7650,9 @@
             "labor"
           ),
           rulePreset(
-            "amistad_jul20",
-            "Día del Amigo",
-            "¡Feliz Día del Amigo! Un buen momento para valorar el trabajo en equipo y el trato cordial en la conserjería y con la comunidad.",
+            "amor_amistad_feb12",
+            "Día del amor y la amistad",
+            "¡Feliz Día del amor y la amistad! Celebremos el cariño y el buen compañerismo en la conserjería y con la comunidad.",
             "neutral"
           ),
           rulePreset(
@@ -7736,12 +7682,12 @@
       save("festiveAmbience", defaultFestiveAmbienceObject());
     }
 
-    /** Una vez: quita menuFx heredado, añade preset Día del Amigo (20 jul, Chile) si faltaba. */
-    function migrateFestiveMenuFxRemovalAndAmistadJul20() {
-      if (load("migrated_festive_amistad_jul20_v1", false)) return;
+    /** Una vez: quita menuFx heredado; preset 12 feb (amor y amistad); convierte amistad_jul20 antiguo. */
+    function migrateFestiveAmorAmistadFeb12() {
+      if (load("migrated_festive_amor_amistad_feb12_v1", false)) return;
       var raw = load("festiveAmbience", null);
       if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-        save("migrated_festive_amistad_jul20_v1", true);
+        save("migrated_festive_amor_amistad_feb12_v1", true);
         return;
       }
       var changed = false;
@@ -7750,55 +7696,74 @@
         delete next.menuFx;
         changed = true;
       }
-      var rules = Array.isArray(next.rules) ? next.rules.slice() : [];
-      var hasAmistad = false;
-      var i;
-      for (i = 0; i < rules.length; i++) {
-        var r0 = rules[i];
-        if (r0 && r0.kind === "preset" && r0.preset === "amistad_jul20") {
-          hasAmistad = true;
+      var def = defaultFestiveAmbienceObject();
+      var defAmor = null;
+      var di;
+      for (di = 0; di < def.rules.length; di++) {
+        if (def.rules[di] && def.rules[di].preset === "amor_amistad_feb12") {
+          defAmor = def.rules[di];
           break;
         }
       }
-      if (!hasAmistad) {
-        var def = defaultFestiveAmbienceObject();
-        var ins = null;
-        for (i = 0; i < def.rules.length; i++) {
-          if (def.rules[i] && def.rules[i].preset === "amistad_jul20") {
-            ins = def.rules[i];
+      var rules = Array.isArray(next.rules) ? next.rules.slice() : [];
+      var i;
+      for (i = 0; i < rules.length; i++) {
+        var ri = rules[i];
+        if (ri && ri.kind === "preset" && ri.preset === "amistad_jul20" && defAmor) {
+          rules[i] = Object.assign({}, ri, {
+            preset: "amor_amistad_feb12",
+            title: defAmor.title,
+            message: defAmor.message,
+            theme: defAmor.theme
+          });
+          delete rules[i].startMmdd;
+          delete rules[i].endMmdd;
+          changed = true;
+        }
+      }
+      var hasAmor = false;
+      for (i = 0; i < rules.length; i++) {
+        var r0 = rules[i];
+        if (r0 && r0.kind === "preset" && r0.preset === "amor_amistad_feb12") {
+          hasAmor = true;
+          break;
+        }
+      }
+      if (!hasAmor && defAmor) {
+        var ins = defAmor;
+        var insertAt = rules.length;
+        for (i = 0; i < rules.length; i++) {
+          if (rules[i] && rules[i].kind === "preset" && rules[i].preset === "patrias_sep") {
+            insertAt = i;
             break;
           }
         }
-        if (ins) {
-          var insertAt = rules.length;
+        if (insertAt === rules.length) {
           for (i = 0; i < rules.length; i++) {
-            if (rules[i] && rules[i].kind === "preset" && rules[i].preset === "patrias_sep") {
-              insertAt = i;
+            if (rules[i] && rules[i].kind === "preset" && rules[i].preset === "labor_may1") {
+              insertAt = i + 1;
               break;
             }
           }
-          if (insertAt === rules.length) {
-            for (i = 0; i < rules.length; i++) {
-              if (rules[i] && rules[i].kind === "preset" && rules[i].preset === "labor_may1") {
-                insertAt = i + 1;
-                break;
-              }
-            }
-          }
-          rules.splice(insertAt, 0, ins);
-          changed = true;
         }
+        rules.splice(insertAt, 0, ins);
+        changed = true;
       }
       if (changed) {
         next.rules = rules;
         save("festiveAmbience", next);
       }
-      save("migrated_festive_amistad_jul20_v1", true);
+      save("migrated_festive_amor_amistad_feb12_v1", true);
     }
 
     var CG_FESTIVE_PRESET_META = {
       labor_may1: { label: "Día del Trabajador", hint: "Automático: 1 de mayo (Chile)", start: "05-01", end: "05-01" },
-      amistad_jul20: { label: "Día del Amigo", hint: "Automático: 20 de julio (Chile)", start: "07-20", end: "07-20" },
+      amor_amistad_feb12: {
+        label: "Día del amor y la amistad",
+        hint: "Automático: 12 de febrero (Chile)",
+        start: "02-12",
+        end: "02-12"
+      },
       patrias_sep: { label: "Fiestas Patrias", hint: "Automático: 18 y 19 de septiembre (Chile)", start: "09-18", end: "09-19" },
       navidad: { label: "Navidad", hint: "Automático: 20–26 de diciembre", start: "12-20", end: "12-26" },
       ano_nuevo: { label: "Año Nuevo", hint: "Automático: 31 dic – 2 ene", start: "12-31", end: "01-02" }
@@ -24746,7 +24711,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return (
       "<div class=\"card\"><div class=\"card-h\"><h3>Ambientación festiva</h3></div><div class=\"card-b\">" +
       "<p class=\"page-desc\" style=\"margin:0 0 1rem;font-size:0.86rem\">" +
-      "Mensaje y diseño en toda la app para <strong>Día del Trabajador</strong>, <strong>Día del Amigo</strong> (20 de julio), <strong>Fiestas Patrias</strong>, <strong>Navidad</strong>, <strong>Año Nuevo</strong> y <strong>períodos propios</strong>. " +
+      "Mensaje y diseño en toda la app para <strong>Día del Trabajador</strong>, <strong>Día del amor y la amistad</strong> (12 de febrero), <strong>Fiestas Patrias</strong>, <strong>Navidad</strong>, <strong>Año Nuevo</strong> y <strong>períodos propios</strong>. " +
       "La fecha efectiva es la de <strong>Chile</strong> (zona horaria América/Santiago). " +
       "El aviso festivo se muestra en el <strong>Panel de control</strong>, junto a cumpleaños y alertas programadas (sin botón de cierre).</p>" +
       "<div class=\"toolbar\" style=\"gap:0.75rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem\">" +
