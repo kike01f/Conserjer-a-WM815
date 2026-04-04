@@ -17958,20 +17958,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.APP_BRAND_NAME +
       "\n" +
       CG_EMAIL_BUILDING_NAME +
+      "\n" +
+      "Logo: " +
+      CG_EMAIL_WM815_LOGO_URL +
       "\n"
     );
   }
 
+  /** Firma HTML sin imagen incrustada (el logo va solo en texto plano como URL). */
   function cgEmailBuildingSignatureHtml() {
     var ff = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
-    var logoUrl = CG_EMAIL_WM815_LOGO_URL;
     return (
-      '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0;">' +
-      '<tr><td style="vertical-align:middle;padding:0 16px 0 0;">' +
-      '<img src="' +
-      G.escapeAttr(logoUrl) +
-      '" width="56" height="56" alt="" style="display:block;width:56px;height:56px;border-radius:50%;object-fit:contain;border:1px solid #e4e4e7;background:#fff;" />' +
-      "</td><td style=\"vertical-align:middle;padding:0;\">" +
       '<div style="font-size:13px;font-weight:700;letter-spacing:0.03em;color:#18181b;font-family:' +
       ff +
       ';margin:0 0 6px 0;">' +
@@ -17981,8 +17978,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       ff +
       ';">' +
       emailHtmlEscape(CG_EMAIL_BUILDING_NAME) +
-      "</div>" +
-      "</td></tr></table>"
+      "</div>"
     );
   }
 
@@ -18284,7 +18280,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     );
   }
 
-  /** HTML avisos visita vehicular: carta tipo aviso formal + tabla de datos + firma/logo en shell. */
+  /** HTML avisos visita vehicular: carta tipo aviso formal + tabla de datos + firma texto en shell (sin imagen). */
   function visitVehResidentNotifyBodyHtml(v, kind) {
     var C = typeof G.getEmailShellThemeColors === "function" ? G.getEmailShellThemeColors() : {};
     var accRibbon = C.ribbon || "#74bd20";
@@ -20121,7 +20117,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "  ✉️  " +
       G.APP_BRAND_NAME +
       " · documento interno\n" +
-      thin;
+      thin +
+      "\nLogo: " +
+      CG_EMAIL_WM815_LOGO_URL +
+      "\n";
     var htmlBody = visitParteBodyHtml(v, dep, estVis, h);
     var subj =
       "Parte visita vehicular — multa — Depto " + (dep ? dep.number : "");
