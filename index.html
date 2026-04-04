@@ -3065,7 +3065,7 @@
       display: flex;
       align-items: center;
       gap: 0.65rem;
-      max-width: min(100%, 20.5rem);
+      max-width: min(100%, 19rem);
       padding: 0.3rem 0.75rem 0.3rem 0.35rem;
       border-radius: 999px;
       background: var(--white);
@@ -3161,27 +3161,6 @@
       display: flex;
       align-items: center;
       justify-content: center;
-    }
-    .cg-topbar-user-vibe {
-      font-size: 0.66rem;
-      font-weight: 500;
-      font-style: italic;
-      color: #4d6636;
-      margin: 0.12rem 0 0;
-      padding: 0;
-      line-height: 1.28;
-      max-width: 14.5rem;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-    .cg-topbar-user-chip--admin .cg-topbar-user-vibe {
-      color: #3d5a8a;
-    }
-    .cg-topbar-user-chip--other .cg-topbar-user-vibe {
-      color: #5c667a;
     }
     @keyframes cg-topbar-avatar-nod {
       0%,
@@ -15700,92 +15679,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (role === "conserje") return "fa-solid fa-id-badge";
       return "fa-solid fa-user";
     }
-    function cgTopbarPickStableVibePhrase(storageKey, phrases) {
-      if (!phrases || !phrases.length) return "";
-      try {
-        var k = "cg_vibe_" + storageKey;
-        var raw = sessionStorage.getItem(k);
-        if (raw !== null) {
-          var idx = parseInt(raw, 10);
-          if (!isNaN(idx) && idx >= 0 && idx < phrases.length) {
-            return phrases[idx];
-          }
-        }
-        var n = Math.floor(Math.random() * phrases.length);
-        sessionStorage.setItem(k, String(n));
-        return phrases[n];
-      } catch (err) {
-        return phrases[Math.floor(Math.random() * phrases.length)];
-      }
-    }
-    function cgTopbarUserVibePhrases() {
-      return {
-        base: {
-          conserje: [
-            "Recepción encendida: buena onda garantizada.",
-            "Modo conserjería: atento, humano, imparable.",
-            "El edificio respira; usted pone el ritmo."
-          ],
-          admin: [
-            "Panel listo: visión clara, decisiones serenas.",
-            "Orden y calma: su impronta en el sistema.",
-            "Sin sorpresas que no pueda visualizar con tiempo."
-          ],
-          other: [
-            "Bienvenido: este espacio también es suyo.",
-            "Aquí para recorrer el edificio con confianza.",
-            "Un acceso amable por donde empezar el día."
-          ]
-        },
-        labor: {
-          conserje: [
-            "Hoy el trabajo se festeja: gracias por lo que hace.",
-            "Oficio noble, turno con brillo propio.",
-            "Manos que ordenan el mundo, una entrada a la vez."
-          ],
-          admin: [
-            "Coordinar también es trabajar; hoy se nota más.",
-            "Liderazgo merece aplauso entre planilla y corazón."
-          ],
-          other: ["Un día para honrar el esfuerzo de quienes lo hacen posible todo."]
-        },
-        patrias: {
-          conserje: [
-            "¡Chile en el pecho y el pasillo impecable!",
-            "Rojo, azul y un «buenos días» que suena a patria.",
-            "Cueca opcional; cariño y respeto, obligatorios."
-          ],
-          admin: ["Bajo su gestión, la comunidad también es patria chica."],
-          other: ["¡Fiestas Patrias! Que este acceso se sienta como hogar."]
-        },
-        navidad: {
-          conserje: [
-            "Paz, pan de pascua y visitas con sello de cariño.",
-            "El espíritu navideño pasó por conserjería primero.",
-            "Luces afuera, calidez en la entrada: misión cumplida."
-          ],
-          admin: ["Calendario lleno, corazón en modo abrazo colectivo."],
-          other: ["Brilla el árbol; aquí brilla también su bienvenida."]
-        },
-        newyear: {
-          conserje: [
-            "Doce campanadas, una conserjería que no afloja.",
-            "Año nuevo: mismas llaves, energías renovadas.",
-            "Brindis mental por turnos tranquilos y buenos vecinos."
-          ],
-          admin: ["Nuevo ciclo: datos limpios, ilusiones en alza."],
-          other: ["Página en blanco: que la escriba con buen pie."]
-        },
-        neutral: {
-          conserje: [
-            "Hoy el edificio vibra distinto, y usted también.",
-            "Celebración a la medida: siga brillando en la entrada."
-          ],
-          admin: ["Un toque festivo en el sistema; usted marca el compás."],
-          other: ["Algo especial en el aire; disfrútelo con calma."]
-        }
-      };
-    }
     function cgTopbarFestiveBadgeIconNames() {
       return {
         labor: { conserje: "fa-helmet-safety", admin: "fa-award", other: "fa-hands-clapping" },
@@ -15797,11 +15690,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     function cgUpdateTopbarUserPersonality() {
       var chip = document.querySelector("#topbar-user .cg-topbar-user-chip");
-      var vibeEl = document.getElementById("cg-topbar-user-vibe");
-      if (!chip || !vibeEl) return;
+      if (!chip) return;
       var app = document.getElementById("app-main");
       var role = chip.getAttribute("data-cg-topbar-role") || "other";
-      var sig = chip.getAttribute("data-cg-topbar-sig") || "guest";
       var festiveOn = app && app.classList.contains("cg-festive-on");
       var themeKey = "base";
       if (festiveOn) {
@@ -15814,9 +15705,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         }
       }
       chip.setAttribute("data-cg-festive-vibe", festiveOn ? themeKey : "");
-      var P = cgTopbarUserVibePhrases();
-      var pool = (P[themeKey] && P[themeKey][role]) || P.base[role] || P.base.other;
-      vibeEl.textContent = cgTopbarPickStableVibePhrase(themeKey + "_" + role + "_" + sig, pool);
       var icon = chip.querySelector(".cg-topbar-user-role-badge i");
       if (icon) {
         if (festiveOn) {
@@ -15846,13 +15734,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var roleLbl = cgTopbarUserRoleLabel(roleKey);
       var initials = cgTopbarUserInitials(u.name);
       var iconCls = cgTopbarUserRoleIconClass(roleKey);
-      var topbarSig =
-        String(u.id != null && u.id !== "" ? u.id : "anon") + "_" + String((u.name || "").length);
       var ariaUser =
         (G.escapeAttr ? G.escapeAttr(u.name) : G.escapeHtml(u.name)) +
         ", " +
         (G.escapeAttr ? G.escapeAttr(roleLbl) : G.escapeHtml(roleLbl));
-      var sigAttr = G.escapeAttr ? G.escapeAttr(topbarSig) : topbarSig.replace(/"/g, "&quot;");
       var roleAttr = G.escapeAttr ? G.escapeAttr(roleKey || "other") : String(roleKey || "other").replace(/"/g, "&quot;");
       if (tb) {
         tb.setAttribute("role", "status");
@@ -15864,8 +15749,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           ariaUser +
           "\" data-cg-topbar-role=\"" +
           roleAttr +
-          "\" data-cg-topbar-sig=\"" +
-          sigAttr +
           "\">" +
           "<span class=\"cg-topbar-user-avatar-wrap\">" +
           "<span class=\"cg-topbar-user-avatar\" aria-hidden=\"true\">" +
@@ -15881,9 +15764,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           iconCls +
           "\" aria-hidden=\"true\"></i> " +
           G.escapeHtml(roleLbl) +
-          "</span></div>" +
-          "<p class=\"cg-topbar-user-vibe\" id=\"cg-topbar-user-vibe\" aria-hidden=\"true\"></p>" +
-          "</div></div>";
+          "</span></div></div></div>";
       }
       if (sb) sb.textContent = u.name + " · " + roleLbl;
       cgUpdateTopbarUserPersonality();
