@@ -2110,59 +2110,17 @@
       align-items: center;
       justify-content: flex-end;
     }
-    /* Misma lógica visual que #login-screen .login-box: vidrio, borde acento, anillo degradado */
+    /* Pastilla usuario: fondo opaco (sin vidrio / blur) */
     .cg-topbar-user-chip {
-      --cg-tb-glass-p: var(--blue-500);
-      --cg-tb-glass-p-dark: var(--accent-dark);
-      --cg-tb-glass-p-light: var(--blue-400);
-      position: relative;
-      isolation: isolate;
       display: flex;
       align-items: center;
       gap: 0.65rem;
       max-width: min(100%, 19rem);
       padding: 0.3rem 0.75rem 0.3rem 0.35rem;
       border-radius: 999px;
-      background: rgba(24, 32, 44, 0.52);
-      backdrop-filter: blur(22px) saturate(180%);
-      -webkit-backdrop-filter: blur(22px) saturate(180%);
-      border: 1px solid color-mix(in srgb, var(--cg-tb-glass-p) 22%, transparent);
-      box-shadow:
-        0 0 0 1px rgba(0, 0, 0, 0.2) inset,
-        0 18px 40px -18px rgba(0, 0, 0, 0.45),
-        0 0 56px -22px color-mix(in srgb, var(--cg-tb-glass-p) 12%, transparent);
-      animation: cg-topbar-user-chip-in 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
-    }
-    @keyframes cg-topbar-user-chip-in {
-      0% { opacity: 0; transform: translateY(8px) scale(0.98); filter: blur(3px); }
-      100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-    }
-    .cg-topbar-user-chip::before {
-      content: "";
-      position: absolute;
-      inset: -1px;
-      border-radius: inherit;
-      padding: 1px;
-      background: linear-gradient(
-        145deg,
-        color-mix(in srgb, var(--cg-tb-glass-p) 35%, transparent) 0%,
-        color-mix(in srgb, var(--cg-tb-glass-p) 12%, transparent) 50%,
-        color-mix(in srgb, var(--cg-tb-glass-p-dark) 20%, transparent) 100%
-      );
-      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      mask-composite: exclude;
-      pointer-events: none;
-      z-index: -1;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .cg-topbar-user-chip {
-        animation: none !important;
-        opacity: 1 !important;
-        transform: none !important;
-        filter: none !important;
-      }
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
     }
     .cg-topbar-user-avatar {
       flex-shrink: 0;
@@ -2199,11 +2157,10 @@
     .cg-topbar-user-name {
       font-size: 0.9rem;
       font-weight: 700;
-      color: #f8fafc;
+      color: var(--blue-900);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     }
     .cg-topbar-user-role-row {
       display: flex;
@@ -2224,19 +2181,19 @@
       border: 1px solid transparent;
     }
     .cg-topbar-user-chip--conserje .cg-topbar-user-role-badge {
-      background: color-mix(in srgb, #6fb828 20%, rgba(15, 23, 42, 0.55));
-      color: #ecfccb;
-      border-color: color-mix(in srgb, #6fb828 38%, transparent);
+      background: rgba(95, 154, 24, 0.12);
+      color: #3d6a0f;
+      border-color: rgba(95, 154, 24, 0.22);
     }
     .cg-topbar-user-chip--admin .cg-topbar-user-role-badge {
-      background: color-mix(in srgb, var(--cg-tb-glass-p) 28%, rgba(15, 23, 42, 0.55));
-      color: #bfdbfe;
-      border-color: color-mix(in srgb, var(--cg-tb-glass-p-light) 42%, transparent);
+      background: rgba(37, 99, 235, 0.1);
+      color: #1d4ed8;
+      border-color: rgba(37, 99, 235, 0.2);
     }
     .cg-topbar-user-chip--other .cg-topbar-user-role-badge {
-      background: rgba(15, 23, 42, 0.55);
-      color: rgba(226, 232, 240, 0.92);
-      border-color: rgba(255, 255, 255, 0.1);
+      background: var(--gray-100);
+      color: var(--gray-600);
+      border-color: var(--gray-200);
     }
     .cg-topbar-user-role-badge i {
       font-size: 0.68rem;
