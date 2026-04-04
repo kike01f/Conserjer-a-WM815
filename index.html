@@ -4126,7 +4126,7 @@
       border-radius: 10px;
       overflow: auto;
       max-height: 300px;
-      background: #f4f4f5;
+      background: #ffffff;
     }
     .email-html-preview .email-html-preview-inner {
       padding: 0;
@@ -17948,6 +17948,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   /** Firma postal en avisos a residentes (visitas / encomiendas). */
   var CG_EMAIL_BUILDING_NAME = "Edificio Activa Walker Martínez 815";
+  /** Fondo tarjeta / firma (único hex: evita “dos blancos” entre tablas y Outlook bgcolor). */
+  var CG_EMAIL_CARD_BG = "#ffffff";
   /** Tracking UTM firma correo (utm_content distinto: logo / botón / texto). */
   var CG_EMAIL_FIRMA_UTM = "utm_source=email&utm_medium=email_signature&utm_campaign=wm815_firma";
   var CG_EMAIL_FIRMA_SITE_BASE =
@@ -17977,9 +17979,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   /**
    * Firma HTML inline (tablas) para Gmail/Outlook; enlaces con UTM (logo / botón / variantes).
-   * Logo: tabla anidada + width/height fijos en px (Outlook no aplica bien width:% ni height:auto en imgs).
+   * Logo sin tabla anidada: mismo CG_EMAIL_CARD_BG + bgcolor Outlook + fondo en img (transparencias PNG).
    */
   function cgEmailBuildingSignatureHtml() {
+    var bg = CG_EMAIL_CARD_BG;
     var uLogo = G.escapeAttr(CG_EMAIL_FIRMA_URL_LOGO);
     var uBtn = G.escapeAttr(CG_EMAIL_FIRMA_URL_BOTON);
     var uAppLogo = G.escapeAttr(CG_EMAIL_APP_LOGO_URL);
@@ -17993,20 +17996,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<![endif]-->";
     var logoAlt = "Edificio WM815 — " + CG_EMAIL_FIRMA_LINE1;
     var logoBlock =
-      '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;border-collapse:collapse;mso-table-lspace:0;mso-table-rspace:0;">' +
-      "<tr>" +
-      '<td width="' +
-      w +
-      '" height="' +
-      h +
-      '" align="center" valign="middle" style="width:' +
-      w +
-      "px;height:" +
-      h +
-      'px;padding:0;line-height:0;font-size:0;mso-line-height-rule:exactly;vertical-align:middle;text-align:center;background-color:#fafafa;">' +
       '<a href="' +
       uLogo +
-      '" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:#3f3d56;">' +
+      '" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:#3f3d56;display:inline-block;line-height:0;font-size:0;">' +
       '<img src="' +
       uAppLogo +
       '" width="' +
@@ -18023,23 +18015,39 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       w +
       "px;max-height:" +
       h +
-      'px;margin:0 auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;line-height:0;mso-line-height-rule:exactly;" />' +
-      "</a></td></tr></table>";
+      "px;margin:0 auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;line-height:0;mso-line-height-rule:exactly;background-color:" +
+      bg +
+      ";background:" +
+      bg +
+      ';" />' +
+      "</a>";
     return (
       mso +
       '<table style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;width:100%;max-width:510px;color:#3f3d56;" role="presentation" border="0" width="510" cellspacing="0" cellpadding="0">' +
       "<tbody><tr>" +
-      '<td style="padding:0;background-color:#ebebed;">' +
-      '<table style="border-collapse:collapse;background-color:#ffffff;" role="presentation" border="0" width="100%" cellspacing="0" cellpadding="0">' +
+      '<td style="padding:0;background-color:' +
+      bg +
+      ';">' +
+      '<table style="border-collapse:collapse;background-color:' +
+      bg +
+      ';" role="presentation" border="0" width="100%" cellspacing="0" cellpadding="0">' +
       "<tbody><tr>" +
       '<td style="width:4px;background-color:#74bd20;line-height:0;font-size:0;">&nbsp;</td>' +
-      '<td style="padding:0;vertical-align:top;background-color:#ffffff;" bgcolor="#FFFFFF">' +
-      '<table style="border-collapse:collapse;table-layout:fixed;width:100%;" role="presentation" border="0" width="100%" cellspacing="0" cellpadding="0">' +
+      '<td style="padding:0;vertical-align:top;background-color:' +
+      bg +
+      ';" bgcolor="#FFFFFF">' +
+      '<table style="border-collapse:collapse;table-layout:fixed;width:100%;background-color:' +
+      bg +
+      ';" role="presentation" border="0" width="100%" cellspacing="0" cellpadding="0">' +
       "<tbody><tr>" +
-      '<td width="168" style="width:168px;padding:8px 8px 8px 10px;vertical-align:middle;text-align:center;line-height:0;font-size:0;mso-line-height-rule:exactly;" valign="middle">' +
+      '<td width="168" bgcolor="#FFFFFF" style="width:168px;padding:8px 8px 8px 10px;vertical-align:middle;text-align:center;line-height:0;font-size:0;mso-line-height-rule:exactly;background-color:' +
+      bg +
+      ';" valign="middle">' +
       logoBlock +
       "</td>" +
-      '<td style="padding:8px 12px 8px 10px;vertical-align:middle;" valign="middle">' +
+      '<td style="padding:8px 12px 8px 10px;vertical-align:middle;background-color:' +
+      bg +
+      ';" valign="middle" bgcolor="#FFFFFF">' +
       '<p style="margin:0 0 5px 0;padding-left:9px;border-left:3px solid #74BD20;font-size:17px;line-height:1.2;color:#434343;font-weight:bold;letter-spacing:-0.02em;">' +
       '<span style="color:#000000;">' +
       emailHtmlEscape(CG_EMAIL_FIRMA_LINE1) +
@@ -18061,7 +18069,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "</a></td></tr></tbody></table>" +
       "</td></tr></tbody></table>" +
       "</td></tr>" +
-      '<tr><td style="padding:2px 12px 9px 10px;background-color:#f7f7f9;vertical-align:middle;border-top:1px solid #74bd20;" colspan="2">' +
+      '<tr><td style="padding:2px 12px 9px 10px;background-color:' +
+      bg +
+      ';vertical-align:middle;border-top:1px solid #74bd20;" colspan="2" bgcolor="#FFFFFF">' +
       '<table style="border-collapse:collapse;" role="presentation" border="0" cellspacing="0" cellpadding="0">' +
       "<tbody><tr>" +
       '<td style="width:22px;padding:0 7px 0 0;" valign="middle">' +
@@ -18072,12 +18082,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       '<td style="padding:0;font-size:10px;line-height:1.45;color:#5c5a70;" valign="middle">' +
       "Cuidemos el Medio Ambiente, por favor, no imprima este E-Mail si no es necesario." +
       "</td></tr></tbody></table>" +
+      "</td></tr>" +
+      "</tbody></table>" +
       "</td></tr></tbody></table>" +
-      "</td></tr></tbody></table>" +
-      '<table style="border-collapse:collapse;mso-table-lspace:0;mso-table-rspace:0;width:100%;max-width:510px;" role="presentation" border="0" width="100%" cellspacing="0" cellpadding="0">' +
-      "<tbody><tr>" +
-      '<td style="padding:0;margin:0;text-align:left;background-color:#ebebed;font-size:0;line-height:0;">&nbsp;</td>' +
-      "</tr></tbody></table>" +
       "</td></tr></tbody></table>"
     );
   }
@@ -18095,12 +18102,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       opts.footer != null
         ? opts.footer
         : "Mensaje generado desde " + G.APP_BRAND_NAME + ".";
-    var cardBg = "#ffffff";
+    var cardBg = CG_EMAIL_CARD_BG;
     var cardBorder = "#e7e7ea";
     var innerText = C.innerText || "#3f3f46";
     var muted = "#71717a";
     var titleCol = "#18181b";
-    var outerBg = "#f4f4f5";
+    var outerBg = CG_EMAIL_CARD_BG;
     var ff = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
     var ribbonTxt = emailHtmlEscape(opts.ribbonText || "");
     var tagRow = ribbonTxt
@@ -18108,7 +18115,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         cardBg +
         ';"><span style="display:inline-block;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:0.02em;color:' +
         accent +
-        ";background:#fafafa;border:1px solid " +
+        ";background:" +
+        cardBg +
+        ";border:1px solid " +
         cardBorder +
         ";font-family:" +
         ff +
@@ -18164,7 +18173,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       ';">' +
       inner +
       "</td></tr>" +
-      '<tr><td style="padding:14px 24px 16px 24px;border-top:1px solid #f4f4f5;background:' +
+      '<tr><td style="padding:14px 24px 16px 24px;border-top:1px solid #e7e7ea;background:' +
       cardBg +
       ";font-family:" +
       ff +
@@ -18189,7 +18198,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var C = typeof G.getEmailShellThemeColors === "function" ? G.getEmailShellThemeColors() : {};
     var labCol = C.footerMuted || "#71717a";
     var valCol = C.innerText || "#18181b";
-    var bb = isLast ? "" : "border-bottom:1px solid #f4f4f5;";
+    var bb = isLast ? "" : "border-bottom:1px solid #e7e7ea;";
     return (
       '<tr><td style="padding:12px 18px;' +
       bb +
@@ -18213,7 +18222,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "#74bd20";
     return (
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e7e7ea;border-radius:8px;overflow:hidden;border-collapse:separate;">' +
-      '<tr><td style="padding:10px 18px;background:#fafafa;color:#18181b;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;border-bottom:1px solid #e7e7ea;border-left:3px solid ' +
+      '<tr><td style="padding:10px 18px;background:#ffffff;color:#18181b;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;border-bottom:1px solid #e7e7ea;border-left:3px solid ' +
       acc +
       ';">' +
       emailHtmlEscape(headerTitle) +
