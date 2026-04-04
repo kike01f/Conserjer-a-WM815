@@ -1764,7 +1764,7 @@
     .cg-manual-root {
       --cg-manual-accent: #4f46e5;
       --cg-manual-accent-soft: color-mix(in srgb, #4f46e5 14%, transparent);
-      font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+      font-family: "Nunito", system-ui, sans-serif;
     }
     .cg-manual-layout {
       display: grid;
@@ -1822,7 +1822,7 @@
       display: flex;
       align-items: center;
       gap: 0.45rem;
-      font-family: "DM Sans", system-ui, sans-serif;
+      font-family: "Nunito", system-ui, sans-serif;
       font-weight: 500;
       transition: background 0.15s, color 0.15s, transform 0.15s;
     }
@@ -1963,7 +1963,7 @@
     }
     .cg-manual-step__kicker {
       margin: 0;
-      font-family: "DM Sans", system-ui, sans-serif;
+      font-family: "Nunito", system-ui, sans-serif;
       font-size: 0.65rem;
       font-weight: 700;
       text-transform: uppercase;
@@ -1988,6 +1988,7 @@
       z-index: 1;
     }
     .cg-manual-lead {
+      font-family: "Nunito", system-ui, sans-serif;
       font-size: 0.98rem;
       line-height: 1.65;
       color: #334155;
@@ -2028,7 +2029,7 @@
       flex-shrink: 0;
     }
     .cg-manual-card__body strong {
-      font-family: "DM Sans", system-ui, sans-serif;
+      font-family: "Nunito", system-ui, sans-serif;
       font-size: 0.82rem;
       font-weight: 700;
       color: #0f172a;
@@ -2037,7 +2038,7 @@
     }
     .cg-manual-card__body p {
       margin: 0;
-      font-family: "Source Serif 4", Georgia, serif;
+      font-family: "Nunito", system-ui, sans-serif;
       font-size: 0.84rem;
       line-height: 1.5;
       color: #475569;
@@ -2049,7 +2050,7 @@
       padding: 0.85rem 1rem;
       border-radius: 12px;
       margin-top: 0.5rem;
-      font-family: "DM Sans", system-ui, sans-serif;
+      font-family: "Nunito", system-ui, sans-serif;
       font-size: 0.82rem;
       line-height: 1.5;
     }
@@ -2080,7 +2081,7 @@
       border: 1px dashed #cbd5e1;
     }
     .cg-manual-flow__node {
-      font-family: "DM Sans", system-ui, sans-serif;
+      font-family: "Nunito", system-ui, sans-serif;
       font-size: 0.72rem;
       font-weight: 700;
       padding: 0.35rem 0.65rem;
@@ -2113,7 +2114,7 @@
       border-radius: 99px;
       background: hsla(var(--step-hue), 50%, 96%, 1);
       border: 1px solid hsla(var(--step-hue), 35%, 80%, 0.5);
-      font-family: "DM Sans", system-ui, sans-serif;
+      font-family: "Nunito", system-ui, sans-serif;
       font-size: 0.7rem;
       font-weight: 600;
       color: hsl(var(--step-hue), 35%, 28%);
@@ -2153,7 +2154,7 @@
       border-top: 1px solid #f1f5f9;
     }
     .cg-manual-counter-pill {
-      font-family: "DM Sans", system-ui, sans-serif;
+      font-family: "Nunito", system-ui, sans-serif;
       font-size: 0.72rem;
       font-weight: 700;
       padding: 0.35rem 0.75rem;
@@ -15196,17 +15197,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           icon: "fa-compass",
           tocIcon: "fa-door-open",
           lead:
-            "Una sola herramienta para el día a día en conserjería: registro, trazabilidad y comunicación con las unidades, con diseño pensado para pantallas de recepción y uso rápido.",
+            "Esta aplicación centraliza el trabajo en recepción: visitas, encomiendas, reservas y lo que ocurre en el edificio. Los pasos siguientes siguen el orden habitual de un turno: entrar, abrir turno en el libro de novedades, revisar el panel y usar cada módulo según lo que pase en el día.",
           cards: [
-            { ic: "fa-user-clock", title: "Visitas", txt: "Ingresos, salidas, historial y avisos por correo a la unidad." },
-            { ic: "fa-box-open", title: "Encomiendas", txt: "Recepción, retiros y notificaciones con constancia en el listado." },
-            { ic: "fa-book", title: "Novedades", txt: "Turno, bitácora y comunicación entre conserjes y administración." },
-            { ic: "fa-chart-pie", title: "Panel", txt: "Resumen del día, alertas y accesos directos a lo urgente." }
+            { ic: "fa-right-to-bracket", title: "1. Acceso", txt: "Inicio de sesión con usuario y contraseña que le asigna administración." },
+            { ic: "fa-book", title: "2. Turno y novedades", txt: "Primero abre el turno aquí; además deja constancia para el siguiente conserje o administración." },
+            { ic: "fa-gauge-high", title: "3. Panel", txt: "Resumen del día, alertas y enlaces rápidos a lo urgente." },
+            { ic: "fa-user-clock", title: "4. Operación diaria", txt: "Visitas, encomiendas y, si aplica, reservas y catálogos." }
           ],
           callout:
-            "<div class=\"cg-manual-callout cg-manual-callout--tip\"><i class=\"fa-solid fa-lightbulb\" aria-hidden=\"true\"></i><span><strong>Sin sesión:</strong> desde el login puede abrir este manual completo. <strong>Con sesión:</strong> menú lateral → <strong>Manual de usuario</strong>.</span></div>",
+            "<div class=\"cg-manual-callout cg-manual-callout--tip\"><i class=\"fa-solid fa-lightbulb\" aria-hidden=\"true\"></i><span><strong>Sin iniciar sesión:</strong> en el login hay un botón para abrir este manual. <strong>Dentro de la app:</strong> menú lateral → <strong>Manual de usuario</strong>.</span></div>",
           media:
-            "<div class=\"cg-manual-media-strip\"><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-mobile-screen\" aria-hidden=\"true\"></i> Responsive</span><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-cloud\" aria-hidden=\"true\"></i> Sincronización</span><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-shield-halved\" aria-hidden=\"true\"></i> Roles</span></div>"
+            "<div class=\"cg-manual-media-strip\"><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-list-ol\" aria-hidden=\"true\"></i> Orden del manual = flujo del turno</span><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-mobile-screen\" aria-hidden=\"true\"></i> Uso en recepción</span></div>"
         },
         {
           t: "Inicio de sesión",
@@ -15214,18 +15215,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           icon: "fa-right-to-bracket",
           tocIcon: "fa-key",
           lead:
-            "Sus credenciales son personales. Si falla el acceso, revise espacios en blanco y mayúsculas; solo un administrador puede crear usuarios o ayudarle con la contraseña.",
+            "Escriba su usuario y contraseña y pulse Iniciar sesión. Si no entra, compruebe mayúsculas, espacios al pegar y que no haya saltos de línea. Crear usuarios o restablecer claves solo lo hace un administrador (módulo Administración).",
           cards: [
-            { ic: "fa-user", title: "Usuario", txt: "Sin espacios al inicio o al final. Si copia y pega, asegúrese de no incluir saltos de línea." },
-            { ic: "fa-lock", title: "Contraseña", txt: "Distingue mayúsculas y minúsculas. No la comparta ni la deje visible en recepción." },
-            { ic: "fa-user-shield", title: "Administrador", txt: "La gestión de personal y permisos está en Administración (solo rol admin)." }
+            { ic: "fa-user", title: "Usuario", txt: "Sin espacios al inicio ni al final; si copia y pega, que sea solo el texto del usuario." },
+            { ic: "fa-lock", title: "Contraseña", txt: "Distingue mayúsculas y minúsculas. No la comparta ni la deje a la vista en el mostrador." },
+            { ic: "fa-user-shield", title: "Quién administra", txt: "Altas, bajas y permisos del personal se gestionan desde Administración (rol administrador)." }
           ],
           list: [
-            "Si otro conserje tiene un turno abierto que bloquea el sistema, debe cerrarse antes de que usted entre (normativa del edificio).",
-            "Cierre sesión al alejarse del puesto, aunque sea unos minutos."
+            "Si el edificio solo permite un turno abierto a la vez, otro conserje debe cerrar el suyo antes de que usted pueda entrar (normativa interna)."
           ],
           callout:
-            "<div class=\"cg-manual-callout cg-manual-callout--note\"><i class=\"fa-solid fa-circle-info\" aria-hidden=\"true\"></i><span>Primer uso en un navegador nuevo: puede aparecer el asistente para crear el primer administrador; después siempre usará el inicio de sesión habitual.</span></div>"
+            "<div class=\"cg-manual-callout cg-manual-callout--note\"><i class=\"fa-solid fa-circle-info\" aria-hidden=\"true\"></i><span>En un navegador nuevo, la primera vez puede aparecer el asistente para crear el primer administrador; después el acceso es siempre con usuario y contraseña.</span></div>"
         },
         {
           t: "Turno de conserjería",
@@ -15233,13 +15233,30 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           icon: "fa-clock-rotate-left",
           tocIcon: "fa-clipboard-list",
           lead:
-            "El turno es el “permiso de circulación” del conserje dentro de la app: mientras no esté abierto, la mayoría de módulos permanecen bloqueados para evitar registros fuera de contexto.",
+            "Sin turno abierto, el sistema bloquea casi todo salvo este manual y el libro de novedades. Eso evita registros (visitas, encomiendas, etc.) cuando no hay conserje formalmente a cargo. Abrir y cerrar turno se hace en el módulo Libro de novedades, que se detalla en el siguiente paso.",
           flow:
-            "<div class=\"cg-manual-flow\" aria-hidden=\"false\"><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-book\" aria-hidden=\"true\"></i> Novedades</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-play\" aria-hidden=\"true\"></i> Abrir turno</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-check\" aria-hidden=\"true\"></i> Resto de módulos</span></div>",
+            "<div class=\"cg-manual-flow\" aria-hidden=\"false\"><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-book\" aria-hidden=\"true\"></i> Libro de novedades</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-play\" aria-hidden=\"true\"></i> Abrir turno</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-check\" aria-hidden=\"true\"></i> Panel, visitas, encomiendas…</span></div>",
           cards: [
-            { ic: "fa-unlock", title: "Qué se desbloquea", txt: "Visitas, encomiendas, reservas, proveedores, panel, etc., según permisos del edificio." },
-            { ic: "fa-book-open", title: "Excepciones", txt: "Este manual y el Libro de novedades siguen disponibles para abrir o cerrar turno." },
-            { ic: "fa-moon", title: "Cierre", txt: "Al finalizar, cierre el turno en novedades o siga el protocolo indicado por administración." }
+            { ic: "fa-unlock", title: "Con turno abierto", txt: "Se habilitan los módulos que su rol permita: panel, visitas, encomiendas, reservas, proveedores, etc." },
+            { ic: "fa-book-open", title: "Siempre disponible", txt: "Este manual y el libro de novedades, para abrir o cerrar turno y dejar anotaciones." },
+            { ic: "fa-moon", title: "Al terminar", txt: "Cierre el turno en novedades (o el procedimiento que indique administración) antes de irse." }
+          ]
+        },
+        {
+          t: "Libro de novedades",
+          theme: "slate",
+          icon: "fa-book",
+          tocIcon: "fa-feather-pointed",
+          lead:
+            "Aquí registra la apertura y el cierre de turno y, además, lo que debe quedar escrito entre conserjes y administración: incidentes, mantenimiento, seguridad, avisos a la comunidad y cualquier hecho relevante del edificio.",
+          cards: [
+            { ic: "fa-play", title: "Turno", txt: "Primera acción del día en recepción: abrir turno desde este módulo cuando corresponda." },
+            { ic: "fa-tags", title: "Categorías", txt: "Elija la categoría que mejor describa la novedad; facilita buscar después." },
+            { ic: "fa-filter", title: "Filtros y búsqueda", txt: "Por rango de fechas (hoy, semana, mes) o texto para localizar entradas antiguas." }
+          ],
+          list: [
+            "Redacte con hora y hechos claros: el siguiente turno debe entender qué pasó sin preguntarle a usted.",
+            "Las conversaciones rápidas entre el equipo pueden ir por otros medios; lo formal del edificio queda en esta bitácora."
           ]
         },
         {
@@ -15248,14 +15265,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           icon: "fa-gauge-high",
           tocIcon: "fa-chart-line",
           lead:
-            "Vista de mando: números del día, comparativas simples, alertas de estacionamiento de visitas y atajos para actuar sin perder tiempo.",
+            "Con el turno ya abierto, use el panel como punto de partida: vea totales del día, comparaciones simples con el día anterior y, sobre todo, alertas de vehículos de visita con tiempo excedido. Desde ahí puede saltar al módulo que necesite.",
           cards: [
-            { ic: "fa-car", title: "Alertas vehículos", txt: "Colores según gravedad: avisos antes del límite, gracia y multa/parte." },
-            { ic: "fa-arrow-pointer", title: "Accesos rápidos", txt: "Botones que llevan al módulo correcto con un clic." },
-            { ic: "fa-rectangle-list", title: "Actividad", txt: "Bitácora reciente de acciones relevantes en el sistema." }
+            { ic: "fa-car", title: "Alertas de vehículos", txt: "Los colores indican gravedad: aviso antes del límite, período de gracia y situación que requiere parte o multa según normativa." },
+            { ic: "fa-arrow-pointer", title: "Accesos rápidos", txt: "Accesos directos al módulo relacionado con cada aviso o resumen." },
+            { ic: "fa-rectangle-list", title: "Actividad reciente", txt: "Listado de acciones relevantes registradas en el sistema en las últimas horas." }
           ],
           media:
-            "<div class=\"cg-manual-media-strip\"><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-eye\" aria-hidden=\"true\"></i> Revise al inicio del turno</span><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-bell\" aria-hidden=\"true\"></i> Priorice alertas rojas</span></div>"
+            "<div class=\"cg-manual-media-strip\"><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-eye\" aria-hidden=\"true\"></i> Al abrir turno, mire el panel primero</span><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-bell\" aria-hidden=\"true\"></i> Priorice alertas críticas</span></div>"
         },
         {
           t: "Visitas",
@@ -15263,15 +15280,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           icon: "fa-user-clock",
           tocIcon: "fa-id-card",
           lead:
-            "Documente cada ingreso con la misma seriedad que un libro físico: datos completos, departamento correcto y salida cuando corresponda.",
+            "Cada ingreso debe quedar registrado con datos fiables: quién entra, a qué unidad va, y salida cuando corresponda. El historial permite auditar lo ocurrido y avisar a la unidad por correo dejando constancia en el sistema.",
           cards: [
-            { ic: "fa-pen-to-square", title: "Registrar", txt: "Persona o proveedor, RUT si aplica, depto, vehículo y código de estacionamiento de visitas." },
-            { ic: "fa-list", title: "Historial", txt: "Filtros por abiertos, hoy o todos; búsqueda por texto en nombre, RUT o número de unidad." },
-            { ic: "fa-envelope", title: "Correo a la unidad", txt: "Abrir correo registra constancia (check). Si envía solo copiando texto, use Marcar correo enviado." }
+            { ic: "fa-pen-to-square", title: "Registrar ingreso", txt: "Visitante o proveedor, RUT si aplica, departamento, y si viene en auto: patente y código de estacionamiento de visitas." },
+            { ic: "fa-door-open", title: "Registrar salida", txt: "Cierre la visita al irse; en peatones, según configuración del edificio puede ser automático o manual." },
+            { ic: "fa-list", title: "Historial", txt: "Filtros por abiertas, hoy o todas; busque por nombre, RUT o número de unidad." },
+            { ic: "fa-envelope", title: "Aviso por correo", txt: "Use Abrir correo para que quede el check de constancia; si solo copia el texto, pulse Marcar correo enviado." }
           ],
           list: [
-            "Las visitas peatonales pueden comportarse distinto según configuración (a veces sin botón de salida).",
-            "Parte o multa vehicular: siga los modales y el texto indicado para administración."
+            "Parte o multa vehicular: siga los textos y pasos del modal; lo administrativo lo confirma administración."
           ]
         },
         {
@@ -15280,27 +15297,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           icon: "fa-box-open",
           tocIcon: "fa-dolly",
           lead:
-            "Cadena completa: llegada del paquete → aviso al residente → retiro con identificación del retirador y cierre en el sistema.",
+            "Flujo típico: recibe el paquete → registra depto y datos visibles → avisa a la unidad si corresponde → cuando lo retiran, registra quién retira y marca entregado.",
           cards: [
-            { ic: "fa-box", title: "Al recibir", txt: "Descripción visible, depto, destinatario del panel si existe." },
-            { ic: "fa-paper-plane", title: "Avisos", txt: "Correo a todos los e-mails de la unidad configurados en ficha e integrantes." },
-            { ic: "fa-circle-check", title: "Constancia", txt: "Iconos de check para llegada y/o retiro cuando marca el envío." }
+            { ic: "fa-box", title: "Al recibir", txt: "Descripción clara, departamento y destinatario si figura en el panel de la unidad." },
+            { ic: "fa-paper-plane", title: "Aviso por correo", txt: "Puede notificar a los correos de la unidad (ficha e integrantes); use Abrir correo para dejar constancia." },
+            { ic: "fa-circle-check", title: "Retiro y checks", txt: "Al marcar entrega y avisos, el listado muestra iconos de confirmación según lo registrado." }
           ],
           callout:
-            "<div class=\"cg-manual-callout cg-manual-callout--tip\"><i class=\"fa-solid fa-envelope-open-text\" aria-hidden=\"true\"></i><span>El sistema abre su Outlook, Gmail u otro cliente; <strong>no envía</strong> el mensaje por sí solo: usted confirma y envía.</span></div>"
-        },
-        {
-          t: "Libro de novedades",
-          theme: "slate",
-          icon: "fa-book",
-          tocIcon: "fa-feather-pointed",
-          lead:
-            "Es la memoria del edificio entre turnos: mantenimiento, seguridad, incidentes, proveedores y mensajes para administración.",
-          cards: [
-            { ic: "fa-tags", title: "Categorías", txt: "Elija la que mejor describa el hecho; ayuda a filtrar después." },
-            { ic: "fa-filter", title: "Filtros", txt: "Por fechas rápidas (hoy, semana, mes) o búsqueda libre." },
-            { ic: "fa-users", title: "Equipo", txt: "El chat del personal es aparte; las novedades quedan en la línea de tiempo." }
-          ]
+            "<div class=\"cg-manual-callout cg-manual-callout--tip\"><i class=\"fa-solid fa-envelope-open-text\" aria-hidden=\"true\"></i><span>La app abre su programa de correo (Outlook, Gmail, etc.); <strong>usted</strong> envía el mensaje. El sistema no lo envía solo.</span></div>"
         },
         {
           t: "Reservas y catálogos",
@@ -15308,14 +15312,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           icon: "fa-layer-group",
           tocIcon: "fa-calendar-days",
           lead:
-            "Reservas de espacios comunes, proveedores frecuentes y, según permisos, consulta o edición de departamentos, estacionamiento y bodegas.",
+            "Según permisos del edificio: reservar espacios comunes (salón, quincho, etc.), mantener la lista de proveedores habituales y consultar o actualizar datos maestros (departamentos, estacionamientos, bodegas).",
           cards: [
-            { ic: "fa-calendar-check", title: "Reservas", txt: "Ventanas de tiempo, unidad asociada y notas para el evento." },
-            { ic: "fa-truck", title: "Proveedores", txt: "Empresa y tipo de servicio para agilizar visitas de proveedor." },
-            { ic: "fa-building", title: "Maestros", txt: "Datos base del edificio: unidades, residentes en panel, E y bodegas." }
+            { ic: "fa-calendar-check", title: "Reservas", txt: "Rango de fecha y hora, unidad que reserva y notas del evento." },
+            { ic: "fa-truck", title: "Proveedores", txt: "Empresa y rubro para registrar más rápido las visitas de proveedor." },
+            { ic: "fa-building", title: "Maestros", txt: "Unidades, residentes en panel, estacionamientos y bodegas: base para visitas y encomiendas." }
           ],
           flow:
-            "<div class=\"cg-manual-flow\"><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-gear\" aria-hidden=\"true\"></i> Admin define</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-id-badge\" aria-hidden=\"true\"></i> Conserje opera</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-database\" aria-hidden=\"true\"></i> Registro unificado</span></div>"
+            "<div class=\"cg-manual-flow\"><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-gear\" aria-hidden=\"true\"></i> Administración configura</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-id-badge\" aria-hidden=\"true\"></i> Conserje usa en el día a día</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-database\" aria-hidden=\"true\"></i> Un solo registro coherente</span></div>"
         },
         {
           t: "Correo, ayuda y salida",
@@ -15323,18 +15327,18 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           icon: "fa-circle-question",
           tocIcon: "fa-life-ring",
           lead:
-            "Cierre del recorrido: buenas prácticas de comunicación con unidades, ayuda del proveedor del software y seguridad de la sesión.",
+            "Resumen de buenas prácticas: comunicación con unidades, soporte técnico del software y cierre seguro de la sesión.",
           cards: [
-            { ic: "fa-at", title: "Correo", txt: "Prefiera siempre Abrir correo para dejar rastro en visitas y encomiendas." },
-            { ic: "fa-handshake-angle", title: "Soporte Elevate", txt: "Logo inferior en login: contacto para incidencias técnicas del sistema." },
-            { ic: "fa-arrow-right-from-bracket", title: "Cerrar sesión", txt: "Botón en el menú lateral al terminar o al cambiar de persona en el puesto." }
+            { ic: "fa-at", title: "Correo y constancia", txt: "En visitas y encomiendas, prefiera Abrir correo para que el sistema guarde la constancia en el listado." },
+            { ic: "fa-handshake-angle", title: "Soporte (Elevate)", txt: "En la pantalla de login, el enlace del logo inferior sirve para incidencias técnicas de la aplicación." },
+            { ic: "fa-arrow-right-from-bracket", title: "Cerrar sesión", txt: "Al terminar el turno o si deja el puesto, use Cerrar sesión en el menú lateral." }
           ],
           list: [
-            "Si comparte PC, no guarde contraseñas del navegador en la recepción.",
-            "Ante dudas de normativa del edificio (multas, cartas), consulte siempre a administración."
+            "En un PC compartido de recepción, evite guardar la contraseña en el navegador.",
+            "Dudas sobre multas, cartas o normas del edificio: consulte siempre a administración, no asuma criterio propio."
           ],
           callout:
-            "<div class=\"cg-manual-callout cg-manual-callout--note\"><i class=\"fa-solid fa-heart\" aria-hidden=\"true\"></i><span>¡Gracias por mantener el registro al día: es la base de una convivencia ordenada y transparente!</span></div>"
+            "<div class=\"cg-manual-callout cg-manual-callout--note\"><i class=\"fa-solid fa-heart\" aria-hidden=\"true\"></i><span>Un registro ordenado ayuda a residentes y administración; gracias por usar el sistema con rigor.</span></div>"
         }
       ];
       var toc = "";
@@ -15488,7 +15492,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           "<div class=\"cg-user-manual-head-badge\" aria-hidden=\"true\"><i class=\"fa-solid fa-book-open\"></i></div>" +
           "<div>" +
           "<h2 id=\"cg-user-manual-title\">Manual de usuario</h2>" +
-          "<p class=\"cg-user-manual-head-sub\">Guía interactiva: turno, visitas, encomiendas, novedades y panel — con iconos y pasos claros.</p>" +
+          "<p class=\"cg-user-manual-head-sub\">Orden lógico de un turno: acceso → libro de novedades (turno) → panel → visitas, encomiendas y más.</p>" +
           "</div></div>" +
           "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"cg-user-manual-close\" aria-label=\"Cerrar manual\"><i class=\"fa-solid fa-xmark\" aria-hidden=\"true\"></i> Cerrar</button>" +
           "</div>" +
@@ -15531,7 +15535,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"cg-page-compact\">" +
         "<div class=\"cg-manual-intro\">" +
         "<h1 class=\"page-title\">Manual de usuario</h1>" +
-        "<p class=\"page-desc\" style=\"margin-top:0\">Guía paso a paso para conserjes. Use el <strong>índice</strong> a la izquierda o avance con <strong>Anterior</strong> y <strong>Siguiente</strong>. Los recuadros con iconos resumen cada módulo.</p>" +
+        "<p class=\"page-desc\" style=\"margin-top:0\">Los pasos siguen el orden de un turno típico: acceso, turno en novedades, panel y operación diaria. Use el <strong>índice</strong> o <strong>Anterior</strong> / <strong>Siguiente</strong>.</p>" +
         "</div>" +
         cgUserManualWizardMarkup() +
         "</div>"
