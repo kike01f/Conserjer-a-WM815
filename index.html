@@ -2534,6 +2534,16 @@
     /* App shell — sidebar opaco (sin vidrio / traslucidez) */
     #app-main { display: flex; min-height: 100vh; }
     /* Ambientación festiva (administrable; fecha según Chile) */
+    /* Iconos de fondo: solo movimiento (sin variar opacidad → evita “parpadeo”). */
+    @keyframes cg-festive-float-bob {
+      0%,
+      100% {
+        transform: translateY(0) rotate(0deg);
+      }
+      50% {
+        transform: translateY(-7px) rotate(15deg);
+      }
+    }
     /* Tarjeta festiva en panel de control (misma zona que cumpleaños / alertas) */
     #dash-festive-mount:not(:empty) {
       margin-bottom: 0.55rem;
@@ -2562,14 +2572,15 @@
       position: absolute;
       font-size: 0.95rem;
       line-height: 1;
-      opacity: 0.5;
+      opacity: 0.52;
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+      animation: cg-festive-float-bob 3.2s ease-in-out infinite;
     }
     .cg-festive-float--1 { top: 12%; right: 8%; }
-    .cg-festive-float--2 { top: 38%; right: 18%; font-size: 0.78rem; }
-    .cg-festive-float--3 { bottom: 14%; right: 28%; font-size: 0.72rem; }
-    .cg-festive-float--4 { top: 22%; right: 38%; font-size: 0.68rem; }
-    .cg-festive-float--5 { bottom: 20%; right: 12%; font-size: 0.62rem; }
+    .cg-festive-float--2 { top: 38%; right: 18%; font-size: 0.78rem; animation-duration: 2.7s; }
+    .cg-festive-float--3 { bottom: 14%; right: 28%; font-size: 0.72rem; animation-duration: 3.8s; }
+    .cg-festive-float--4 { top: 22%; right: 38%; font-size: 0.68rem; animation-duration: 2.4s; }
+    .cg-festive-float--5 { bottom: 20%; right: 12%; font-size: 0.62rem; animation-duration: 4.1s; }
     .cg-dash-festive-card > .card-h,
     .cg-dash-festive-card > .card-b {
       position: relative;
@@ -2747,6 +2758,7 @@
     }
     @media (prefers-reduced-motion: reduce) {
       .cg-festive-float {
+        animation: none !important;
         opacity: 0.45;
       }
     }
