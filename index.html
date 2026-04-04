@@ -4690,14 +4690,14 @@
     const APP_BRAND_NAME = "Sistema de Gestión - Conserjeria";
     const MANUFACTURER_LOGO_URL = "https://img.mailinblue.com/8323725/images/content_library/original/69ba11d918850cebd86808f2.png";
     const MODULES = [
-      { id: "dashboard", label: "Dashboard", icon: "fa-chart-pie" },
+      { id: "dashboard", label: "Panel de control", icon: "fa-chart-pie" },
       { id: "novedades", label: "Libro de novedades", icon: "fa-book" },
+      { id: "visitas", label: "Visitas", icon: "fa-user-clock" },
+      { id: "encomiendas", label: "Encomiendas", icon: "fa-box-open" },
       { id: "departamentos", label: "Departamentos", icon: "fa-door-open" },
       { id: "estacionamientos", label: "Estacionamientos", icon: "fa-square-parking" },
       { id: "bodegas", label: "Bodegas", icon: "fa-box" },
       { id: "proveedores", label: "Proveedores", icon: "fa-truck" },
-      { id: "visitas", label: "Visitas", icon: "fa-user-clock" },
-      { id: "encomiendas", label: "Encomiendas", icon: "fa-box-open" },
       { id: "reservas", label: "Reservas", icon: "fa-calendar-check" },
       { id: "admin", label: "Administración", icon: "fa-user-shield", adminOnly: true }
     ];
@@ -14547,7 +14547,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       const novRec = novedadesArr.slice().sort(function (a, b) { return new Date(b.at) - new Date(a.at); }).slice(0, 5);
       const actTable = buildDashMonthlyConserjeActivityHtml();
       return (
-        "<h1 class=\"page-title\">Dashboard</h1>" +
+        "<h1 class=\"page-title\">Panel de control</h1>" +
         "<div class=\"card cg-dash-bday-card\" id=\"dash-staff-bday-card\" style=\"display:none;border-left:3px solid #db2777\">" +
         "<div class=\"cg-dash-bday-confetti\" aria-hidden=\"true\">" +
         "<span class=\"cg-dash-bday-confetti-piece\"></span><span class=\"cg-dash-bday-confetti-piece\"></span><span class=\"cg-dash-bday-confetti-piece\"></span><span class=\"cg-dash-bday-confetti-piece\"></span>" +
@@ -14947,7 +14947,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
       return (
         "<h1 class=\"page-title\">Panel de administrador</h1>" +
-        "<p class=\"page-desc\">Personal, turnos y horas, permisos por rol, reportes, alertas programadas del dashboard y configuración.</p>" +
+        "<p class=\"page-desc\">Personal, turnos y horas, permisos por rol, reportes, alertas programadas del panel de control y configuración.</p>" +
         "<div class=\"admin-tabs\" role=\"toolbar\" aria-label=\"Secciones de administración\">" +
         "<button type=\"button\" class=\"admin-tab active\" data-adm=\"staff\" aria-pressed=\"true\">Personal</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"turnos\" aria-pressed=\"false\">Turnos</button>" +
@@ -14955,7 +14955,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"rep\" aria-pressed=\"false\">Reportes</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"personalizacion\" aria-pressed=\"false\">Personalización</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"rrhh\" aria-pressed=\"false\">RRHH</button>" +
-        "<button type=\"button\" class=\"admin-tab\" data-adm=\"dashAlerts\" aria-pressed=\"false\">Alertas dashboard</button>" +
+        "<button type=\"button\" class=\"admin-tab\" data-adm=\"dashAlerts\" aria-pressed=\"false\">Alertas panel de control</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"cfg\" aria-pressed=\"false\">Configuración</button></div>" +
         "<div id=\"adm-panel\" role=\"region\" aria-label=\"Contenido de administración\"></div>"
       );
@@ -21286,10 +21286,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             .join("")
         : "<tr><td colspan=\"6\" class=\"page-desc\">No hay alertas programadas. Use el formulario inferior.</td></tr>";
     return (
-      "<div class=\"card\"><div class=\"card-h\"><h3>Alertas programadas del dashboard</h3></div>" +
+      "<div class=\"card\"><div class=\"card-h\"><h3>Alertas programadas del panel de control</h3></div>" +
       "<div class=\"card-b\">" +
       "<p class=\"page-desc\" style=\"margin:0 0 1rem;font-size:0.86rem\">" +
-      "Avisos para conserjería en la parte superior del <strong>Dashboard</strong> (junto al mensaje de cumpleaños). " +
+      "Avisos para conserjería en la parte superior del <strong>Panel de control</strong> (junto al mensaje de cumpleaños). " +
       "Solo se muestran si están <strong>activas</strong> y la hora actual está entre <strong>inicio</strong> y <strong>término</strong>. " +
       "Pueden coexistir varias alertas a la vez.</p>" +
       "<div class=\"data-table-wrap\" style=\"overflow:auto\"><table class=\"data-table\"><thead><tr><th>Estado</th><th>Título</th><th>Mensaje</th><th>Inicio</th><th>Término</th><th></th></tr></thead><tbody>" +
