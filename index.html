@@ -2555,16 +2555,17 @@
       0%, 100% { opacity: 0.07; }
       50% { opacity: 0.12; }
     }
-    .cg-festive-banner {
-      flex-shrink: 0;
+    /* Tarjeta festiva en panel de control (misma zona que cumpleaños / alertas) */
+    #dash-festive-mount:not(:empty) {
+      margin-bottom: 1rem;
+    }
+    .cg-dash-festive-card {
       position: relative;
       overflow: hidden;
-      padding: 0.75rem 1rem 0.85rem;
-      border-bottom: 1px solid color-mix(in srgb, var(--blue-500) 22%, var(--border-color));
-      background: linear-gradient(105deg, color-mix(in srgb, var(--blue-100) 88%, var(--blue-500)), var(--gray-50));
-      box-shadow: 0 1px 0 color-mix(in srgb, var(--blue-500) 12%, transparent);
+      border-left: 3px solid color-mix(in srgb, var(--blue-500) 55%, var(--border-color));
+      background: linear-gradient(105deg, color-mix(in srgb, var(--blue-100) 88%, var(--blue-500)), var(--card-color, var(--gray-50)));
     }
-    .cg-festive-banner__fx {
+    .cg-dash-festive-card .cg-festive-banner__fx {
       position: absolute;
       inset: 0;
       pointer-events: none;
@@ -2603,59 +2604,40 @@
     .cg-festive-float--3 { bottom: 14%; right: 28%; font-size: 0.72rem; animation-duration: 3.8s; }
     .cg-festive-float--4 { top: 22%; right: 38%; font-size: 0.68rem; animation-duration: 2.4s; }
     .cg-festive-float--5 { bottom: 20%; right: 12%; font-size: 0.62rem; animation-duration: 4.1s; }
-    .cg-festive-banner__inner {
-      max-width: 72rem;
-      margin: 0 auto;
-      display: flex;
-      align-items: flex-start;
-      gap: 0.85rem;
+    .cg-dash-festive-card > .card-h,
+    .cg-dash-festive-card > .card-b {
       position: relative;
       z-index: 1;
     }
-    .cg-festive-banner__icon-wrap {
-      flex-shrink: 0;
-      margin-top: 0.05rem;
-      animation: cg-festive-icon-breathe 2.8s ease-in-out infinite;
-    }
-    .cg-festive-banner__icon {
-      width: 2.65rem;
-      height: 2.65rem;
-      border-radius: 12px;
+    .cg-dash-festive-card .card-h h3 {
       display: flex;
       align-items: center;
-      justify-content: center;
-      font-size: 1.35rem;
-      line-height: 1;
-      color: #fff;
-      background: color-mix(in srgb, var(--blue-500) 22%, var(--white));
-      box-shadow:
-        inset 0 0 0 1px color-mix(in srgb, var(--blue-500) 25%, transparent),
-        0 4px 14px -4px rgba(0, 0, 0, 0.2);
-    }
-    .cg-festive-banner__icon i {
-      filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
-    }
-    .cg-festive-banner__text { flex: 1; min-width: 0; }
-    .cg-festive-banner__title {
-      display: block;
-      font-size: 0.98rem;
-      color: var(--gray-800);
-      letter-spacing: -0.02em;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.5rem;
       animation: cg-festive-title-in 0.55s ease-out both;
     }
-    .cg-festive-banner__msg {
-      margin: 0.35rem 0 0;
-      font-size: 0.86rem;
-      line-height: 1.45;
-      color: var(--secondary-text);
-      animation: cg-festive-title-in 0.55s ease-out 0.08s both;
-    }
-    .cg-festive-banner__close {
+    .cg-festive-dash-h-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 11px;
       flex-shrink: 0;
+      font-size: 1.2rem;
       line-height: 1;
-      padding: 0.2rem 0.5rem;
-      min-width: 2rem;
-      font-size: 1.15rem;
+      color: #fff;
+      background: color-mix(in srgb, var(--blue-500) 35%, var(--white));
+      box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--blue-500) 28%, transparent),
+        0 4px 12px -3px rgba(0, 0, 0, 0.18);
+      animation: cg-festive-icon-breathe 2.8s ease-in-out infinite;
+    }
+    .cg-festive-dash-h-icon i {
+      filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
+    }
+    .cg-dash-festive-card .card-b .cg-dash-bday-msg {
+      animation: cg-festive-title-in 0.55s ease-out 0.08s both;
     }
     .cg-festive-banner__preview-note {
       margin: 0 0 0.4rem;
@@ -2675,59 +2657,54 @@
       background: color-mix(in srgb, var(--warning, #d97706) 22%, var(--gray-200));
       color: var(--gray-800);
     }
-    #app-main.cg-festive-theme--newyear .cg-festive-banner__preview-note { color: color-mix(in srgb, #fde68a 75%, #fff); }
-    #app-main.cg-festive-theme--newyear .cg-festive-banner__preview-pill {
+    #app-main.cg-festive-theme--newyear .cg-dash-festive-card .cg-festive-banner__preview-note { color: color-mix(in srgb, #fde68a 75%, #fff); }
+    #app-main.cg-festive-theme--newyear .cg-dash-festive-card .cg-festive-banner__preview-pill {
       background: rgba(250, 204, 21, 0.25);
       color: #fef9c3;
     }
-    #app-main.cg-festive-theme--labor .cg-festive-banner {
+    #app-main.cg-festive-theme--labor .cg-dash-festive-card {
       background: linear-gradient(110deg, #fff7ed 0%, #ffedd5 40%, #fef3c7 100%);
-      border-bottom-color: color-mix(in srgb, #d97706 35%, var(--border-color));
+      border-left-color: #f59e0b;
     }
-    #app-main.cg-festive-theme--labor .cg-festive-float { color: #b45309; }
-    #app-main.cg-festive-theme--labor .cg-festive-banner__icon {
+    #app-main.cg-festive-theme--labor .cg-dash-festive-card .cg-festive-float { color: #b45309; }
+    #app-main.cg-festive-theme--labor .cg-dash-festive-card .cg-festive-dash-h-icon {
       background: linear-gradient(145deg, #fbbf24, #f59e0b);
       box-shadow:
         inset 0 0 0 1px rgba(180, 83, 9, 0.35),
         0 4px 16px -4px rgba(217, 119, 6, 0.45);
     }
-    #app-main.cg-festive-theme--patrias .cg-festive-banner {
+    #app-main.cg-festive-theme--patrias .cg-dash-festive-card {
       background: linear-gradient(115deg, #eff6ff 0%, #dbeafe 35%, #fee2e2 100%);
-      border-bottom-color: color-mix(in srgb, #2563eb 28%, #dc2626 18%, var(--border-color));
+      border-left-color: #2563eb;
     }
-    #app-main.cg-festive-theme--patrias .cg-festive-float:nth-child(odd) { color: #1d4ed8; }
-    #app-main.cg-festive-theme--patrias .cg-festive-float:nth-child(even) { color: #dc2626; }
-    #app-main.cg-festive-theme--patrias .cg-festive-banner__icon {
+    #app-main.cg-festive-theme--patrias .cg-dash-festive-card .cg-festive-float:nth-child(odd) { color: #1d4ed8; }
+    #app-main.cg-festive-theme--patrias .cg-dash-festive-card .cg-festive-float:nth-child(even) { color: #dc2626; }
+    #app-main.cg-festive-theme--patrias .cg-dash-festive-card .cg-festive-dash-h-icon {
       background: linear-gradient(145deg, #3b82f6, #dc2626);
       box-shadow:
         inset 0 0 0 1px rgba(30, 64, 175, 0.35),
         0 4px 16px -4px rgba(220, 38, 38, 0.25);
     }
-    #app-main.cg-festive-theme--navidad .cg-festive-banner {
+    #app-main.cg-festive-theme--navidad .cg-dash-festive-card {
       background: linear-gradient(120deg, #ecfdf5 0%, #d1fae5 30%, #fee2e2 85%);
-      border-bottom-color: color-mix(in srgb, #059669 25%, #b91c1c 20%, var(--border-color));
+      border-left-color: #059669;
     }
-    #app-main.cg-festive-theme--navidad .cg-festive-float:nth-child(odd) { color: #047857; }
-    #app-main.cg-festive-theme--navidad .cg-festive-float:nth-child(even) { color: #b91c1c; }
-    #app-main.cg-festive-theme--navidad .cg-festive-banner__icon {
+    #app-main.cg-festive-theme--navidad .cg-dash-festive-card .cg-festive-float:nth-child(odd) { color: #047857; }
+    #app-main.cg-festive-theme--navidad .cg-dash-festive-card .cg-festive-float:nth-child(even) { color: #b91c1c; }
+    #app-main.cg-festive-theme--navidad .cg-dash-festive-card .cg-festive-dash-h-icon {
       background: linear-gradient(145deg, #10b981, #dc2626);
       box-shadow:
         inset 0 0 0 1px rgba(5, 150, 105, 0.35),
         0 4px 18px -4px rgba(5, 150, 105, 0.35);
     }
-    #app-main.cg-festive-theme--newyear .cg-festive-banner {
+    #app-main.cg-festive-theme--newyear .cg-dash-festive-card {
       background: linear-gradient(125deg, #1e1b4b 0%, #312e81 40%, #4c1d95 100%);
-      border-bottom-color: rgba(250, 204, 21, 0.35);
+      border-left-color: #facc15;
     }
-    #app-main.cg-festive-theme--newyear .cg-festive-banner__title { color: #fef9c3; }
-    #app-main.cg-festive-theme--newyear .cg-festive-banner__msg { color: color-mix(in srgb, #fde68a 85%, #e2e8f0); }
-    #app-main.cg-festive-theme--newyear .cg-festive-banner__close {
-      background: rgba(255, 255, 255, 0.12);
-      color: #fef9c3;
-      border: 1px solid rgba(250, 204, 21, 0.35);
-    }
-    #app-main.cg-festive-theme--newyear .cg-festive-float { color: #fde047; }
-    #app-main.cg-festive-theme--newyear .cg-festive-banner__icon {
+    #app-main.cg-festive-theme--newyear .cg-dash-festive-card .card-h h3 { color: #fef9c3; }
+    #app-main.cg-festive-theme--newyear .cg-dash-festive-card .cg-dash-bday-msg { color: color-mix(in srgb, #fde68a 85%, #e2e8f0); }
+    #app-main.cg-festive-theme--newyear .cg-dash-festive-card .cg-festive-float { color: #fde047; }
+    #app-main.cg-festive-theme--newyear .cg-dash-festive-card .cg-festive-dash-h-icon {
       background: linear-gradient(145deg, #facc15, #eab308);
       box-shadow:
         inset 0 0 0 1px rgba(113, 63, 18, 0.4),
@@ -2775,7 +2752,6 @@
       color: #d97706;
     }
     #app-main.cg-festive-on .main-wrap > .topbar,
-    #app-main.cg-festive-on .main-wrap > #cg-festive-banner,
     #app-main.cg-festive-on .main-wrap > .content {
       position: relative;
       z-index: 1;
@@ -2795,28 +2771,28 @@
     #app-main.cg-festive-theme--newyear .topbar {
       box-shadow: inset 0 -1px 0 rgba(250, 204, 21, 0.28);
     }
-    #app-main.cg-festive-theme--neutral .cg-festive-float { color: var(--blue-500); }
-    #app-main.cg-festive-theme--neutral .cg-festive-banner__icon {
+    #app-main.cg-festive-theme--neutral .cg-dash-festive-card .cg-festive-float { color: var(--blue-500); }
+    #app-main.cg-festive-theme--neutral .cg-dash-festive-card .cg-festive-dash-h-icon {
       color: #fff;
       background: linear-gradient(145deg, color-mix(in srgb, var(--blue-500) 92%, #fff), var(--blue-500));
       box-shadow:
         inset 0 0 0 1px color-mix(in srgb, var(--blue-500) 40%, transparent),
         0 4px 14px -4px color-mix(in srgb, var(--blue-500) 45%, transparent);
     }
-    #app-main.cg-festive-preview-active .cg-festive-banner__shimmer {
+    #app-main.cg-festive-preview-active .cg-dash-festive-card .cg-festive-banner__shimmer {
       animation-duration: 3.8s;
     }
     @media (prefers-reduced-motion: reduce) {
       .cg-festive-banner__shimmer,
       .cg-festive-float,
-      .cg-festive-banner__icon-wrap,
-      .cg-festive-banner__title,
-      .cg-festive-banner__msg,
+      .cg-festive-dash-h-icon,
+      .cg-dash-festive-card .card-h h3,
+      .cg-dash-festive-card .card-b .cg-dash-bday-msg,
       #app-main.cg-festive-on .main-wrap::before {
         animation: none !important;
       }
-      .cg-festive-banner__title,
-      .cg-festive-banner__msg {
+      .cg-dash-festive-card .card-h h3,
+      .cg-dash-festive-card .card-b .cg-dash-bday-msg {
         opacity: 1;
         transform: none;
       }
@@ -2826,10 +2802,10 @@
       .cg-festive-float--5 {
         display: none;
       }
-      .cg-festive-banner__icon {
-        width: 2.35rem;
-        height: 2.35rem;
-        font-size: 1.15rem;
+      .cg-festive-dash-h-icon {
+        width: 2.2rem;
+        height: 2.2rem;
+        font-size: 1.05rem;
       }
     }
     .sidebar {
@@ -5588,7 +5564,6 @@
     </aside>
     <div class="overlay-mobile" id="sidebar-overlay"></div>
     <div class="main-wrap">
-      <div id="cg-festive-banner" class="cg-festive-banner hidden" aria-hidden="true"></div>
       <header class="topbar">
         <button type="button" class="menu-toggle" id="menu-toggle" aria-label="Abrir o cerrar menú lateral" aria-expanded="false" aria-controls="sidebar"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
         <div class="topbar-user" id="topbar-user"></div>
@@ -7620,8 +7595,8 @@
 
     function applyFestiveAmbienceToDom() {
       var app = document.getElementById("app-main");
-      var banner = document.getElementById("cg-festive-banner");
-      if (!app || !banner) return;
+      var mount = document.getElementById("dash-festive-mount");
+      if (!app) return;
       var themeClasses = ["labor", "patrias", "navidad", "newyear", "neutral"];
       var ti;
       for (ti = 0; ti < themeClasses.length; ti++) {
@@ -7629,28 +7604,26 @@
       }
       app.classList.remove("cg-festive-on");
       app.classList.remove("cg-festive-preview-active");
-      function hideBanner() {
-        banner.classList.add("hidden");
-        banner.innerHTML = "";
-        banner.setAttribute("aria-hidden", "true");
+      function clearFestiveMount() {
+        if (mount) mount.innerHTML = "";
       }
       if (!currentUser()) {
-        hideBanner();
+        clearFestiveMount();
         return;
       }
       var fa = getFestiveAmbienceNormalized();
       if (!fa.globalEnabled) {
-        hideBanner();
+        clearFestiveMount();
         return;
       }
       var ctx = getFestiveAmbienceChileYmdParts();
       if (!ctx) {
-        hideBanner();
+        clearFestiveMount();
         return;
       }
       var hit = resolveFestiveAmbienceRuleFromParts(ctx.mmdd, ctx.ymd, fa);
       if (!hit || !hit.rule) {
-        hideBanner();
+        clearFestiveMount();
         return;
       }
       var th = cgFestiveThemeClass(hit.rule.theme);
@@ -7658,20 +7631,9 @@
       app.classList.add("cg-festive-theme--" + th);
       if (ctx.preview) app.classList.add("cg-festive-preview-active");
       else app.classList.remove("cg-festive-preview-active");
-      var dismissKey = "cgFestiveDismiss_" + hit.rule.id + "_" + hit.ymd;
-      try {
-        if (sessionStorage.getItem(dismissKey) === "1") {
-          hideBanner();
-          return;
-        }
-      } catch (eD) {}
       var title = escapeHtml(String(hit.rule.title || "Celebración").trim() || "Celebración");
       var msgRaw = String(hit.rule.message || "").trim();
       var msgEsc = escapeHtml(msgRaw).replace(/\n/g, "<br>");
-      var rid = escapeAttr(String(hit.rule.id || ""));
-      var ymdEsc = escapeAttr(String(hit.ymd || ""));
-      banner.classList.remove("hidden");
-      banner.setAttribute("aria-hidden", "false");
       var previewNote = ctx.preview
         ? "<p class=\"cg-festive-banner__preview-note\"><span class=\"cg-festive-banner__preview-pill\">Vista previa</span> Simulando fecha Chile <strong>" +
           escapeHtml(ctx.ymd) +
@@ -7679,29 +7641,23 @@
         : "";
       var mainIconInner = cgFestiveBannerMainIconHtml(th);
       var floatsHtml = cgFestiveBannerFloatsHtml(th);
-      banner.innerHTML =
+      if (!mount) return;
+      mount.innerHTML =
+        "<div class=\"card cg-dash-festive-card\" role=\"status\">" +
         "<div class=\"cg-festive-banner__fx\" aria-hidden=\"true\">" +
         "<div class=\"cg-festive-banner__shimmer\"></div>" +
         "<div class=\"cg-festive-banner__floats\">" +
         floatsHtml +
         "</div></div>" +
-        "<div class=\"cg-festive-banner__inner\" role=\"region\" aria-label=\"Mensaje festivo\">" +
-        "<div class=\"cg-festive-banner__icon-wrap\">" +
-        "<div class=\"cg-festive-banner__icon\">" +
+        "<div class=\"card-h cg-dash-bday-card-h\"><h3><span class=\"cg-festive-dash-h-icon\">" +
         mainIconInner +
-        "</div></div>" +
-        "<div class=\"cg-festive-banner__text\">" +
-        previewNote +
-        "<strong class=\"cg-festive-banner__title\">" +
+        "</span> " +
         title +
-        "</strong>" +
-        (msgEsc ? "<p class=\"cg-festive-banner__msg\">" + msgEsc + "</p>" : "") +
-        "</div>" +
-        "<button type=\"button\" class=\"cg-festive-banner__close btn btn-sm btn-secondary\" data-cg-act=\"festiveBannerDismiss\" data-cg-id=\"" +
-        rid +
-        "\" data-cg-param=\"" +
-        ymdEsc +
-        "\" title=\"Ocultar hasta mañana\"><span aria-hidden=\"true\">×</span></button></div>";
+        "</h3></div>" +
+        "<div class=\"card-b\">" +
+        previewNote +
+        (msgEsc ? "<p class=\"cg-dash-bday-msg\">" + msgEsc + "</p>" : "") +
+        "</div></div>";
     }
 
     function migrateStaffChat() {
@@ -16321,6 +16277,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       const actTable = buildDashMonthlyConserjeActivityHtml();
       return (
         "<h1 class=\"page-title\">Panel de control</h1>" +
+        "<div id=\"dash-festive-mount\" class=\"cg-dash-festive-mount\" aria-live=\"polite\"></div>" +
         "<div class=\"card cg-dash-bday-card\" id=\"dash-staff-bday-card\" style=\"display:none;border-left:3px solid #db2777\">" +
         "<div class=\"cg-dash-bday-confetti\" aria-hidden=\"true\">" +
         "<span class=\"cg-dash-bday-confetti-piece\"></span><span class=\"cg-dash-bday-confetti-piece\"></span><span class=\"cg-dash-bday-confetti-piece\"></span><span class=\"cg-dash-bday-confetti-piece\"></span>" +
@@ -16385,6 +16342,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardVehAlerts) CG_ACTIONS.renderDashboardVehAlerts();
         if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardStaffBirthdays) CG_ACTIONS.renderDashboardStaffBirthdays();
         if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardScheduledAlerts) CG_ACTIONS.renderDashboardScheduledAlerts();
+        if (window.CG && typeof window.CG.applyFestiveAmbienceToDom === "function") window.CG.applyFestiveAmbienceToDom();
         if (document.getElementById("dash-chart-visits")) updateDashboardChartsSummaryAndActivity();
       }
       visitAlertsTick();
@@ -16761,6 +16719,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardVehAlerts) CG_ACTIONS.renderDashboardVehAlerts();
       if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardStaffBirthdays) CG_ACTIONS.renderDashboardStaffBirthdays();
       if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardScheduledAlerts) CG_ACTIONS.renderDashboardScheduledAlerts();
+      if (window.CG && typeof window.CG.applyFestiveAmbienceToDom === "function") window.CG.applyFestiveAmbienceToDom();
       renderDashboardCharts();
     }
 
@@ -24179,13 +24138,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (typeof A.renderDashboardScheduledAlerts === "function") A.renderDashboardScheduledAlerts();
   };
 
-  A.festiveBannerDismiss = function (id, ymd) {
-    try {
-      sessionStorage.setItem("cgFestiveDismiss_" + String(id || "") + "_" + String(ymd || ""), "1");
-    } catch (eFd) {}
-    if (typeof G.applyFestiveAmbienceToDom === "function") G.applyFestiveAmbienceToDom();
-  };
-
   /** chileParts: { ymd, mmdd } o null = fecha real Chile ahora */
   function festiveAdminRowStatus(r, chileParts) {
     if (!r || r.enabled === false) {
@@ -24370,7 +24322,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<p class=\"page-desc\" style=\"margin:0 0 1rem;font-size:0.86rem\">" +
       "Mensaje y diseño en toda la app para <strong>Día del Trabajador</strong>, <strong>Fiestas Patrias</strong>, <strong>Navidad</strong>, <strong>Año Nuevo</strong> y <strong>períodos propios</strong>. " +
       "La fecha efectiva es la de <strong>Chile</strong> (zona horaria América/Santiago). " +
-      "Los conserjes pueden ocultar la cinta solo hasta el día siguiente (no afecta la ambientación de fondo).</p>" +
+      "El aviso festivo se muestra en el <strong>Panel de control</strong>, junto a cumpleaños y alertas programadas (sin botón de cierre).</p>" +
       "<div class=\"toolbar\" style=\"gap:0.75rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem\">" +
       "<label style=\"display:flex;align-items:center;gap:0.4rem;margin:0\"><input type=\"checkbox\" id=\"adm-festive-global\"" +
       globalChk +
@@ -24382,7 +24334,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         ? "<p class=\"page-desc\" style=\"margin:0 0 0.75rem;color:#b45309\"><strong>Vista previa activa:</strong> la app usa la fecha civil <code>" +
           G.escapeHtml(previewYmdActive) +
           "</code> en Chile en <strong>esta pestaña</strong> (no se guarda en la nube ni afecta a otros equipos).</p>"
-        : "<p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.86rem\">Elija una fecha y pulse <strong>Aplicar vista previa</strong> para ver la cinta y la ambientación como si fuera ese día, sin cambiar el reloj del sistema.</p>") +
+        : "<p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.86rem\">Elija una fecha y pulse <strong>Aplicar vista previa</strong> para ver la tarjeta festiva en el panel y la ambientación como si fuera ese día, sin cambiar el reloj del sistema.</p>") +
       "<div class=\"toolbar\" style=\"gap:0.75rem;flex-wrap:wrap;align-items:center\">" +
       "<label style=\"margin:0\">Fecha de prueba <input type=\"date\" id=\"adm-festive-preview-date\" value=\"" +
       G.escapeAttr(previewYmdActive || "") +
@@ -24457,7 +24409,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     if (typeof G.setFestivePreviewChileYmd === "function") G.setFestivePreviewChileYmd(v);
-    G.toast("Vista previa: fecha Chile " + v + ". Abra otro módulo o recargue la tabla si sigue en Administración.");
+    G.toast("Vista previa: fecha Chile " + v + ". Abra el Panel de control para ver la tarjeta festiva, o recargue la pestaña Ambientación festiva.");
     A.renderAdmin("festive");
     if (typeof G.applyFestiveAmbienceToDom === "function") G.applyFestiveAmbienceToDom();
   };
