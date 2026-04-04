@@ -17756,7 +17756,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           log[v.id] = entry;
           var o = visitBuildWarn30Mail(v);
           try {
-            window.open(mailtoHrefPlain(o.email, o.subj, o.body), "_blank", "noopener,noreferrer");
+            visitApplyResidentNotified(v.id, {
+              closeModal: false,
+              logMsg: "Alerta automática: aviso 30 min visita vehicular — correo abierto (constancia en historial)"
+            });
+            cgOpenMailtoHref(mailtoHrefPlain(o.email, o.subj, o.body));
           } catch (e3) {}
         } else if (!entry.mail30m && !resEm && !entry.mail30mSkip) {
           entry.mail30mSkip = true;
@@ -17788,7 +17792,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           log[v.id] = entryM;
           var om = visitBuildMultaMail(v);
           try {
-            window.open(mailtoHrefPlain(om.email, om.subj, om.body), "_blank", "noopener,noreferrer");
+            visitApplyResidentNotified(v.id, {
+              closeModal: false,
+              logMsg: "Alerta automática: aviso multa visita vehicular — correo abierto (constancia en historial)"
+            });
+            cgOpenMailtoHref(mailtoHrefPlain(om.email, om.subj, om.body));
           } catch (e4) {}
           var k3 = "multa_mail_toast_" + v.id;
           if (!G.persist.sessionGetRaw(k3)) {
@@ -18060,6 +18068,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.toast("Mensaje muy largo: parte del texto se acortó en el enlace", "warn");
     }, 100);
     return build(shortPlain);
+  }
+
+  function cgOpenMailtoHref(href) {
+    if (!href) return;
+    try {
+      window.open(href, "_blank", "noopener,noreferrer");
+    } catch (eM1) {
+      try {
+        window.location.href = href;
+      } catch (eM2) {}
+    }
   }
 
   function emailHtmlEscape(s) {
@@ -18804,27 +18823,31 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           G.escapeHtml(mail.replace(/,/g, ", ")) +
           "</strong>" +
           (inf.fuente ? " <span style=\"opacity:.85\">(" + G.escapeHtml(inf.fuente) + ")</span>" : "") +
-          ". <strong>Abrir correo</strong> inserta el mensaje de abajo en todos los destinatarios (texto plano con formato y emojis; compatible con todos los clientes)."
+          ". <strong>Abrir correo</strong> abre el cliente y <strong>deja constancia en el listado</strong> (check). Mensaje en texto plano con formato y emojis."
         : "<strong>Sin dirección de correo disponible</strong> en la ficha del departamento ni en integrantes del panel.") +
       "</p>" +
-      "<p class=\"page-desc\" style=\"margin-top:0\">Sin servidor SMTP: envío desde su cliente habitual. Opcional: <em>Copiar diseño HTML</em> si desea colores al pegar en el cuerpo.</p>" +
+      "<p class=\"page-desc\" style=\"margin-top:0\">Sin servidor SMTP: envío desde su cliente habitual. Si envía solo con copiar/pegar, use <em>Marcar correo enviado</em>. Opcional: <em>Copiar diseño HTML</em> para colores.</p>" +
       "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje que se envía</p>" +
       "<textarea id=\"" + taId + "\" style=\"width:100%;min-height:180px;font-family:ui-monospace,monospace;font-size:0.8rem;line-height:1.45;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:0.5rem\">" + G.escapeHtml(plain) + "</textarea>" +
       "<p class=\"page-desc\" style=\"margin:0.75rem 0 0.25rem;font-size:0.8rem\">Vista previa con colores (solo referencia / copiar HTML)</p>" +
       "<div class=\"email-html-preview\"><div id=\"enc-mail-preview\" class=\"email-html-preview-inner\"></div></div>" +
       "<div class=\"toolbar\" style=\"margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem\">" +
       (mailto
-        ? "<a class=\"btn btn-primary btn-sm\" href=\"" + mailto.replace(/"/g, "&quot;") + "\"><i class=\"fa-solid fa-envelope\"></i> Abrir correo</a>"
+        ? "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"encomiendaOpenMailtoMark\" data-cg-id=\"" +
+          G.escapeHtml(id) +
+          "\" data-cg-param=\"" +
+          G.escapeHtml(encKind) +
+          "\"><i class=\"fa-solid fa-envelope\"></i> Abrir correo</button>"
         : "<span class=\"page-desc\">Sin dirección de correo disponible.</span>") +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"btn-enc-copy-html\"><i class=\"fa-solid fa-palette\"></i> Copiar diseño HTML</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"clipboardCopyByElId\" data-cg-id=\"" +
       G.escapeHtml(taId) +
       "\">Copiar texto plano</button>" +
-      "<button type=\"button\" class=\"btn btn-primary btn-sm\" style=\"margin-left:auto\" data-cg-act=\"encomiendaMarkNotified\" data-cg-id=\"" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" style=\"margin-left:auto\" data-cg-act=\"encomiendaMarkNotified\" data-cg-id=\"" +
       G.escapeHtml(id) +
       "\" data-cg-param=\"" +
       G.escapeHtml(encKind) +
-      "\" title=\"Tras enviar desde su cliente, deja un check en el listado\">" +
+      "\" title=\"Si envió el mensaje copiado (sin usar Abrir correo), registre aquí la constancia\">" +
       "<i class=\"fa-solid fa-check\"></i> Marcar correo enviado</button>" +
       "</div></div><div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cerrar</button></div></div>"
     );
@@ -18877,19 +18900,23 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.escapeHtml(mail.replace(/,/g, ", ")) +
       "</strong>" +
       (inf.fuente ? " <span style=\"opacity:.85\">(" + G.escapeHtml(inf.fuente) + ")</span>" : "") +
-      ". <strong>Abrir correo</strong> coloca todos en el campo Para.</p>" +
-      "<p class=\"page-desc\" style=\"margin-top:0\">Sin servidor SMTP: envío desde su cliente habitual. Use <em>Copiar diseño HTML</em> para el mismo contenido con el estilo de los avisos de encomiendas (colores al pegar en Gmail, Outlook…).</p>" +
+      ". <strong>Abrir correo</strong> abre el cliente y <strong>deja constancia en el historial</strong> (check).</p>" +
+      "<p class=\"page-desc\" style=\"margin-top:0\">Sin servidor SMTP: envío desde su cliente habitual. Si envía solo con copiar/pegar, use <em>Marcar correo enviado</em>. <em>Copiar diseño HTML</em> para colores en Gmail u Outlook.</p>" +
       "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje (texto plano para mailto)</p>" +
       "<textarea id=\"" + taId + "\" style=\"width:100%;min-height:200px;font-family:ui-monospace,monospace;font-size:0.8rem;line-height:1.45;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:0.5rem\">" + G.escapeHtml(plain) + "</textarea>" +
       "<p class=\"page-desc\" style=\"margin:0.75rem 0 0.25rem;font-size:0.8rem\">Vista previa con colores (referencia / copiar HTML)</p>" +
       "<div class=\"email-html-preview\"><div id=\"" + prevId + "\" class=\"email-html-preview-inner\"></div></div>" +
       "<div class=\"toolbar\" style=\"margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem\">" +
-      "<a class=\"btn btn-primary btn-sm\" href=\"" + mailto.replace(/"/g, "&quot;") + "\"><i class=\"fa-solid fa-envelope\"></i> Abrir correo</a>" +
+      "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"visitVehOpenMailtoMark\" data-cg-id=\"" +
+      G.escapeHtml(visitId) +
+      "\" data-cg-param=\"" +
+      G.escapeHtml(k) +
+      "\"><i class=\"fa-solid fa-envelope\"></i> Abrir correo</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"btn-visit-mail-copy-html\"><i class=\"fa-solid fa-palette\"></i> Copiar diseño HTML</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"clipboardCopyByElId\" data-cg-id=\"" + G.escapeHtml(taId) + "\">Copiar texto plano</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" style=\"margin-left:auto\" data-cg-act=\"visitMarkResidentNotified\" data-cg-id=\"" +
       G.escapeHtml(visitId) +
-      "\" title=\"Tras enviar desde su cliente, deja un check en el historial\"><i class=\"fa-solid fa-check\"></i> Marcar correo enviado</button>" +
+      "\" title=\"Si envió el mensaje copiado (sin usar Abrir correo), registre aquí la constancia\"><i class=\"fa-solid fa-check\"></i> Marcar correo enviado</button>" +
       "</div></div><div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cerrar</button></div></div>"
     );
     setTimeout(function () {
@@ -18932,7 +18959,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.escapeHtml(mail.replace(/,/g, ", ")) +
       "</strong>" +
       (inf.fuente ? " <span style=\"opacity:.85\">(" + G.escapeHtml(inf.fuente) + ")</span>" : "") +
-      ". <strong>Abrir correo</strong> usa texto plano en el campo Para. <em>Copiar diseño HTML</em> pega el mensaje con colores y firma en Gmail u Outlook.</p>" +
+      ". <strong>Abrir correo</strong> abre el cliente y <strong>deja constancia en el historial</strong> (check). <em>Copiar diseño HTML</em> para colores y firma en Gmail u Outlook.</p>" +
       "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje (texto plano para mailto)</p>" +
       "<textarea id=\"" +
       taId +
@@ -18944,16 +18971,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       prevId +
       "\" class=\"email-html-preview-inner\"></div></div>" +
       "<div class=\"toolbar\" style=\"margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem\">" +
-      "<a class=\"btn btn-primary btn-sm\" href=\"" +
-      mailto.replace(/"/g, "&quot;") +
-      "\"><i class=\"fa-solid fa-envelope\"></i> Abrir correo</a>" +
+      "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"visitIngresoOpenMailtoMark\" data-cg-id=\"" +
+      G.escapeHtml(rec.id) +
+      "\"><i class=\"fa-solid fa-envelope\"></i> Abrir correo</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"btn-visit-ingreso-copy-html\"><i class=\"fa-solid fa-palette\"></i> Copiar diseño HTML</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"clipboardCopyByElId\" data-cg-id=\"" +
       G.escapeHtml(taId) +
       "\">Copiar texto plano</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" style=\"margin-left:auto\" data-cg-act=\"visitMarkResidentNotified\" data-cg-id=\"" +
       G.escapeHtml(rec.id) +
-      "\" title=\"Tras enviar desde su cliente, deja un check en el historial\"><i class=\"fa-solid fa-check\"></i> Marcar correo enviado</button>" +
+      "\" title=\"Si envió el mensaje copiado (sin usar Abrir correo), registre aquí la constancia\"><i class=\"fa-solid fa-check\"></i> Marcar correo enviado</button>" +
       "</div></div><div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cerrar</button></div></div>"
     );
     setTimeout(function () {
@@ -18968,26 +18995,83 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }, 0);
   };
 
-  A.encomiendaMarkNotified = function (id, kind) {
+  function encomiendaApplyNotifyMark(id, kind, options) {
+    options = options || {};
     var now = new Date().toISOString();
+    var exists = (G.state.encomiendas || []).some(function (x) {
+      return x.id === id;
+    });
+    if (!exists) return false;
     G.state.encomiendas = (G.state.encomiendas || []).map(function (x) {
       if (x.id !== id) return x;
       if (kind === "llegada") return Object.assign({}, x, { notifiedInAt: now });
       return Object.assign({}, x, { notifiedOutAt: now });
     });
-    G.logConserjeActivity(
-      "enc_correo",
-      "Marcó aviso de correo (" + (kind === "llegada" ? "llegada" : "retiro") + ") como enviado — encomienda"
-    );
-    G.toast("Aviso por correo registrado en el listado");
+    if (options.log !== false) {
+      G.logConserjeActivity(
+        "enc_correo",
+        options.logMsg ||
+          "Marcó aviso de correo (" + (kind === "llegada" ? "llegada" : "retiro") + ") como enviado — encomienda"
+      );
+    }
     if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("encomiendas");
-    UI.closeModal();
+    if (options.closeModal) UI.closeModal();
+    if (options.toastMsg) G.toast(options.toastMsg, options.toastType || "success");
     A.renderEncomiendas();
+    return true;
+  }
+
+  A.encomiendaMarkNotified = function (id, kind) {
+    if (
+      !encomiendaApplyNotifyMark(id, kind, {
+        closeModal: true,
+        logMsg: "Marcó aviso de correo (" + (kind === "llegada" ? "llegada" : "retiro") + ") como enviado — encomienda",
+        toastMsg: "Aviso por correo registrado en el listado"
+      })
+    ) {
+      G.toast("No se encontró la encomienda", "error");
+    }
   };
 
-  /** Conserje confirma que avisó a la unidad por correo (constancia en historial de visitas). */
-  A.visitMarkResidentNotified = function (visitId) {
-    if (!visitId) return;
+  /** Abrir correo y registrar constancia (mismo criterio que visitas). */
+  A.encomiendaOpenMailtoMark = function (id, kind) {
+    var e = (G.state.encomiendas || []).find(function (x) {
+      return x.id === id;
+    });
+    if (!e) {
+      G.toast("No se encontró la encomienda", "error");
+      return;
+    }
+    var inf = residentEmailsForEncomiendaNotify(e);
+    var mail = inf.email;
+    var encKind = kind === "retiro" ? "retiro" : "llegada";
+    var plain = encomiendaBodyText(e, encKind);
+    var depN = G.deptById(e.deptId);
+    var num = depN ? depN.number : "";
+    var subj =
+      encKind === "llegada"
+        ? "Encomienda en conserjería — Depto " + num
+        : "Confirmación retiro encomienda — Depto " + num;
+    if (!String(mail || "").trim()) {
+      G.toast("Sin dirección de correo disponible", "warn");
+      return;
+    }
+    var href = mailtoHrefPlain(mail, subj, plain);
+    if (
+      !encomiendaApplyNotifyMark(id, encKind, {
+        closeModal: false,
+        logMsg: "Abrió cliente de correo — aviso " + encKind + " (constancia en listado)",
+        toastMsg: "Cliente de correo abierto; constancia en el listado"
+      })
+    ) {
+      G.toast("No se encontró la encomienda", "error");
+      return;
+    }
+    cgOpenMailtoHref(href);
+  };
+
+  function visitApplyResidentNotified(visitId, options) {
+    options = options || {};
     var now = new Date().toISOString();
     var found = false;
     G.state.visits = (G.state.visits || []).map(function (x) {
@@ -18995,16 +19079,97 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       found = true;
       return Object.assign({}, x, { residentNotifiedAt: now });
     });
-    if (!found) {
+    if (!found) return false;
+    if (options.log !== false && options.logMsg) {
+      G.logConserjeActivity("visita_correo", options.logMsg);
+    }
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("visits");
+    if (options.closeModal) UI.closeModal();
+    if (options.toastMsg) G.toast(options.toastMsg, options.toastType || "success");
+    A.renderVisitas();
+    if (A.renderDashboardVehAlerts) A.renderDashboardVehAlerts();
+    return true;
+  }
+
+  /** Solo constancia (p. ej. envió el mensaje copiado por otro medio). */
+  A.visitMarkResidentNotified = function (visitId) {
+    if (!visitId) return;
+    if (
+      !visitApplyResidentNotified(visitId, {
+        closeModal: true,
+        logMsg: "Marcó aviso por correo a la unidad como enviado — visita",
+        toastMsg: "Aviso por correo registrado en el historial"
+      })
+    ) {
+      G.toast("No se encontró el registro de visita", "error");
+    }
+  };
+
+  A.visitIngresoOpenMailtoMark = function (visitId) {
+    var rec = (G.state.visits || []).find(function (x) {
+      return x.id === visitId;
+    });
+    if (!rec || !visitIngresoNotifyDeptIsResidential(rec.deptId)) {
+      G.toast("No se puede abrir el aviso para esta visita.", "warn");
+      return;
+    }
+    var inf = residentEmailsAllForDept(rec.deptId);
+    if (!String(inf.email || "").trim()) {
+      G.toast("Sin direcciones de correo para esta unidad", "warn");
+      return;
+    }
+    var dep = G.deptById(rec.deptId);
+    var deptLbl = dep ? dep.number : "—";
+    var subjIng = "Aviso de ingreso de visita — Depto " + deptLbl;
+    var plain = visitIngresoNotifyBodyText(rec);
+    var href = mailtoHrefPlain(inf.email, subjIng, plain);
+    if (
+      !visitApplyResidentNotified(visitId, {
+        closeModal: false,
+        logMsg: "Abrió correo aviso ingreso visita — constancia en historial",
+        toastMsg: "Cliente de correo abierto; constancia en el historial"
+      })
+    ) {
       G.toast("No se encontró el registro de visita", "error");
       return;
     }
-    G.logConserjeActivity("visita_correo", "Marcó aviso por correo a la unidad como enviado — visita");
-    G.toast("Aviso por correo registrado en el historial");
-    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("visits");
-    UI.closeModal();
-    A.renderVisitas();
-    if (A.renderDashboardVehAlerts) A.renderDashboardVehAlerts();
+    cgOpenMailtoHref(href);
+  };
+
+  A.visitVehOpenMailtoMark = function (visitId, kind) {
+    var v = (G.state.visits || []).find(function (x) {
+      return x.id === visitId;
+    });
+    if (!v || !v.vehicular || v.outAt || visitIsProveedor(v)) {
+      G.toast("No se puede abrir el correo para esta visita.", "warn");
+      return;
+    }
+    var inf = residentEmailsAllForDept(v.deptId);
+    if (!String(inf.email || "").trim()) {
+      G.toast("Ningún integrante de la unidad tiene e-mail registrado", "error");
+      return;
+    }
+    var k = kind === "multa" ? "multa" : "warn30";
+    var plain = visitVehResidentNotifyBodyText(v, k);
+    var dep = G.deptById(v.deptId);
+    var deptLbl = dep ? dep.number : "—";
+    var subj =
+      k === "warn30"
+        ? "Recordatorio: tiempo máximo estacionamiento de visitas — Depto " + deptLbl
+        : "Se ha excedido el tiempo máximo del estacionamiento de visitas — Depto " + deptLbl;
+    var href = mailtoHrefPlain(inf.email, subj, plain);
+    if (
+      !visitApplyResidentNotified(visitId, {
+        closeModal: false,
+        logMsg:
+          "Abrió correo aviso visita vehicular (" + (k === "warn30" ? "30 min al límite" : "multa") + ") — constancia en historial",
+        toastMsg: "Cliente de correo abierto; constancia en el historial"
+      })
+    ) {
+      G.toast("No se encontró el registro de visita", "error");
+      return;
+    }
+    cgOpenMailtoHref(href);
   };
 
   function renderEncDestinatarioPanel(deptId, preselect) {
@@ -20495,21 +20660,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     UI.checkVehicularVisitWarnings();
   };
 
-  A.visitParte = function (id) {
-    var v = G.state.visits.find(function (x) { return x.id === id; });
-    if (!v) return;
-    if (!v.vehicular) {
-      G.toast("El parte no aplica a visitas peatonales.", "warn");
-      return;
-    }
-    if (visitIsProveedor(v)) {
-      G.toast("Los proveedores llevan tiempo de registro pero no multa ni parte de estacionamiento.", "warn");
-      return;
-    }
-    if (!visitVehMultaStayReached(v)) {
-      G.toast("El parte solo se genera cuando aplica multa: tras 5 h y 15 min de gracia desde el ingreso.", "warn");
-      return;
-    }
+  function visitParteNotifyContent(v) {
     var dep = G.deptById(v.deptId);
     var estVis = visitVisitorParkingDisplay(v) || "—";
     var h = (visitStayEndMs(v) - new Date(v.at).getTime()) / 3600000;
@@ -20582,23 +20733,77 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var infParte = residentEmailsAllForDept(v.deptId);
     var mail = infParte.email;
     var mailto = mail ? mailtoHrefPlain(mail, subj, plain) : "";
+    return { plain: plain, htmlBody: htmlBody, subj: subj, mail: mail, mailto: mailto, dep: dep, estVis: estVis, h: h };
+  }
+
+  A.visitParteOpenMailtoMark = function (id) {
+    var v = G.state.visits.find(function (x) {
+      return x.id === id;
+    });
+    if (!v) return;
+    if (!v.vehicular || visitIsProveedor(v) || !visitVehMultaStayReached(v)) {
+      G.toast("No se puede abrir el correo del parte en este registro.", "warn");
+      return;
+    }
+    var parts = visitParteNotifyContent(v);
+    if (!parts.mailto) {
+      G.toast("Sin e-mail disponible para el parte", "warn");
+      return;
+    }
+    if (
+      !visitApplyResidentNotified(id, {
+        closeModal: false,
+        logMsg: "Abrió correo parte / multa visita vehicular — constancia en historial",
+        toastMsg: "Cliente de correo abierto; constancia en el historial"
+      })
+    ) {
+      G.toast("No se encontró el registro de visita", "error");
+      return;
+    }
+    cgOpenMailtoHref(parts.mailto);
+  };
+
+  A.visitParte = function (id) {
+    var v = G.state.visits.find(function (x) { return x.id === id; });
+    if (!v) return;
+    if (!v.vehicular) {
+      G.toast("El parte no aplica a visitas peatonales.", "warn");
+      return;
+    }
+    if (visitIsProveedor(v)) {
+      G.toast("Los proveedores llevan tiempo de registro pero no multa ni parte de estacionamiento.", "warn");
+      return;
+    }
+    if (!visitVehMultaStayReached(v)) {
+      G.toast("El parte solo se genera cuando aplica multa: tras 5 h y 15 min de gracia desde el ingreso.", "warn");
+      return;
+    }
+    var parts = visitParteNotifyContent(v);
+    var plain = parts.plain;
+    var htmlBody = parts.htmlBody;
+    var mailto = parts.mailto;
+    var dep = parts.dep;
+    var estVis = parts.estVis;
+    var h = parts.h;
     UI.openModal(
       "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>Parte y envío</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
-      "<div class=\"modal-b\"><p class=\"page-desc\"><strong>Abrir correo</strong> coloca en el campo Para el correo de la ficha del departamento y el de cada integrante de la unidad con e-mail en el panel (sin duplicar). Texto compatible con Gmail, Outlook y móvil. Opcional: <em>Copiar diseño HTML</em> para pegar con colores.</p>" +
+      "<div class=\"modal-b\"><p class=\"page-desc\"><strong>Abrir correo</strong> abre su cliente y <strong>deja constancia en el historial</strong> (check verde). Incluye ficha del departamento e integrantes con e-mail. Opcional: <em>Copiar diseño HTML</em> para pegar con colores; si envía solo por copiar, use <em>Marcar correo enviado</em>.</p>" +
       "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje que se envía</p>" +
       "<textarea id=\"parte-txt\" style=\"width:100%;min-height:200px;font-family:ui-monospace,monospace;font-size:0.8rem;line-height:1.45;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:0.5rem\">" + G.escapeHtml(plain) + "</textarea>" +
       "<p class=\"page-desc\" style=\"margin:0.75rem 0 0.25rem;font-size:0.8rem\">Vista previa con colores (opcional)</p>" +
       "<div class=\"email-html-preview\"><div id=\"parte-mail-preview\" class=\"email-html-preview-inner\"></div></div>" +
       "<div class=\"toolbar\" style=\"margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem\">" +
       (mailto
-        ? "<a class=\"btn btn-primary btn-sm\" href=\"" + mailto.replace(/"/g, "&quot;") + "\"><i class=\"fa-solid fa-envelope\"></i> Abrir correo</a>"
+        ? "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"visitParteOpenMailtoMark\" data-cg-id=\"" +
+          G.escapeHtml(v.id) +
+          "\"><i class=\"fa-solid fa-envelope\"></i> Abrir correo</button>"
         : "<span class=\"page-desc\">Sin e-mail en la ficha del departamento ni en integrantes de la unidad.</span>") +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"btn-parte-copy-html\"><i class=\"fa-solid fa-palette\"></i> Copiar diseño HTML</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"clipboardCopyByElId\" data-cg-id=\"parte-txt\">Copiar texto plano</button>" +
       (mailto
         ? "<button type=\"button\" class=\"btn btn-secondary btn-sm\" style=\"margin-left:auto\" data-cg-act=\"visitMarkResidentNotified\" data-cg-id=\"" +
           G.escapeHtml(v.id) +
-          "\" title=\"Tras enviar desde su cliente, deja un check en el historial\"><i class=\"fa-solid fa-check\"></i> Marcar correo enviado</button>"
+          "\" title=\"Si envió el mensaje copiado (sin usar Abrir correo), registre aquí la constancia\"><i class=\"fa-solid fa-check\"></i> Marcar correo enviado</button>"
         : "") +
       "</div></div><div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cerrar</button></div></div>"
     );
