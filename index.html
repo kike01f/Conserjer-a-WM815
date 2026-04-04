@@ -18535,11 +18535,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       headMid +
       ";font-size:15px;color:" +
       (C.innerText || "#3f3f46") +
-      ";line-height:1.55;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;\">Parte de visita vehicular emitido desde <strong style=\"color:" +
-      headDark +
-      ';">' +
-      emailHtmlEscape(G.APP_BRAND_NAME) +
-      "</strong>. Conserve este registro para su trazabilidad.</p>" +
+      ";line-height:1.55;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;\">" +
+      emailHtmlEscape(
+        "Se ha excedido el tiempo máximo para utilizar el estacionamiento de visitas, lo cual será notificado a la administración:"
+      ) +
+      "</p>" +
       emailDetailTableOpen("Datos del registro", headDark) +
       parteTableBody +
       emailDetailTableClose();
