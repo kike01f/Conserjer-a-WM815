@@ -14679,6 +14679,53 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     return null;
   }
+  /**
+   * Excel RRHH: solo día y mes de cumpleaños (no guarda año de nacimiento).
+   * Normaliza a 2000-MM-DD para almacenamiento; el registro debe llevar noYear: true.
+   */
+  function rrhhImportBirthdayDayMonthOnly(val) {
+    function pad2(n) {
+      return n < 10 ? "0" + n : String(n);
+    }
+    function toPlaceholderYmd(mm, dd) {
+      if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+      var chk = new Date(2000, mm - 1, dd);
+      if (chk.getFullYear() !== 2000 || chk.getMonth() !== mm - 1 || chk.getDate() !== dd) return null;
+      return "2000-" + pad2(mm) + "-" + pad2(dd);
+    }
+    if (val == null || val === "") return null;
+    if (val instanceof Date && !isNaN(val.getTime())) {
+      return toPlaceholderYmd(val.getMonth() + 1, val.getDate());
+    }
+    if (typeof val === "number" && !isNaN(val) && typeof XLSX !== "undefined" && XLSX.SSF && XLSX.SSF.parse_date_code) {
+      var parsed = XLSX.SSF.parse_date_code(val);
+      if (parsed) {
+        var mmX = parsed.m != null ? parsed.m : 1;
+        var ddX = parsed.d != null ? parsed.d : 1;
+        if (mmX >= 1 && mmX <= 12 && ddX >= 1 && ddX <= 31) return toPlaceholderYmd(mmX, ddX);
+      }
+    }
+    var s = String(val).trim();
+    var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (m) {
+      var d1 = parseInt(m[1], 10);
+      var m1 = parseInt(m[2], 10);
+      return toPlaceholderYmd(m1, d1);
+    }
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) {
+      return toPlaceholderYmd(parseInt(m[2], 10), parseInt(m[3], 10));
+    }
+    m = s.match(/^(\d{1,2})[/-](\d{1,2})$/);
+    if (m) {
+      return toPlaceholderYmd(parseInt(m[2], 10), parseInt(m[1], 10));
+    }
+    var full = rrhhParseBirthYmd(val);
+    if (full && /^\d{4}-\d{2}-\d{2}$/.test(full)) {
+      return toPlaceholderYmd(parseInt(full.slice(5, 7), 10), parseInt(full.slice(8, 10), 10));
+    }
+    return null;
+  }
   function residentTipoToVincLabel(internal) {
     if (internal === "propietario") return "Propietario";
     if (internal === "arrendatario") return "Arrendatario";
@@ -19596,7 +19643,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var d = parseInt(p.slice(8, 10), 10);
     return now.getMonth() + 1 === m && now.getDate() === d;
   }
-  function staffBirthdayAgeYears(dob, now) {
+  function staffBirthdayAgeYears(dob, now, noYear) {
+    if (noYear) return null;
     if (!dob || typeof dob !== "string") return null;
     var p = dob.slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(p)) return null;
@@ -19610,10 +19658,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (mm < 0 || (mm === 0 && now.getDate() < birth.getDate())) age--;
     return age;
   }
-  function staffBirthdayFmtCl(dob) {
+  function staffBirthdayFmtCl(dob, noYear) {
     if (!dob || typeof dob !== "string") return "—";
     var p = dob.slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(p)) return "—";
+    if (noYear) return p.slice(8, 10) + "/" + p.slice(5, 7);
     return p.slice(8, 10) + "/" + p.slice(5, 7) + "/" + p.slice(0, 4);
   }
 
@@ -19634,7 +19683,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     card.style.display = "";
     var chips = today
       .map(function (e) {
-        var age = staffBirthdayAgeYears(e.dob, now);
+        var age = staffBirthdayAgeYears(e.dob, now, e.noYear);
         return (
           "<li class=\"cg-dash-bday-chip\" tabindex=\"0\" role=\"group\" aria-label=\"" +
           G.escapeAttr("Cumpleaños: " + (e.name || "")) +
@@ -19683,7 +19732,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 "</td><td>" +
                 G.escapeHtml(e.cargo || "—") +
                 "</td><td>" +
-                G.escapeHtml(staffBirthdayFmtCl(e.dob)) +
+                G.escapeHtml(staffBirthdayFmtCl(e.dob, e.noYear)) +
                 "</td><td>" +
                 (staffBirthdayIsToday(e, now) ? "<span class=\"badge\" style=\"background:#fce7f3;color:#9d174d\">Hoy</span>" : "—") +
                 "</td><td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"staffBirthdayOpen\" data-cg-id=\"" +
@@ -19705,9 +19754,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "</div></div>" +
       "<div class=\"card-b\">" +
       "<p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.86rem\">" +
-      "Registro de <strong>fecha de nacimiento</strong> del equipo (conserjes y otros). El <strong>panel de control</strong> muestra una alerta el día del cumpleaños. " +
-      "Excel: primera fila con encabezados; columnas reconocidas: <em>Nombre</em> (o Empleado), <em>Cargo</em> (opcional), <em>Cumpleaños / Fecha nacimiento / Nacimiento</em> (dd/mm/aaaa o aaaa-mm-dd o fecha de Excel).</p>" +
-      "<table class=\"data-table\"><thead><tr><th>Nombre</th><th>Cargo</th><th>Fecha nac.</th><th>Hoy</th><th></th></tr></thead><tbody>" +
+      "Registro de <strong>cumpleaños</strong> del equipo (conserjes y otros). El <strong>panel de control</strong> muestra una alerta el día del cumpleaños. " +
+      "Al <strong>importar Excel</strong> solo se usa el <strong>día y el mes</strong> (el año de la celda no se guarda). Manualmente puede indicar la fecha completa si desea que se muestre la edad el día del cumpleaños. " +
+      "Excel: primera fila con encabezados; columnas: <em>Nombre</em> (o Empleado), <em>Cargo</em> (opcional), <em>Cumpleaños / Fecha nacimiento / Nacimiento</em> (dd/mm, dd/mm/aaaa, aaaa-mm-dd o fecha Excel).</p>" +
+      "<table class=\"data-table\"><thead><tr><th>Nombre</th><th>Cargo</th><th>Cumpleaños</th><th>Hoy</th><th></th></tr></thead><tbody>" +
       rows +
       "</tbody></table></div></div>"
     );
@@ -19740,7 +19790,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<input type=\"hidden\" name=\"rid\" value=\"" +
       G.escapeAttr(id && e ? e.id : "") +
       "\" /></form>" +
-      "<p class=\"page-desc\" style=\"margin:0.75rem 0 0;font-size:0.82rem\">La fecha no se muestra en el panel; solo se usa el día y mes para el aviso anual y el cálculo de edad el día del cumpleaños.</p></div>" +
+      "<p class=\"page-desc\" style=\"margin:0.75rem 0 0;font-size:0.82rem\">" +
+      (e && e.noYear
+        ? "Este registro proviene de importación: solo se guardan <strong>día y mes</strong>. El año mostrado al editar es solo técnico; no se usa para calcular edad."
+        : "En el panel de control solo se usa el día y el mes para el aviso. Si indicó año completo, se puede mostrar la edad el día del cumpleaños.") +
+      "</p></div>" +
       "<div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
       "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"staffBirthdaySave\"><i class=\"fa-solid fa-floppy-disk\"></i> Guardar</button></div></div>"
     );
@@ -19778,7 +19832,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     var rid = (fd.get("rid") || "").toString().trim();
     var list = Array.isArray(G.state.staffBirthdays) ? G.state.staffBirthdays.slice() : [];
+    var prev = rid ? list.find(function (x) { return x.id === rid; }) : null;
+    var keepNoYear = !!(prev && prev.noYear && parseInt(ymd.slice(0, 4), 10) === 2000);
     var rec = { id: rid || G.uid(), name: name, cargo: cargo, dob: ymd };
+    if (keepNoYear) rec.noYear = true;
     if (rid) {
       var ix = list.findIndex(function (x) { return x.id === rid; });
       if (ix >= 0) list[ix] = rec;
@@ -19849,7 +19906,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         return;
       }
       keys[k] = true;
-      existing.push({ id: G.uid(), name: r.name, cargo: r.cargo || "", dob: r.dob });
+      var nrec = { id: G.uid(), name: r.name, cargo: r.cargo || "", dob: r.dob };
+      if (r.noYear) nrec.noYear = true;
+      existing.push(nrec);
       added++;
     });
     G.state.staffBirthdays = existing;
@@ -19909,13 +19968,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "fecha nacimiento",
       "fecha de nacimiento",
       "fecha_nacimiento",
+      "fecha cumple",
+      "dia cumple",
       "birth",
       "dob",
       "fnacimiento",
       "f. nac"
     ]);
     if (iName < 0 || iDate < 0) {
-      G.toast("Faltan columnas: se requiere nombre y fecha de nacimiento (o cumpleaños).", "error");
+      G.toast("Faltan columnas: se requiere nombre y columna de cumpleaños (día y mes, o fecha completa).", "error");
       return;
     }
     var out = [];
@@ -19931,7 +19992,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         continue;
       }
       var rawDt = row[iDate];
-      var ymd = rrhhParseBirthYmd(rawDt);
+      var ymd = rrhhImportBirthdayDayMonthOnly(rawDt);
       if (!ymd) {
         err++;
         continue;
@@ -19941,7 +20002,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var cgt = G.validate.textBlock(String(row[iCargo]).trim(), { label: "Cargo", min: 1, max: 120 });
         cg = cgt.ok ? cgt.value.replace(/\s+/g, " ") : "";
       }
-      out.push({ name: nm.value.replace(/\s+/g, " "), cargo: cg, dob: ymd });
+      out.push({ name: nm.value.replace(/\s+/g, " "), cargo: cg, dob: ymd, noYear: true });
     }
     if (!out.length) {
       G.toast("No se importó ninguna fila válida." + (err ? " Revise fechas y nombres." : ""), "warn");
@@ -19958,8 +20019,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           "</td><td>" +
           G.escapeHtml(r.cargo || "—") +
           "</td><td>" +
-          G.escapeHtml(r.dob) +
-          "</td></tr>"
+          G.escapeHtml(staffBirthdayFmtCl(r.dob, true)) +
+          " <span style=\"opacity:0.75;font-size:0.85em\">(solo día/mes)</span></td></tr>"
         );
       })
       .join("");
@@ -19968,11 +20029,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"modal\"><div class=\"modal-h\"><h4>Importar cumpleaños (Excel)</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
       "<div class=\"modal-b\"><p class=\"page-desc\" style=\"margin:0 0 0.65rem\">Se importarán <strong>" +
       out.length +
-      "</strong> fila(s). " +
+      "</strong> fila(s) con <strong>solo día y mes</strong> de cumpleaños (el año del archivo no se guarda). " +
       (err ? "<span style=\"color:#b45309\">" + err + " fila(s) omitidas por datos inválidos.</span> " : "") +
-      "No se duplican registros con el mismo nombre y fecha.</p>" +
+      "No se duplican registros con el mismo nombre y mismo día/mes de cumpleaños.</p>" +
       "<div class=\"data-table-wrap\" style=\"overflow:auto;max-height:220px;border:1px solid var(--gray-200);border-radius:8px\">" +
-      "<table class=\"data-table\"><thead><tr><th>Fila</th><th>Nombre</th><th>Cargo</th><th>Fecha (ISO)</th></tr></thead><tbody>" +
+      "<table class=\"data-table\"><thead><tr><th>Fila</th><th>Nombre</th><th>Cargo</th><th>Cumpleaños</th></tr></thead><tbody>" +
       prevHtml +
       (out.length > 40 ? "<tr><td colspan=\"4\" style=\"text-align:center;opacity:0.85\">… vista previa limitada</td></tr>" : "") +
       "</tbody></table></div></div>" +
