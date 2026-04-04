@@ -81,7 +81,8 @@
         LS: LS,
         /** Claves de sesión conocidas (evita typos; valores siguen siendo strings). */
         SESSION: {
-          DASH_ACT_MONTH: "cg_dash_act_month"
+          DASH_ACT_MONTH: "cg_dash_act_month",
+          VIS_SUB: "cg_visitas_sub"
         },
         parseJson: function (raw, fallback) {
           if (raw == null || raw === "") return fallback;
@@ -2772,7 +2773,36 @@
     }
     .cg-vis-open-name { font-weight: 600; color: var(--blue-900); line-height: 1.25; }
     .cg-vis-open-rut { font-size: 0.74rem; font-weight: 600; color: var(--gray-700); line-height: 1.2; }
-    .cg-vis-hist-wrap { max-height: min(38vh, 360px); overflow: auto; border-radius: 8px; border: 1px solid var(--gray-200); }
+    .cg-vis-hist-wrap { max-height: min(62vh, 520px); overflow: auto; border-radius: 8px; border: 1px solid var(--gray-200); }
+    .cg-vis-module-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.65rem 1rem;
+      margin-bottom: 0.25rem;
+    }
+    .cg-vis-module-head .page-title {
+      margin: 0;
+      flex: 1 1 12rem;
+    }
+    .cg-vis-subnav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      align-items: center;
+    }
+    .cg-vis-sub-tab.btn {
+      font-weight: 600;
+    }
+    .cg-vis-sub-tab.active {
+      background: var(--blue-500);
+      border-color: var(--blue-500);
+      color: #fff;
+    }
+    .cg-vis-sub-tab.active:hover {
+      filter: brightness(1.05);
+      color: #fff;
+    }
     .cg-vis-hist-wrap table.data-table { margin: 0; font-size: calc(0.727rem * 1.01); line-height: 1.25; }
     .cg-vis-hist-wrap table.data-table th,
     .cg-vis-hist-wrap table.data-table td {
@@ -13855,7 +13885,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var vpDatalist = visitorParkingDatalistOptionsHtml();
       return (
         "<div class=\"cg-page-compact\">" +
-        "<h1 class=\"page-title\">Registro de visitas</h1>" +
+        "<div class=\"cg-vis-module-head\">" +
+        "<h1 class=\"page-title\">Visitas</h1>" +
+        "<div class=\"cg-vis-subnav\" role=\"tablist\" aria-label=\"Secciones de Visitas\">" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm cg-vis-sub-tab active\" role=\"tab\" aria-selected=\"true\" aria-pressed=\"true\" data-cg-act=\"visitasSubNav\" data-cg-param=\"reg\">Registrar</button>" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm cg-vis-sub-tab\" role=\"tab\" aria-selected=\"false\" aria-pressed=\"false\" data-cg-act=\"visitasSubNav\" data-cg-param=\"hist\">Historial</button>" +
+        "</div></div>" +
+        "<div id=\"vis-sub-reg\" class=\"cg-vis-sub-page\" data-vis-sub=\"reg\">" +
         "<div class=\"cg-module-intro\">" +
         "<p class=\"page-desc\">Registro de ingreso de <strong>personas</strong> o <strong>proveedores</strong>. Indique el <strong>número de departamento</strong> y pulse <strong>Buscar</strong> (como en Encomiendas) o elija la unidad en la lista. Puede abrir <strong>varios formularios a la vez</strong> con <strong>Nueva visita</strong> si atiende varios ingresos en paralelo.</p>" +
         "<div class=\"cg-module-stats\" id=\"vis-module-stats\" aria-live=\"polite\"></div></div>" +
@@ -13869,8 +13905,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div id=\"vis-reg-stack\" class=\"cg-vis-reg-stack\" aria-live=\"polite\"></div>" +
         "<datalist id=\"visitor-parking-suggest\">" +
         vpDatalist +
-        "</datalist></div></div>" +
-        "<div class=\"card cg-card-accent--visit\"><div class=\"card-h\"><h3>Historial</h3>" +
+        "</datalist></div></div></div>" +
+        "<div id=\"vis-sub-hist\" class=\"cg-vis-sub-page\" data-vis-sub=\"hist\" hidden style=\"display:none\">" +
+        "<div class=\"cg-module-intro\">" +
+        "<p class=\"page-desc\">Consulte ingresos anteriores y en curso. Filtre por estado o busque por nombre, RUT, empresa, patente o departamento.</p></div>" +
+        "<div class=\"card cg-card-accent--visit\"><div class=\"card-h\"><h3>Historial de visitas</h3>" +
         "<div class=\"toolbar\" style=\"flex:1;justify-content:flex-end;flex-wrap:wrap\">" +
         "<select id=\"flt-vis-scope\" style=\"min-width:10.5rem\" title=\"Filtrar listado\">" +
         "<option value=\"all\" selected>Todas las visitas</option>" +
@@ -13879,7 +13918,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<option value=\"prov\">Solo proveedores</option>" +
         "</select>" +
         "<input type=\"search\" id=\"flt-vis-q\" placeholder=\"Buscar nombre, RUT, empresa, patente, depto…\" style=\"min-width:12rem;flex:1;max-width:20rem\" /></div></div>" +
-        "<div class=\"card-b\"><div class=\"cg-vis-hist-wrap\"><div id=\"tbl-vis-wrap\"></div></div></div></div></div>"
+        "<div class=\"card-b\"><div class=\"cg-vis-hist-wrap\"><div id=\"tbl-vis-wrap\"></div></div></div></div></div></div>"
       );
     }
 
@@ -18653,6 +18692,31 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     });
   }
 
+  A.visitasSubNav = function (sub) {
+    var s = String(sub || "reg").toLowerCase();
+    if (s !== "reg" && s !== "hist") s = "reg";
+    var regEl = document.getElementById("vis-sub-reg");
+    var histEl = document.getElementById("vis-sub-hist");
+    if (!regEl || !histEl) return;
+    var showReg = s === "reg";
+    regEl.hidden = !showReg;
+    histEl.hidden = showReg;
+    regEl.style.display = showReg ? "" : "none";
+    histEl.style.display = showReg ? "none" : "";
+    try {
+      if (G.persist && G.persist.SESSION && G.persist.sessionSetRaw) {
+        G.persist.sessionSetRaw(G.persist.SESSION.VIS_SUB, s);
+      }
+    } catch (eVisSub) {}
+    document.querySelectorAll(".cg-vis-sub-tab").forEach(function (b) {
+      var on = (b.getAttribute("data-cg-param") || "") === s;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    if (A.renderVisitas) A.renderVisitas();
+  };
+
   A.bindVisitas = function () {
     var stack = document.getElementById("vis-reg-stack");
     if (stack) {
@@ -18663,7 +18727,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         bindOneVisitForm(fm);
       });
     }
-    A.renderVisitas();
+    var saved = "";
+    try {
+      if (G.persist && G.persist.SESSION && G.persist.sessionGetRaw) {
+        saved = G.persist.sessionGetRaw(G.persist.SESSION.VIS_SUB) || "";
+      }
+    } catch (eVisLoad) {}
+    if (saved === "hist") A.visitasSubNav("hist");
+    else A.visitasSubNav("reg");
   };
 
   A.visitOut = function (id) {
