@@ -17502,8 +17502,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
 
   /**
-   * Todos los correos de la unidad (ficha departamento + cada residente con e-mail), sin duplicados.
-   * Lista separada por comas para un solo mailto a todos los habitantes.
+   * Correos solo de integrantes de la unidad (residentes vinculados en el panel), sin duplicados.
+   * No usa el e-mail de la ficha del departamento: solo personas registradas en la unidad con e-mail.
    */
   function residentEmailsAllForDept(deptId) {
     var seen = {};
@@ -17516,8 +17516,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       seen[key] = true;
       list.push(em);
     }
-    var d = G.deptById(deptId);
-    if (d && String(d.email || "").trim()) add(d.email);
     var u = (G.state.buildingUnits || []).find(function (x) { return x.id === deptId; });
     (u && u.residentIds ? u.residentIds : []).forEach(function (rid) {
       var r = (G.state.buildingResidents || []).find(function (x) { return x.id === rid; });
@@ -17526,7 +17524,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return {
       email: list.join(","),
       emails: list,
-      fuente: list.length ? list.length + " destinatario(s) en el mismo correo" : ""
+      fuente: list.length ? list.length + " integrante(s) con e-mail" : ""
     };
   }
 
@@ -17728,7 +17726,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           var k3 = "multa_mail_toast_" + v.id;
           if (!G.persist.sessionGetRaw(k3)) {
             G.persist.sessionSetRaw(k3, "1");
-            G.toast("Notificación de multa a la unidad (depto " + deptLbl + "): correo abierto a todos los destinatarios.", "warn");
+            G.toast("Notificación de multa (depto " + deptLbl + "): correo abierto a los integrantes con e-mail.", "warn");
           }
         } else if (!entryM.mailMulta && !resEm && !entryM.mailMultaSkip) {
           entryM.mailMultaSkip = true;
@@ -17786,11 +17784,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var dur = fmtDurVisit(mock);
         var msg =
           phase === "warn"
-            ? "Menos de 30 min antes del límite de 5 h. Aviso por correo a todos los e-mails de la unidad (ficha + residentes)."
+            ? "Menos de 30 min antes del límite de 5 h. Aviso por correo a los integrantes de la unidad que tengan e-mail en el panel."
             : phase === "grace"
               ? "Superó 5 h — gracia 15 min. Tras finalizar la gracia aplica multa; el parte solo se genera entonces."
               : phase === "multa"
-                ? "Multa aplicable. Parte y correo a todos los e-mails de la unidad si hay al menos uno registrado."
+                ? "Multa aplicable. Parte y correo a los integrantes de la unidad con e-mail en el panel."
                 : "Dentro del tiempo permitido.";
         var mailBtns = "";
         if (phase === "warn") {
@@ -17805,7 +17803,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             G.escapeHtml(v.id) +
             "\">Correo multa</button> ";
         }
-        var noMail = !resEm ? "<span class=\"page-desc\" style=\"font-size:0.72rem\">Sin e-mails en ficha ni residentes.</span> " : "";
+        var noMail = !resEm ? "<span class=\"page-desc\" style=\"font-size:0.72rem\">Sin e-mail en integrantes.</span> " : "";
         var parteBtn = visitParteMultaApplies(v)
           ? "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"visitParte\" data-cg-id=\"" +
             G.escapeHtml(v.id) +
@@ -18763,7 +18761,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var inf = residentEmailsAllForDept(v.deptId);
     var mail = inf.email;
     if (!mail) {
-      G.toast("No hay correos en la ficha del departamento ni en los residentes de la unidad", "error");
+      G.toast("Ningún integrante de la unidad tiene e-mail registrado en el panel", "error");
       return;
     }
     var k = kind === "multa" ? "multa" : "warn30";
@@ -18788,11 +18786,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"modal-b\"><p class=\"page-desc\">Unidad: <strong>" + G.escapeHtml(deptLbl) + "</strong>" +
       (resNm && resNm !== "—" ? " · " + G.escapeHtml(resNm) : "") +
       "</p>" +
-      "<p class=\"page-desc\" style=\"margin-top:0\">Destinatarios (mismo correo): <strong>" +
+      "<p class=\"page-desc\" style=\"margin-top:0\">Integrantes de la unidad (mismo correo): <strong>" +
       G.escapeHtml(mail.replace(/,/g, ", ")) +
       "</strong>" +
       (inf.fuente ? " <span style=\"opacity:.85\">(" + G.escapeHtml(inf.fuente) + ")</span>" : "") +
-      ". <strong>Abrir correo</strong> rellena el mismo mensaje para todos en el campo Para.</p>" +
+      ". <strong>Abrir correo</strong> coloca todos en el campo Para.</p>" +
       "<p class=\"page-desc\" style=\"margin-top:0\">Sin servidor SMTP: envío desde su cliente habitual. Use <em>Copiar diseño HTML</em> para el mismo contenido con el estilo de los avisos de encomiendas (colores al pegar en Gmail, Outlook…).</p>" +
       "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje (texto plano para mailto)</p>" +
       "<textarea id=\"" + taId + "\" style=\"width:100%;min-height:200px;font-family:ui-monospace,monospace;font-size:0.8rem;line-height:1.45;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:0.5rem\">" + G.escapeHtml(plain) + "</textarea>" +
