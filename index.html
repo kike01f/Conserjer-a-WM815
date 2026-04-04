@@ -2689,8 +2689,53 @@
         inset 0 0 0 1px rgba(113, 63, 18, 0.4),
         0 0 20px -2px rgba(250, 204, 21, 0.55);
     }
+    #app-main.cg-festive-theme--amor_amistad .cg-dash-festive-card {
+      background: linear-gradient(
+        122deg,
+        #fff1f2 0%,
+        #fce7f3 26%,
+        #fdf4ff 55%,
+        #ffe4e6 88%,
+        #fecdd3 100%
+      );
+      border-left-color: #e11d48;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.65),
+        0 2px 14px -4px rgba(225, 29, 72, 0.12);
+    }
+    #app-main.cg-festive-theme--amor_amistad .cg-dash-festive-card .card-h h3 {
+      color: #9f1239;
+    }
+    #app-main.cg-festive-theme--amor_amistad .cg-dash-festive-card .cg-dash-bday-msg {
+      color: color-mix(in srgb, #831843 78%, var(--secondary-text, #64748b));
+    }
+    #app-main.cg-festive-theme--amor_amistad .cg-dash-festive-card .cg-festive-float:nth-child(odd) {
+      color: #e11d48;
+    }
+    #app-main.cg-festive-theme--amor_amistad .cg-dash-festive-card .cg-festive-float:nth-child(even) {
+      color: #a855f7;
+    }
+    #app-main.cg-festive-theme--amor_amistad .cg-dash-festive-card .cg-festive-dash-h-icon {
+      color: #fff;
+      background: linear-gradient(145deg, #fb7185 0%, #e11d48 48%, #c026d3 100%);
+      box-shadow:
+        inset 0 0 0 1px rgba(190, 24, 93, 0.35),
+        0 4px 18px -4px rgba(225, 29, 72, 0.4),
+        0 0 0 1px rgba(255, 255, 255, 0.2);
+    }
+    #app-main.cg-festive-theme--amor_amistad .cg-dash-festive-card .cg-festive-banner__preview-note {
+      color: #9d174d;
+    }
+    #app-main.cg-festive-theme--amor_amistad .cg-dash-festive-card .cg-festive-banner__preview-pill {
+      background: color-mix(in srgb, #fda4af 35%, #fce7f3);
+      color: #831843;
+      border: 1px solid color-mix(in srgb, #e11d48 22%, transparent);
+    }
     #app-main.cg-festive-on.cg-festive-theme--neutral .main-wrap {
       box-shadow: inset 0 3px 0 color-mix(in srgb, var(--blue-500) 45%, transparent);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--amor_amistad .main-wrap {
+      box-shadow: inset 0 3px 0 color-mix(in srgb, #e11d48 38%, #a855f7 22%, transparent);
     }
     #app-main.cg-festive-on .main-wrap {
       position: relative;
@@ -2728,6 +2773,13 @@
       opacity: 0.08;
       color: #d97706;
     }
+    #app-main.cg-festive-theme--amor_amistad .main-wrap::before {
+      opacity: 0.085;
+      color: #fb7185;
+      background-image: radial-gradient(circle at 8% 12%, #fda4af 0, transparent 38%),
+        radial-gradient(circle at 92% 20%, #e9d5ff 0, transparent 36%),
+        radial-gradient(circle at 48% 0%, #fecdd3 0, transparent 28%);
+    }
     #app-main.cg-festive-on .main-wrap > .topbar,
     #app-main.cg-festive-on .main-wrap > .content {
       position: relative;
@@ -2747,6 +2799,9 @@
     }
     #app-main.cg-festive-theme--newyear .topbar {
       box-shadow: inset 0 -1px 0 rgba(250, 204, 21, 0.28);
+    }
+    #app-main.cg-festive-theme--amor_amistad .topbar {
+      box-shadow: inset 0 -1px 0 color-mix(in srgb, #e11d48 22%, #c026d3 18%, transparent);
     }
     #app-main.cg-festive-theme--neutral .cg-dash-festive-card .cg-festive-float { color: var(--blue-500); }
     #app-main.cg-festive-theme--neutral .cg-dash-festive-card .cg-festive-dash-h-icon {
@@ -3288,6 +3343,20 @@
       color: #713f12;
       border-color: rgba(250, 204, 21, 0.35);
     }
+    #app-main.cg-festive-on.cg-festive-theme--amor_amistad .cg-topbar-user-chip--conserje {
+      border-color: color-mix(in srgb, #e11d48 26%, var(--gray-200));
+      box-shadow:
+        0 2px 12px rgba(225, 29, 72, 0.08),
+        0 0 0 1px color-mix(in srgb, #c026d3 14%, transparent);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--amor_amistad .cg-topbar-user-chip--conserje .cg-topbar-user-avatar {
+      background: linear-gradient(145deg, #fb7185 0%, #e11d48 52%, #a855f7 100%);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--amor_amistad .cg-topbar-user-chip--conserje .cg-topbar-user-role-badge {
+      background: rgba(225, 29, 72, 0.12);
+      color: #9f1239;
+      border-color: color-mix(in srgb, #e11d48 28%, #a855f7 20%, transparent);
+    }
     #app-main.cg-festive-on.cg-festive-theme--neutral .cg-topbar-user-chip--conserje .cg-topbar-user-role-badge {
       background: color-mix(in srgb, var(--blue-500) 12%, transparent);
       border-color: color-mix(in srgb, var(--blue-500) 22%, transparent);
@@ -3307,6 +3376,13 @@
     }
     #app-main.cg-festive-on.cg-festive-theme--labor .cg-topbar-user-chip--other {
       border-color: color-mix(in srgb, #ca8a04 18%, var(--gray-200));
+    }
+    #app-main.cg-festive-on.cg-festive-theme--amor_amistad .cg-topbar-user-chip--admin {
+      border-color: color-mix(in srgb, #e11d48 20%, var(--gray-200));
+      box-shadow: 0 2px 8px rgba(225, 29, 72, 0.06);
+    }
+    #app-main.cg-festive-on.cg-festive-theme--amor_amistad .cg-topbar-user-chip--other {
+      border-color: color-mix(in srgb, #f472b6 22%, var(--gray-200));
     }
     @media (prefers-reduced-motion: reduce) {
       .cg-topbar-user-chip:hover,
@@ -7595,7 +7671,8 @@
         ["staffBirthdays", migrateStaffBirthdays],
         ["dashScheduledAlerts", migrateDashScheduledAlerts],
         ["festiveAmbience", migrateFestiveAmbience],
-        ["festiveAmorAmistadFeb12", migrateFestiveAmorAmistadFeb12]
+        ["festiveAmorAmistadFeb12", migrateFestiveAmorAmistadFeb12],
+        ["festiveAmorAmistadThemePack", migrateFestiveAmorAmistadThemePack]
       ];
       var si;
       for (si = 0; si < steps.length; si++) {
@@ -7665,7 +7742,7 @@
             "amor_amistad_feb12",
             "Día del amor y la amistad",
             "¡Feliz Día del amor y la amistad! Celebremos el cariño y el buen compañerismo en la conserjería y con la comunidad.",
-            "neutral"
+            "amor_amistad"
           ),
           rulePreset(
             "patrias_sep",
@@ -7766,6 +7843,33 @@
         save("festiveAmbience", next);
       }
       save("migrated_festive_amor_amistad_feb12_v1", true);
+    }
+
+    /** Una vez: tema visual amor_amistad en regla 12 feb (antes neutral). */
+    function migrateFestiveAmorAmistadThemePack() {
+      if (load("migrated_festive_amor_amistad_theme_pack_v1", false)) return;
+      var raw = load("festiveAmbience", null);
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        save("migrated_festive_amor_amistad_theme_pack_v1", true);
+        return;
+      }
+      var rules = Array.isArray(raw.rules) ? raw.rules.slice() : [];
+      var changed = false;
+      var i;
+      for (i = 0; i < rules.length; i++) {
+        var r = rules[i];
+        if (r && r.kind === "preset" && r.preset === "amor_amistad_feb12") {
+          var th = String(r.theme || "").toLowerCase();
+          if (th === "neutral" || th === "") {
+            rules[i] = Object.assign({}, r, { theme: "amor_amistad" });
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        save("festiveAmbience", Object.assign({}, raw, { rules: rules }));
+      }
+      save("migrated_festive_amor_amistad_theme_pack_v1", true);
     }
 
     var CG_FESTIVE_PRESET_META = {
@@ -7882,7 +7986,15 @@
 
     function cgFestiveThemeClass(theme) {
       var t = String(theme || "neutral").toLowerCase();
-      if (t === "labor" || t === "patrias" || t === "navidad" || t === "newyear" || t === "neutral") return t;
+      if (
+        t === "labor" ||
+        t === "patrias" ||
+        t === "navidad" ||
+        t === "newyear" ||
+        t === "neutral" ||
+        t === "amor_amistad"
+      )
+        return t;
       return "neutral";
     }
 
@@ -7908,6 +8020,10 @@
         neutral: {
           main: "fa-wand-magic-sparkles",
           floats: ["fa-heart", "fa-star", "fa-sparkles", "fa-gift", "fa-music"]
+        },
+        amor_amistad: {
+          main: "fa-heart",
+          floats: ["fa-gift", "fa-star", "fa-music", "fa-hand-holding-heart", "fa-face-smile"]
         }
       };
       return packs[th] || packs.neutral;
@@ -7949,7 +8065,7 @@
         syncTopbarPersonality();
         return;
       }
-      var themeClasses = ["labor", "patrias", "navidad", "newyear", "neutral"];
+      var themeClasses = ["labor", "patrias", "navidad", "newyear", "neutral", "amor_amistad"];
       var ti;
       for (ti = 0; ti < themeClasses.length; ti++) {
         app.classList.remove("cg-festive-theme--" + themeClasses[ti]);
@@ -15730,7 +15846,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         patrias: { conserje: "fa-flag", admin: "fa-landmark", other: "fa-star" },
         navidad: { conserje: "fa-gift", admin: "fa-tree", other: "fa-snowflake" },
         newyear: { conserje: "fa-champagne-glasses", admin: "fa-clock", other: "fa-music" },
-        neutral: { conserje: "fa-sparkles", admin: "fa-wand-magic-sparkles", other: "fa-heart" }
+        neutral: { conserje: "fa-sparkles", admin: "fa-wand-magic-sparkles", other: "fa-heart" },
+        amor_amistad: { conserje: "fa-heart", admin: "fa-gift", other: "fa-hand-holding-heart" }
       };
     }
     function cgUpdateTopbarUserPersonality() {
@@ -15741,7 +15858,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var festiveOn = app && app.classList.contains("cg-festive-on");
       var themeKey = "base";
       if (festiveOn) {
-        var ths = ["labor", "patrias", "navidad", "newyear", "neutral"];
+        var ths = ["labor", "patrias", "navidad", "newyear", "neutral", "amor_amistad"];
         for (var ti = 0; ti < ths.length; ti++) {
           if (app.classList.contains("cg-festive-theme--" + ths[ti])) {
             themeKey = ths[ti];
@@ -24664,6 +24781,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       { v: "patrias", l: "Fiestas Patrias (azul y rojo)" },
       { v: "navidad", l: "Navidad (verde y rojo)" },
       { v: "newyear", l: "Año Nuevo (nocturno dorado)" },
+      { v: "amor_amistad", l: "Amor y amistad (rosa, coral y violeta)" },
       { v: "neutral", l: "Neutro (acento institucional)" }
     ];
     var themeHtml = themeOpts
