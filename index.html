@@ -2635,6 +2635,59 @@
       color: #831843;
       font-weight: 500;
     }
+    #dash-scheduled-alerts-mount:empty {
+      display: none;
+    }
+    .cg-dash-sched-card {
+      margin-bottom: 0.6rem;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(135deg, #f0f9ff 0%, #fff 55%, #e0f2fe 100%);
+      box-shadow: 0 3px 14px rgba(2, 132, 199, 0.1);
+    }
+    .cg-dash-sched-card > .card-h.cg-dash-bday-card-h {
+      border-bottom: none;
+      padding: 0.5rem 0.85rem;
+    }
+    .cg-dash-sched-card > .card-b {
+      padding: 0.6rem 0.85rem 0.7rem;
+    }
+    .cg-dash-sched-card .cg-dash-bday-card-h h3 {
+      color: #0369a1;
+    }
+    .cg-dash-sched-alert-msg {
+      white-space: pre-wrap;
+      margin: 0;
+    }
+    .cg-dash-sched-meta {
+      margin: 0.45rem 0 0 !important;
+      font-size: 0.72rem !important;
+      color: #0c4a6e !important;
+      opacity: 0.9 !important;
+    }
+    .cg-adm-dash-alert-status {
+      display: inline-block;
+      padding: 0.12rem 0.4rem;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .cg-adm-dash-alert-status--ok {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .cg-adm-dash-alert-status--wait {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .cg-adm-dash-alert-status--off {
+      background: var(--gray-200);
+      color: var(--gray-700);
+    }
+    .cg-adm-dash-alert-status--bad {
+      background: #fee2e2;
+      color: #991b1b;
+    }
     /* Dashboard: tarjetas KPI más compactas y fila de gráficos */
     .cg-dash-stat-grid {
       display: grid;
@@ -5115,7 +5168,9 @@
       get conserjeActivityLog() { return load("conserjeActivityLog", []); },
       set conserjeActivityLog(v) { save("conserjeActivityLog", v); },
       get staffBirthdays() { return load("staffBirthdays", []); },
-      set staffBirthdays(v) { save("staffBirthdays", v); }
+      set staffBirthdays(v) { save("staffBirthdays", v); },
+      get dashScheduledAlerts() { return load("dashScheduledAlerts", []); },
+      set dashScheduledAlerts(v) { save("dashScheduledAlerts", v); }
     };
 
     /* ┌─ 7. Sesión, permisos por módulo, bloqueo turno conserje ──────────────────────── */
@@ -5874,7 +5929,8 @@
         ["provVisitAdmin", migrateProveedorVisitAdminDept],
         ["visitVehAlert", migrateVisitVehAlertLog],
         ["conserjeActivity", migrateConserjeActivityLog],
-        ["staffBirthdays", migrateStaffBirthdays]
+        ["staffBirthdays", migrateStaffBirthdays],
+        ["dashScheduledAlerts", migrateDashScheduledAlerts]
       ];
       var si;
       for (si = 0; si < steps.length; si++) {
@@ -5911,6 +5967,10 @@
 
     function migrateStaffBirthdays() {
       if (P.localGetRaw(LS + "staffBirthdays") === null) save("staffBirthdays", []);
+    }
+
+    function migrateDashScheduledAlerts() {
+      if (P.localGetRaw(LS + "dashScheduledAlerts") === null) save("dashScheduledAlerts", []);
     }
 
     function migrateStaffChat() {
@@ -14072,7 +14132,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       const actTable = buildDashMonthlyConserjeActivityHtml();
       return (
         "<h1 class=\"page-title\">Dashboard</h1>" +
-        "<p class=\"page-desc\">Resumen de actividad en conserjería (visitas, reservas, encomiendas, novedades y registro de operaciones por usuario).</p>" +
+        "<p class=\"page-desc\">Resumen de actividad en conserjería (visitas, reservas, encomiendas, novedades y registro de operaciones por usuario). Si el administrador programó avisos, aparecen debajo del bloque de cumpleaños.</p>" +
         "<div class=\"card cg-dash-bday-card\" id=\"dash-staff-bday-card\" style=\"display:none;border-left:3px solid #db2777\">" +
         "<div class=\"cg-dash-bday-confetti\" aria-hidden=\"true\">" +
         "<span class=\"cg-dash-bday-confetti-piece\"></span><span class=\"cg-dash-bday-confetti-piece\"></span><span class=\"cg-dash-bday-confetti-piece\"></span><span class=\"cg-dash-bday-confetti-piece\"></span>" +
@@ -14094,6 +14154,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<span class=\"cg-dash-bday-balloon cg-dash-bday-balloon--i\"></span></div>" +
         "<div class=\"card-h cg-dash-bday-card-h\"><h3><i class=\"fa-solid fa-cake-candles\" style=\"opacity:0.9\"></i> Hoy hay algo que celebrar</h3></div>" +
         "<div class=\"card-b\" id=\"dash-staff-bday-body\" aria-live=\"polite\"></div></div>" +
+        "<div id=\"dash-scheduled-alerts-mount\" class=\"cg-dash-sched-mount\" aria-live=\"polite\"></div>" +
         "<div class=\"card cg-dash-veh-card\" id=\"dash-veh-card\" style=\"display:none;border-left:4px solid #ea580c\">" +
         "<div class=\"card-h\"><h3><i class=\"fa-solid fa-car-side\" style=\"opacity:0.85\"></i> Visitas vehiculares en curso</h3>" +
         "<span class=\"page-desc\" style=\"margin:0;font-size:0.78rem\">Solo visitas <strong>vehiculares de persona</strong>: tiempos en vivo, aviso a 30 min del límite de 5 h y multa tras 15 min de gracia. <strong>Alerta sonora</strong> al cruzar cada umbral (tras un clic o tecla en la app, por política del navegador). Proveedores llevan tiempo sin multas; peatones sin cómputo.</span></div>" +
@@ -14136,6 +14197,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (window.CG_ACTIONS && CG_ACTIONS.updateVisitLiveDurations) CG_ACTIONS.updateVisitLiveDurations();
         if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardVehAlerts) CG_ACTIONS.renderDashboardVehAlerts();
         if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardStaffBirthdays) CG_ACTIONS.renderDashboardStaffBirthdays();
+        if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardScheduledAlerts) CG_ACTIONS.renderDashboardScheduledAlerts();
         if (document.getElementById("dash-chart-visits")) updateDashboardChartsSummaryAndActivity();
       }
       visitAlertsTick();
@@ -14471,7 +14533,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
       return (
         "<h1 class=\"page-title\">Panel de administrador</h1>" +
-        "<p class=\"page-desc\">Personal, turnos y horas, permisos por rol, reportes y configuración.</p>" +
+        "<p class=\"page-desc\">Personal, turnos y horas, permisos por rol, reportes, alertas programadas del dashboard y configuración.</p>" +
         "<div class=\"admin-tabs\" role=\"toolbar\" aria-label=\"Secciones de administración\">" +
         "<button type=\"button\" class=\"admin-tab active\" data-adm=\"staff\" aria-pressed=\"true\">Personal</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"turnos\" aria-pressed=\"false\">Turnos</button>" +
@@ -14479,6 +14541,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"rep\" aria-pressed=\"false\">Reportes</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"personalizacion\" aria-pressed=\"false\">Personalización</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"rrhh\" aria-pressed=\"false\">RRHH</button>" +
+        "<button type=\"button\" class=\"admin-tab\" data-adm=\"dashAlerts\" aria-pressed=\"false\">Alertas dashboard</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"cfg\" aria-pressed=\"false\">Configuración</button></div>" +
         "<div id=\"adm-panel\" role=\"region\" aria-label=\"Contenido de administración\"></div>"
       );
@@ -14506,6 +14569,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
       if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardVehAlerts) CG_ACTIONS.renderDashboardVehAlerts();
       if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardStaffBirthdays) CG_ACTIONS.renderDashboardStaffBirthdays();
+      if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardScheduledAlerts) CG_ACTIONS.renderDashboardScheduledAlerts();
       renderDashboardCharts();
     }
 
@@ -14686,6 +14750,20 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             var tabRrhh = document.querySelector(".admin-tab[data-adm=\"rrhh\"].active");
             if (tabRrhh) A.renderAdmin("rrhh");
           } catch (eRhh) {}
+        }
+      }
+
+      if (k === "dashScheduledAlerts") {
+        if (dash && A && typeof A.renderDashboardScheduledAlerts === "function") {
+          try {
+            A.renderDashboardScheduledAlerts();
+          } catch (eDsa) {}
+        }
+        if (A && typeof A.renderAdmin === "function") {
+          try {
+            var tabDa = document.querySelector(".admin-tab[data-adm=\"dashAlerts\"].active");
+            if (tabDa) A.renderAdmin("dashAlerts");
+          } catch (eDa) {}
         }
       }
 
@@ -20645,6 +20723,340 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "</ul>";
   };
 
+  function parseDatetimeLocalDashAlert(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(s || "").trim());
+    if (!m) return null;
+    var d = new Date(
+      parseInt(m[1], 10),
+      parseInt(m[2], 10) - 1,
+      parseInt(m[3], 10),
+      parseInt(m[4], 10),
+      parseInt(m[5], 10),
+      0,
+      0
+    );
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function dashAlertToDatetimeLocalValue(iso) {
+    if (!iso) return "";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    function pad(n) {
+      return n < 10 ? "0" + n : String(n);
+    }
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
+  function dashAlertAdminRowStatus(a, now) {
+    if (!a || a.enabled === false) {
+      return { label: "Desactivada", cls: "cg-adm-dash-alert-status--off" };
+    }
+    var s = a.startAt ? new Date(a.startAt) : null;
+    var en = a.endAt ? new Date(a.endAt) : null;
+    if (!s || !en || isNaN(s.getTime()) || isNaN(en.getTime())) {
+      return { label: "Fechas inválidas", cls: "cg-adm-dash-alert-status--bad" };
+    }
+    if (now < s) return { label: "Programada", cls: "cg-adm-dash-alert-status--wait" };
+    if (now > en) return { label: "Finalizada", cls: "cg-adm-dash-alert-status--off" };
+    return { label: "En vigor", cls: "cg-adm-dash-alert-status--ok" };
+  }
+
+  function buildRenderAdminDashAlertsHtml() {
+    var pf = A._dashAlertFormPrefill;
+    A._dashAlertFormPrefill = null;
+    var vId = pf && pf.id != null && String(pf.id) !== "" ? G.escapeAttr(String(pf.id)) : "";
+    var vTitle = pf && pf.title != null ? G.escapeAttr(String(pf.title)) : "";
+    var vMsg = pf && pf.message != null ? G.escapeHtml(String(pf.message)) : "";
+    var vStart = pf && pf.startAt ? G.escapeAttr(dashAlertToDatetimeLocalValue(pf.startAt)) : "";
+    var vEnd = pf && pf.endAt ? G.escapeAttr(dashAlertToDatetimeLocalValue(pf.endAt)) : "";
+    var chkEn = !pf || pf.enabled !== false ? " checked" : "";
+    var list = Array.isArray(G.state.dashScheduledAlerts) ? G.state.dashScheduledAlerts.slice() : [];
+    var now = new Date();
+    list.sort(function (a, b) {
+      return new Date(b.startAt || 0).getTime() - new Date(a.startAt || 0).getTime();
+    });
+    var rows =
+      list.length > 0
+        ? list
+            .map(function (a) {
+              var idA = G.escapeAttr(a.id || "");
+              var st = dashAlertAdminRowStatus(a, now);
+              var startL = a.startAt ? G.fmtDate(a.startAt) : "—";
+              var endL = a.endAt ? G.fmtDate(a.endAt) : "—";
+              var prev = String(a.message || "").replace(/\s+/g, " ").trim();
+              if (prev.length > 90) prev = prev.slice(0, 90) + "…";
+              return (
+                "<tr><td><span class=\"cg-adm-dash-alert-status " +
+                st.cls +
+                "\">" +
+                G.escapeHtml(st.label) +
+                "</span></td><td>" +
+                G.escapeHtml(a.title || "—") +
+                "</td><td style=\"max-width:15rem;font-size:0.82rem\">" +
+                G.escapeHtml(prev || "—") +
+                "</td><td style=\"white-space:nowrap;font-size:0.82rem\">" +
+                G.escapeHtml(startL) +
+                "</td><td style=\"white-space:nowrap;font-size:0.82rem\">" +
+                G.escapeHtml(endL) +
+                "</td><td style=\"white-space:nowrap\">" +
+                "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"dashScheduledAlertToggle\" data-cg-id=\"" +
+                idA +
+                "\" title=\"Activar o desactivar\"><i class=\"fa-solid fa-power-off\"></i></button> " +
+                "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"dashScheduledAlertEdit\" data-cg-id=\"" +
+                idA +
+                "\"><i class=\"fa-solid fa-pen\"></i></button> " +
+                "<button type=\"button\" class=\"btn btn-danger btn-sm\" data-cg-act=\"dashScheduledAlertDel\" data-cg-id=\"" +
+                idA +
+                "\"><i class=\"fa-solid fa-trash\"></i></button></td></tr>"
+              );
+            })
+            .join("")
+        : "<tr><td colspan=\"6\" class=\"page-desc\">No hay alertas programadas. Use el formulario inferior.</td></tr>";
+    return (
+      "<div class=\"card\"><div class=\"card-h\"><h3>Alertas programadas del dashboard</h3></div>" +
+      "<div class=\"card-b\">" +
+      "<p class=\"page-desc\" style=\"margin:0 0 1rem;font-size:0.86rem\">" +
+      "Avisos para conserjería en la parte superior del <strong>Dashboard</strong> (junto al mensaje de cumpleaños). " +
+      "Solo se muestran si están <strong>activas</strong> y la hora actual está entre <strong>inicio</strong> y <strong>término</strong>. " +
+      "Pueden coexistir varias alertas a la vez.</p>" +
+      "<div class=\"data-table-wrap\" style=\"overflow:auto\"><table class=\"data-table\"><thead><tr><th>Estado</th><th>Título</th><th>Mensaje</th><th>Inicio</th><th>Término</th><th></th></tr></thead><tbody>" +
+      rows +
+      "</tbody></table></div></div></div>" +
+      "<div class=\"card\" style=\"margin-top:1rem\"><div class=\"card-h\"><h3 style=\"font-size:0.98rem\">Crear o editar alerta</h3>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"dashScheduledAlertFormClear\" data-cg-empty=\"1\">Limpiar formulario</button></div>" +
+      "<div class=\"card-b\">" +
+      "<input type=\"hidden\" id=\"adm-dash-alert-id\" value=\"" +
+      vId +
+      "\" />" +
+      "<div class=\"form-group\"><label for=\"adm-dash-alert-title\">Título</label>" +
+      "<input type=\"text\" id=\"adm-dash-alert-title\" maxlength=\"120\" value=\"" +
+      vTitle +
+      "\" placeholder=\"Ej. Mantenimiento ascensores\" style=\"width:100%;max-width:28rem\" /></div>" +
+      "<div class=\"form-group\"><label for=\"adm-dash-alert-msg\">Mensaje</label>" +
+      "<textarea id=\"adm-dash-alert-msg\" rows=\"4\" style=\"width:100%;max-width:36rem\" placeholder=\"Detalle, piso afectado, contacto, etc.\">" +
+      vMsg +
+      "</textarea></div>" +
+      "<div class=\"toolbar\" style=\"gap:1rem;flex-wrap:wrap;align-items:flex-end\">" +
+      "<div class=\"form-group\" style=\"margin:0\"><label for=\"adm-dash-alert-start\">Inicio</label>" +
+      "<input type=\"datetime-local\" id=\"adm-dash-alert-start\" value=\"" +
+      vStart +
+      "\" /></div>" +
+      "<div class=\"form-group\" style=\"margin:0\"><label for=\"adm-dash-alert-end\">Término</label>" +
+      "<input type=\"datetime-local\" id=\"adm-dash-alert-end\" value=\"" +
+      vEnd +
+      "\" /></div>" +
+      "<label style=\"display:flex;align-items:center;gap:0.35rem;margin:0\"><input type=\"checkbox\" id=\"adm-dash-alert-enabled\"" +
+      chkEn +
+      " /> <span>Activa</span></label></div>" +
+      "<button type=\"button\" class=\"btn btn-primary\" style=\"margin-top:0.85rem\" data-cg-act=\"dashScheduledAlertSave\" data-cg-empty=\"1\"><i class=\"fa-solid fa-floppy-disk\"></i> Guardar alerta</button>" +
+      "</div></div>"
+    );
+  }
+
+  A.renderDashboardScheduledAlerts = function () {
+    var mount = document.getElementById("dash-scheduled-alerts-mount");
+    if (!mount) return;
+    var now = new Date();
+    var list = Array.isArray(G.state.dashScheduledAlerts) ? G.state.dashScheduledAlerts.slice() : [];
+    var active = list.filter(function (a) {
+      if (!a || a.enabled === false) return false;
+      var s = a.startAt ? new Date(a.startAt) : null;
+      var en = a.endAt ? new Date(a.endAt) : null;
+      if (!s || !en || isNaN(s.getTime()) || isNaN(en.getTime())) return false;
+      return now >= s && now <= en;
+    });
+    active.sort(function (a, b) {
+      return new Date(a.startAt || 0).getTime() - new Date(b.startAt || 0).getTime();
+    });
+    if (!active.length) {
+      mount.innerHTML = "";
+      return;
+    }
+    mount.innerHTML = active
+      .map(function (a) {
+        var title = G.escapeHtml(a.title || "Aviso");
+        var msgEsc = G.escapeHtml(a.message || "");
+        var endShow = a.endAt ? G.fmtDate(a.endAt) : "—";
+        return (
+          "<div class=\"card cg-dash-sched-card\" role=\"status\">" +
+          "<div class=\"card-h cg-dash-bday-card-h\"><h3><i class=\"fa-solid fa-bullhorn\" aria-hidden=\"true\"></i> " +
+          title +
+          "</h3></div>" +
+          "<div class=\"card-b\">" +
+          "<p class=\"cg-dash-bday-msg cg-dash-sched-alert-msg\">" +
+          msgEsc.replace(/\n/g, "<br>") +
+          "</p>" +
+          "<p class=\"page-desc cg-dash-sched-meta\">Visible hasta <strong>" +
+          G.escapeHtml(endShow) +
+          "</strong></p>" +
+          "</div></div>"
+        );
+      })
+      .join("");
+  };
+
+  A.dashScheduledAlertFormClear = function () {
+    A._dashAlertFormPrefill = null;
+    A.renderAdmin("dashAlerts");
+  };
+
+  A.dashScheduledAlertEdit = function (id) {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede editar alertas.", "error");
+      return;
+    }
+    var list = Array.isArray(G.state.dashScheduledAlerts) ? G.state.dashScheduledAlerts : [];
+    var a = null;
+    var i;
+    for (i = 0; i < list.length; i++) {
+      if (list[i] && String(list[i].id) === String(id)) {
+        a = list[i];
+        break;
+      }
+    }
+    if (!a) {
+      G.toast("Alerta no encontrada.", "warn");
+      return;
+    }
+    A._dashAlertFormPrefill = {
+      id: a.id,
+      title: a.title || "",
+      message: a.message || "",
+      startAt: a.startAt || "",
+      endAt: a.endAt || "",
+      enabled: a.enabled !== false
+    };
+    A.renderAdmin("dashAlerts");
+  };
+
+  A.dashScheduledAlertToggle = function (id) {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede cambiar alertas.", "error");
+      return;
+    }
+    var list = Array.isArray(G.state.dashScheduledAlerts) ? G.state.dashScheduledAlerts.slice() : [];
+    var found = false;
+    list = list.map(function (x) {
+      if (!x || String(x.id) !== String(id)) return x;
+      found = true;
+      var next = Object.assign({}, x);
+      next.enabled = x.enabled === false;
+      return next;
+    });
+    if (!found) {
+      G.toast("Alerta no encontrada.", "warn");
+      return;
+    }
+    G.state.dashScheduledAlerts = list;
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("dashScheduledAlerts");
+    if (typeof G.logConserjeActivity === "function") {
+      G.logConserjeActivity("dash_sched_alert_toggle", String(id).slice(0, 120));
+    }
+    G.toast("Estado actualizado");
+    A.renderAdmin("dashAlerts");
+    if (typeof A.renderDashboardScheduledAlerts === "function") A.renderDashboardScheduledAlerts();
+  };
+
+  A.dashScheduledAlertDel = function (id) {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede eliminar alertas.", "error");
+      return;
+    }
+    if (!confirm("¿Eliminar esta alerta programada?")) return;
+    var list = (Array.isArray(G.state.dashScheduledAlerts) ? G.state.dashScheduledAlerts : []).filter(function (x) {
+      return !x || String(x.id) !== String(id);
+    });
+    G.state.dashScheduledAlerts = list;
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("dashScheduledAlerts");
+    if (typeof G.logConserjeActivity === "function") G.logConserjeActivity("dash_sched_alert_del", String(id).slice(0, 120));
+    G.toast("Alerta eliminada");
+    A.renderAdmin("dashAlerts");
+    if (typeof A.renderDashboardScheduledAlerts === "function") A.renderDashboardScheduledAlerts();
+  };
+
+  A.dashScheduledAlertSave = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede guardar alertas.", "error");
+      return;
+    }
+    var idEl = document.getElementById("adm-dash-alert-id");
+    var titleEl = document.getElementById("adm-dash-alert-title");
+    var msgEl = document.getElementById("adm-dash-alert-msg");
+    var startEl = document.getElementById("adm-dash-alert-start");
+    var endEl = document.getElementById("adm-dash-alert-end");
+    var enEl = document.getElementById("adm-dash-alert-enabled");
+    if (!titleEl || !msgEl || !startEl || !endEl) return;
+    var title = String(titleEl.value || "").trim();
+    if (!title) {
+      G.toast("Indique un título.", "warn");
+      return;
+    }
+    var message = String(msgEl.value || "").trim();
+    if (message.length > 4000) {
+      G.toast("El mensaje es demasiado largo (máx. 4000 caracteres).", "warn");
+      return;
+    }
+    var startD = parseDatetimeLocalDashAlert(String(startEl.value || ""));
+    var endD = parseDatetimeLocalDashAlert(String(endEl.value || ""));
+    if (!startD || !endD) {
+      G.toast("Indique inicio y término válidos (fecha y hora).", "warn");
+      return;
+    }
+    if (endD.getTime() < startD.getTime()) {
+      G.toast("El término debe ser igual o posterior al inicio.", "warn");
+      return;
+    }
+    var enabled = enEl ? !!enEl.checked : true;
+    var id = idEl && idEl.value ? String(idEl.value).trim() : "";
+    var list = Array.isArray(G.state.dashScheduledAlerts) ? G.state.dashScheduledAlerts.slice() : [];
+    var nowIso = new Date().toISOString();
+    if (id) {
+      var idx = -1;
+      var j;
+      for (j = 0; j < list.length; j++) {
+        if (list[j] && String(list[j].id) === id) {
+          idx = j;
+          break;
+        }
+      }
+      if (idx < 0) {
+        G.toast("No se encontró la alerta a actualizar.", "warn");
+        return;
+      }
+      list[idx] = {
+        id: list[idx].id,
+        title: title,
+        message: message,
+        startAt: startD.toISOString(),
+        endAt: endD.toISOString(),
+        enabled: enabled,
+        updatedAt: nowIso,
+        createdAt: list[idx].createdAt || nowIso
+      };
+    } else {
+      list.push({
+        id: G.uid(),
+        title: title,
+        message: message,
+        startAt: startD.toISOString(),
+        endAt: endD.toISOString(),
+        enabled: enabled,
+        createdAt: nowIso
+      });
+    }
+    G.state.dashScheduledAlerts = list;
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("dashScheduledAlerts");
+    if (typeof G.logConserjeActivity === "function") G.logConserjeActivity("dash_sched_alert_save", title.slice(0, 120));
+    G.toast("Alerta guardada");
+    A.renderAdmin("dashAlerts");
+    if (typeof A.renderDashboardScheduledAlerts === "function") A.renderDashboardScheduledAlerts();
+  };
+
   function buildRenderAdminRrhhHtml() {
     var list = Array.isArray(G.state.staffBirthdays) ? G.state.staffBirthdays.slice() : [];
     var now = new Date();
@@ -21251,6 +21663,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div style=\"max-width:28rem\">" +
         palCards +
         "</div></div></div>";
+    } else if (tab === "dashAlerts") {
+      p.innerHTML = buildRenderAdminDashAlertsHtml();
     } else if (tab === "rrhh") {
       p.innerHTML = buildRenderAdminRrhhHtml();
       A.bindRrhhExcelImport();
