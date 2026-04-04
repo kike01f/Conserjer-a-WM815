@@ -883,7 +883,7 @@
       .cg-skip-link { transition: none; }
     }
 
-    /* Chat interno flotante — esquina fija; botón tipo cristal translúcido */
+    /* Chat interno flotante — esquina fija; botón circular con gradiente marca */
     .cg-staff-chat-root {
       position: fixed;
       right: max(1rem, env(safe-area-inset-right, 0px));
@@ -905,44 +905,40 @@
     }
     .cg-chat-fab {
       position: relative;
-      width: 3.55rem;
-      height: 3.55rem;
-      border-radius: 1rem;
-      border: 1px solid rgba(255, 255, 255, 0.5);
+      width: 3.65rem;
+      height: 3.65rem;
+      border-radius: 50%;
+      border: none;
       cursor: pointer;
-      background: rgba(22, 48, 12, 0.38);
-      backdrop-filter: blur(14px) saturate(1.25);
-      -webkit-backdrop-filter: blur(14px) saturate(1.25);
-      color: #ecfccb;
+      background: linear-gradient(145deg, #8fd633 0%, #74bd20 45%, #5fa018 100%);
+      color: #fff;
       box-shadow:
-        0 4px 22px rgba(15, 23, 42, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        0 0 0 3px rgba(116, 189, 32, 0.22),
+        0 4px 14px rgba(95, 160, 24, 0.45),
+        0 2px 6px rgba(15, 23, 42, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.38rem;
-      transition: background 0.2s ease, transform 0.18s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-    }
-    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-      .cg-chat-fab {
-        background: rgba(47, 80, 22, 0.9);
-      }
+      font-size: 1.42rem;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
     }
     .cg-chat-fab i {
       position: relative;
       z-index: 1;
-      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+      filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2));
     }
     .cg-chat-fab:hover {
-      background: rgba(34, 70, 18, 0.52);
-      border-color: rgba(255, 255, 255, 0.62);
-      transform: translateY(-2px);
+      filter: brightness(1.06);
+      transform: translateY(-3px) scale(1.03);
       box-shadow:
-        0 10px 32px rgba(15, 23, 42, 0.24),
-        inset 0 1px 0 rgba(255, 255, 255, 0.48);
+        0 12px 28px rgba(95, 160, 24, 0.5),
+        0 4px 10px rgba(15, 23, 42, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.45);
     }
     .cg-chat-fab:active {
-      transform: translateY(0);
+      transform: translateY(-1px) scale(1.01);
+      filter: brightness(0.97);
     }
     .cg-chat-fab:focus-visible {
       outline: 3px solid #fbbf24;
@@ -959,8 +955,8 @@
     }
     .cg-chat-badge {
       position: absolute;
-      top: -0.2rem;
-      right: -0.2rem;
+      top: -0.15rem;
+      right: -0.15rem;
       min-width: 1.35rem;
       height: 1.35rem;
       padding: 0 0.35rem;
