@@ -4728,8 +4728,13 @@
       line-height: 1.38;
       margin: 0.35rem 0 0;
     }
-    #f-nov-wrap.cg-nov-form-locked form#f-nov {
-      opacity: 0.9;
+    /* Bitácora: siempre legible; el bloqueo por turno solo afecta el formulario «Nueva entrada». */
+    #cg-nov-bitacora-card .timeline,
+    #cg-nov-bitacora-card .tl-item,
+    #cg-nov-bitacora-card .tl-card,
+    #cg-nov-bitacora-card .tl-meta {
+      opacity: 1 !important;
+      filter: none !important;
     }
     .card-h .cg-nov-bit-toolbar {
       flex: 1 1 100%;
@@ -16048,7 +16053,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"form-group\"><label>Categoría</label><select name=\"category\" required>" + catsForm + "</select></div>" +
         "<div class=\"form-group\"><label>Descripción</label><textarea name=\"text\" rows=\"3\" required placeholder=\"Detalle de la novedad…\"></textarea></div>" +
         "<button type=\"submit\" class=\"btn btn-primary\"><i class=\"fa-solid fa-book\"></i> Registrar</button></form></div></div>" +
-        "<div class=\"card\"><div class=\"card-h\"><h3>Bitácora</h3><div class=\"toolbar cg-nov-bit-toolbar\">" +
+        "<div class=\"card\" id=\"cg-nov-bitacora-card\"><div class=\"card-h\"><h3>Bitácora</h3><div class=\"toolbar cg-nov-bit-toolbar\">" +
         "<div class=\"cg-nov-q-wrap form-group\" style=\"margin:0\">" +
         "<label for=\"flt-nov-q\">Buscar</label>" +
         "<input type=\"search\" id=\"flt-nov-q\" placeholder=\"Texto, # de registro, autor…\" autocomplete=\"off\" />" +
@@ -22197,10 +22202,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var locked = !novedadConserjeMayRegisterNew(u);
     var hint =
       "Abra su turno en el recuadro <strong>Control de turno</strong> para poder registrar entradas en el libro.";
-    f.querySelectorAll("select, textarea, button[type=\"submit\"]").forEach(function (el) {
-      el.disabled = locked;
-    });
-    if (wrap) wrap.classList.toggle("cg-nov-form-locked", locked);
+    var catEl = f.querySelector('[name="category"]');
+    var textEl = f.querySelector('[name="text"]');
+    var subEl = f.querySelector('button[type="submit"]');
+    if (catEl) catEl.disabled = locked;
+    if (textEl) textEl.disabled = locked;
+    if (subEl) subEl.disabled = locked;
+    f.classList.toggle("cg-nov-form-locked", locked);
+    if (wrap) wrap.classList.remove("cg-nov-form-locked");
     if (msg) {
       if (locked) {
         msg.innerHTML = hint;
