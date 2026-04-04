@@ -17955,9 +17955,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   var CG_EMAIL_FIRMA_URL_LOGO = CG_EMAIL_FIRMA_SITE_BASE + "&utm_content=logo";
   var CG_EMAIL_FIRMA_URL_BOTON = CG_EMAIL_FIRMA_SITE_BASE + "&utm_content=boton_sitio";
   var CG_EMAIL_FIRMA_URL_TEXTO = CG_EMAIL_FIRMA_SITE_BASE + "&utm_content=texto_firma";
-  /** GIF firma Brevo (banner WM815). */
-  var CG_EMAIL_FIRMA_LOGO_GIF =
-    "https://img.mailinblue.com/8323725/images/content_library/original/69ceffbc186f62d83f9a5948.gif";
+  /** Logo de la app (mismo PNG que barra lateral / login). */
+  var CG_EMAIL_APP_LOGO_URL =
+    "https://img.mailinblue.com/8323725/images/content_library/original/6844749040dd0f16c5341248.png";
   var CG_EMAIL_FIRMA_LINE1 = "Sistema de Gestión - Conserjeria";
 
   function cgEmailSignaturePlain() {
@@ -17978,7 +17978,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   function cgEmailBuildingSignatureHtml() {
     var uLogo = G.escapeAttr(CG_EMAIL_FIRMA_URL_LOGO);
     var uBtn = G.escapeAttr(CG_EMAIL_FIRMA_URL_BOTON);
-    var uGif = G.escapeAttr(CG_EMAIL_FIRMA_LOGO_GIF);
+    var uAppLogo = G.escapeAttr(CG_EMAIL_APP_LOGO_URL);
     var uIconNet = G.escapeAttr("https://img.icons8.com/material-rounded/48/FFFFFF/internet.png");
     var uIconLeaf = G.escapeAttr("https://img.icons8.com/material-rounded/48/74bd20/leaf.png");
     var mso =
@@ -18000,9 +18000,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       '<a style="text-decoration:none;color:#3f3d56;display:inline-block;" href="' +
       uLogo +
       '" target="_blank" rel="noopener noreferrer">' +
-      '<img style="display:block;width:100%;max-width:156px;height:auto;margin:0 auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;background-color:transparent;" src="' +
-      uGif +
-      '" alt="Logo Edificio WM 815" width="156" border="0">' +
+      '<img style="display:block;width:100%;max-width:156px;height:auto;margin:0 auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;background-color:transparent;object-fit:contain;" src="' +
+      uAppLogo +
+      '" alt="Logo" width="156" border="0">' +
       "</a></td>" +
       '<td style="padding:8px 12px 8px 10px;vertical-align:middle;" valign="middle">' +
       '<p style="margin:0 0 5px 0;padding-left:9px;border-left:3px solid #74BD20;font-size:17px;line-height:1.2;color:#434343;font-weight:bold;letter-spacing:-0.02em;">' +
