@@ -13588,7 +13588,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<h1 class=\"page-title\">Dashboard</h1>" +
         "<p class=\"page-desc\">Resumen de actividad en conserjería (visitas, reservas, encomiendas, novedades y registro de operaciones por usuario).</p>" +
         "<div class=\"card cg-dash-bday-card\" id=\"dash-staff-bday-card\" style=\"display:none;border-left:4px solid #db2777\">" +
-        "<div class=\"card-h cg-dash-bday-card-h\"><h3><i class=\"fa-solid fa-cake-candles\" style=\"opacity:0.9\"></i> Un día especial para el equipo</h3></div>" +
+        "<div class=\"card-h cg-dash-bday-card-h\"><h3><i class=\"fa-solid fa-cake-candles\" style=\"opacity:0.9\"></i> Hoy hay algo que celebrar</h3></div>" +
         "<div class=\"card-b\" id=\"dash-staff-bday-body\" aria-live=\"polite\"></div></div>" +
         "<div class=\"card cg-dash-veh-card\" id=\"dash-veh-card\" style=\"display:none;border-left:4px solid #ea580c\">" +
         "<div class=\"card-h\"><h3><i class=\"fa-solid fa-car-side\" style=\"opacity:0.85\"></i> Visitas vehiculares en curso</h3>" +
@@ -19796,6 +19796,19 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return p.slice(8, 10) + "/" + p.slice(5, 7) + "/" + p.slice(0, 4);
   }
 
+  function staffBirthdayDashHash(s) {
+    var h = 5381;
+    var i;
+    for (i = 0; i < s.length; i++) {
+      h = (h * 33) ^ s.charCodeAt(i);
+    }
+    return h >>> 0;
+  }
+  function staffBirthdayDashPick(arr, seedStr) {
+    if (!arr || !arr.length) return "";
+    return arr[staffBirthdayDashHash(seedStr) % arr.length];
+  }
+
   A.renderDashboardStaffBirthdays = function () {
     var card = document.getElementById("dash-staff-bday-card");
     var body = document.getElementById("dash-staff-bday-body");
@@ -19827,16 +19840,67 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       })
       .join("");
     var nB = today.length;
-    var warmMsg =
-      nB === 1
-        ? "Hoy celebramos contigo. Gracias por tu dedicación en la conserjería y por el trato cercano que brindas cada día a residentes y visitas. Te deseamos un cumpleaños lleno de alegría, buena salud y momentos memorables junto a quienes más quieres."
-        : "Hoy celebramos con ustedes. Gracias por su dedicación en la conserjería y por el esfuerzo diario que hace del edificio un lugar más acogedor. Les deseamos un cumpleaños lleno de alegría, buena salud y momentos inolvidables junto a las personas que más quieren.";
+    var seedBase =
+      now.getFullYear() +
+      "-" +
+      (now.getMonth() + 1) +
+      "-" +
+      now.getDate() +
+      "|" +
+      today
+        .map(function (e) {
+          return String(e.name || "") + "\0" + String(e.id || "");
+        })
+        .sort()
+        .join("|");
+    var leads1 = [
+      "¡Qué lindo es hoy!",
+      "¡Brindemos por ti!",
+      "¡Hoy mandamos buena onda!",
+      "¡Que sea un día redondo!",
+      "¡Te deseamos lo mejor!",
+      "¡Otro año en la cuenta!",
+      "¡Hoy toca celebrar!",
+      "¡Que te llenen de cariño!"
+    ];
+    var lines1 = [
+      "Que tengas risas, algo rico y un ratito solo para ti.",
+      "Ojalá te lleguen abrazos de verdad y mensajes que te hagan sonreír.",
+      "Que el día te sorprenda para bien, aunque sea en una cosa chica.",
+      "Un año más de historias; que este empiece con buena energía.",
+      "Que te regalen algo que te haga ojitos.",
+      "Si puedes, date un gusto hoy: lo mereces.",
+      "Que la música, el café o lo que te guste sepa un poco mejor hoy.",
+      "Que pases un día suave, sin apuro y con buena compañía."
+    ];
+    var leadsN = [
+      "¡Qué lindo día!",
+      "¡Brindemos por ustedes!",
+      "¡Hoy hay doble —o más— motivo!",
+      "¡Que lo pasen muy bien!",
+      "¡Felicidades, cumpleañeros!",
+      "¡Hoy el calendario juega a favor!",
+      "¡Les mandamos buena energía!",
+      "¡A celebrar como prefieran!"
+    ];
+    var linesN = [
+      "Que tengan risas, algo rico y un buen momento para compartir.",
+      "Ojalá les lleguen detalles lindos y mensajes que les alegran el día.",
+      "Que celebren a su manera: tranquilo, ruidoso o en familia.",
+      "Feliz vuelta al sol; que este año les deje buenos recuerdos.",
+      "Que hoy les toque un poco de magia cotidiana.",
+      "Si pueden, dense un gusto entre todos o cada uno por su lado.",
+      "Que el día se les haga corto de obligaciones y largo de buenos ratos.",
+      "Les deseamos un día con buena compañía y cero estrés innecesario."
+    ];
+    var lead = staffBirthdayDashPick(nB === 1 ? leads1 : leadsN, seedBase + "|L");
+    var line = staffBirthdayDashPick(nB === 1 ? lines1 : linesN, seedBase + "|M");
     body.innerHTML =
-      "<p class=\"cg-dash-bday-lead\">¡Feliz cumpleaños" +
-      (nB === 1 ? "!" : " a quienes cumplen hoy!") +
-      " 🎂✨</p>" +
+      "<p class=\"cg-dash-bday-lead\">" +
+      G.escapeHtml(lead) +
+      "</p>" +
       "<p class=\"cg-dash-bday-msg\">" +
-      G.escapeHtml(warmMsg) +
+      G.escapeHtml(line) +
       "</p>" +
       "<p class=\"page-desc\" style=\"margin:0 0 0.5rem;font-size:0.8rem;font-weight:600;color:#be185d;opacity:0.95\">" +
       (nB === 1 ? "Cumpleañero del día" : "Cumpleañeros del día") +
