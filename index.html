@@ -20208,7 +20208,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       cgEmailSignaturePlain();
     var htmlBody = visitParteBodyHtml(v, dep, estVis, h);
     var subj =
-      "Parte visita vehicular — multa — Depto " + (dep ? dep.number : "");
+      "Se ha excedido el tiempo máximo del estacionamiento de visitas (N° " +
+      (dep && dep.number != null ? String(dep.number) : "—") +
+      ")";
     var mail = (dep && dep.email) ? String(dep.email).trim() : "";
     var mailto = mail ? mailtoHrefPlain(mail, subj, plain) : "";
     UI.openModal(
