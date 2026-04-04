@@ -439,6 +439,11 @@
             window.cgApp = firebase.app();
           }
           window.cgDb = firebase.firestore();
+          try {
+            if (window.cgDb && typeof window.cgDb.settings === "function") {
+              window.cgDb.settings({ experimentalAutoDetectLongPolling: true });
+            }
+          } catch (eFsSettings) {}
           window.cgAuth = firebase.auth();
           /* Emulador: en SDK modular use connectFirestoreEmulator(db, host, port) antes de otras llamadas;
              en este bundle compat, configure reglas contra el proyecto real o consulte la guía oficial. */
@@ -567,6 +572,7 @@
             },
             function (err) {
               window.__cgFsLastError = err;
+              console.warn("[CG][Firestore] subscribe (colección kv)", err);
             }
           );
         },
