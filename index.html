@@ -2631,64 +2631,100 @@
     }
     .cg-vis-type-opt-inner strong { display: block; font-size: 0.92rem; color: var(--blue-900); }
     .cg-vis-type-opt-inner small { display: block; font-size: 0.72rem; color: var(--gray-600); margin-top: 0.2rem; line-height: 1.3; }
-    /* Registro de visitas: formulario más compacto */
-    #f-visit.cg-visit-form {
-      padding: 0.5rem 0.6rem !important;
-      gap: 0;
-    }
-    .cg-page-compact .card.cg-card-accent--visit:has(#f-visit) .card-b {
+    /* Registro de visitas: varios paneles tipo encomienda */
+    .cg-vis-reg-card-b {
       padding: 0.55rem 0.72rem;
     }
-    #f-visit .cg-form-block {
+    .cg-vis-reg-stack {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+      gap: 0.75rem;
+      align-items: start;
+    }
+    .cg-vis-reg-sheet {
+      border: 1px solid var(--gray-200);
+      border-radius: 12px;
+      background: var(--white);
+      box-shadow: 0 2px 14px rgba(15, 23, 42, 0.07);
+      overflow: hidden;
+      min-width: 0;
+    }
+    .cg-vis-reg-sheet-h {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.5rem 0.72rem;
+      background: linear-gradient(135deg, #eff6ff 0%, #fff 100%);
+      border-bottom: 1px solid var(--gray-200);
+    }
+    .cg-vis-reg-sheet-h h4 {
+      margin: 0;
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: var(--blue-900);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .cg-vis-reg-sheet-b {
+      padding: 0.5rem 0.62rem 0.62rem;
+    }
+    form.cg-vis-reg-form.cg-visit-form {
+      padding: 0 !important;
+      gap: 0;
+    }
+    .cg-vis-reg-form .cg-form-block {
       margin-bottom: 0.4rem;
       padding-bottom: 0.35rem;
     }
-    #f-visit .cg-form-block:last-of-type {
+    .cg-vis-reg-form .cg-form-block:last-of-type {
       margin-bottom: 0;
       padding-bottom: 0;
     }
-    #f-visit .cg-form-block-title {
+    .cg-vis-reg-form .cg-form-block-title {
       margin: 0 0 0.3rem;
       font-size: calc(0.65rem * 0.93);
     }
-    #f-visit .form-group {
+    .cg-vis-reg-form .form-group {
       margin-bottom: 0.4rem;
     }
-    #f-visit .form-group:last-child {
+    .cg-vis-reg-form .form-group:last-child {
       margin-bottom: 0;
     }
-    #f-visit .form-group label {
+    .cg-vis-reg-form .form-group label {
       margin-bottom: 0.2rem;
       font-size: calc(0.75rem * 0.93);
     }
-    #f-visit .form-group input,
-    #f-visit .form-group select,
-    #f-visit .form-group textarea {
+    .cg-vis-reg-form .form-group input,
+    .cg-vis-reg-form .form-group select,
+    .cg-vis-reg-form .form-group textarea {
       padding: 0.45rem 0.58rem;
       font-size: calc(0.92rem * 0.93);
       line-height: 1.32;
     }
-    #f-visit .cg-form-grid-2 {
+    .cg-vis-reg-form .cg-form-grid-2 {
       gap: 0.32rem 0.5rem;
     }
-    #f-visit .cg-vis-type-pick {
+    .cg-vis-reg-form .cg-vis-type-pick {
       gap: 0.38rem;
       margin-top: 0.05rem;
     }
-    #f-visit .cg-vis-type-opt-inner {
+    .cg-vis-reg-form .cg-vis-type-opt-inner {
       padding: 0.42rem 0.55rem;
     }
-    #f-visit .cg-vis-type-opt-inner small {
+    .cg-vis-reg-form .cg-vis-type-opt-inner small {
       margin-top: 0.1rem;
       line-height: 1.25;
     }
-    #f-visit > .btn.btn-primary {
+    .cg-vis-reg-form > .btn.btn-primary {
       margin-top: 0.3rem;
+      width: 100%;
     }
-    #f-visit .page-desc {
+    .cg-vis-reg-form .page-desc {
       margin-top: 0.2rem !important;
     }
-    #f-visit #veh-extra .page-desc {
+    .cg-vis-reg-form .cg-vis-veh-extra .page-desc {
       margin-top: 0.15rem !important;
     }
     .cg-vis-open-card {
@@ -13802,75 +13838,23 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function pageVisitas() {
       if (window.CG_ACTIONS && CG_ACTIONS.syncParkingSlotsFromBuilding) CG_ACTIONS.syncParkingSlotsFromBuilding();
       var vpDatalist = visitorParkingDatalistOptionsHtml();
-      var nProv = (G.state.proveedores || []).length;
-      var provHint =
-        nProv > 0
-          ? "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.76rem;line-height:1.35\">Proveedores: elija la empresa registrada o cargue una nueva en el módulo <strong>Proveedores</strong>.</p>"
-          : "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.76rem;line-height:1.35\">Aún no hay empresas registradas. " +
-            "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"proveedores\"><i class=\"fa-solid fa-truck\"></i> Ir a Proveedores</button></p>";
       return (
         "<div class=\"cg-page-compact\">" +
         "<h1 class=\"page-title\">Registro de visitas</h1>" +
         "<div class=\"cg-module-intro\">" +
+        "<p class=\"page-desc\">Registro de ingreso de <strong>personas</strong> o <strong>proveedores</strong>. Indique el <strong>número de departamento</strong> y pulse <strong>Buscar</strong> (como en Encomiendas) o elija la unidad en la lista. Puede abrir <strong>varios formularios a la vez</strong> con <strong>Nueva visita</strong> si atiende varios ingresos en paralelo.</p>" +
         "<div class=\"cg-module-stats\" id=\"vis-module-stats\" aria-live=\"polite\"></div></div>" +
         "<div class=\"cg-vis-open-card\" id=\"vis-open-card-wrap\">" +
         "<h4><i class=\"fa-solid fa-door-open\" style=\"opacity:0.85\"></i> Dentro del edificio ahora</h4>" +
         "<div id=\"vis-open-list\" aria-live=\"polite\"></div></div>" +
-        "<div class=\"card cg-card-accent--visit\"><div class=\"card-h\"><h3>Registrar ingreso</h3></div><div class=\"card-b\">" +
-        "<form id=\"f-visit\" class=\"cg-visit-form\" action=\"#\" method=\"post\">" +
-        "<div class=\"cg-form-block\">" +
-        "<p class=\"cg-form-block-title\">Tipo de ingreso</p>" +
-        "<div class=\"form-group\">" +
-        "<span class=\"page-desc\" style=\"display:block;margin-bottom:0.2rem;font-size:0.8rem\">¿Quién ingresa?</span>" +
-        "<div class=\"cg-vis-type-pick\" role=\"radiogroup\" aria-label=\"Tipo de ingreso\">" +
-        "<label class=\"cg-vis-type-opt\">" +
-        "<input type=\"radio\" name=\"visitIngreso\" value=\"persona\" checked id=\"v-ing-persona\" />" +
-        "<span class=\"cg-vis-type-opt-inner\"><strong>Visita particular</strong><small>Persona que visita a un residente</small></span></label>" +
-        "<label class=\"cg-vis-type-opt\">" +
-        "<input type=\"radio\" name=\"visitIngreso\" value=\"proveedor\" id=\"v-ing-prov\" />" +
-        "<span class=\"cg-vis-type-opt-inner\"><strong>Proveedor</strong><small>Empresa de mantención, delivery B2B, etc.</small></span></label></div>" +
-        provHint +
-        "</div></div>" +
-        "<div class=\"cg-form-block\">" +
-        "<p class=\"cg-form-block-title\">Visitante y destino</p>" +
-        "<div id=\"vis-row-persona\" class=\"form-group\">" +
-        "<div class=\"cg-form-grid-2\">" +
-        "<div class=\"form-group\" style=\"margin-bottom:0\"><label for=\"f-visit-visitor\">Nombre visitante</label><input name=\"visitor\" id=\"f-visit-visitor\" autocomplete=\"name\" placeholder=\"Ej: Ana Pérez\" spellcheck=\"true\" /></div>" +
-        "<div class=\"form-group\" style=\"margin-bottom:0\"><label for=\"f-visit-rut\">RUT (opcional)</label><input name=\"visitorRut\" id=\"f-visit-rut\" type=\"text\" inputmode=\"text\" autocomplete=\"off\" placeholder=\"12.345.678-9\" maxlength=\"14\" title=\"Formato chileno: 12.345.678-9\" /></div></div>" +
-        "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.74rem;line-height:1.35\">Al registrar, el nombre se ajusta a mayúscula inicial en cada palabra (español). El RUT se formatea al escribir.</p></div>" +
-        "<div id=\"vis-row-proveedor\" style=\"display:none\">" +
-        "<div class=\"cg-form-grid-2\">" +
-        "<div class=\"form-group\"><label>Empresa (registrada)</label><select name=\"proveedorId\" id=\"f-visit-proveedor\">" +
-        G.proveedorSelectOptionsHtml() +
-        "</select></div>" +
-        "<div class=\"form-group\"><label for=\"f-visit-contact\">Persona que ingresa (opcional)</label><input name=\"visitContact\" id=\"f-visit-contact\" placeholder=\"Técnico, motorista…\" autocomplete=\"name\" spellcheck=\"true\" /></div>" +
-        "<div class=\"form-group cg-span-2\"><label for=\"f-visit-rut-contact\">RUT de quien ingresa (opcional)</label><input name=\"visitContactRut\" id=\"f-visit-rut-contact\" type=\"text\" inputmode=\"text\" autocomplete=\"off\" placeholder=\"12.345.678-9\" maxlength=\"14\" title=\"Formato chileno: 12.345.678-9\" /></div></div></div>" +
-        "<div class=\"form-group\" id=\"vis-row-visit-dept\">" +
-        "<div class=\"cg-form-grid-2\">" +
-        "<div class=\"form-group\" style=\"margin-bottom:0\">" +
-        "<label for=\"f-visit-dept-filter\">Número de depto</label>" +
-        "<input type=\"search\" id=\"f-visit-dept-filter\" autocomplete=\"off\" placeholder=\"Ej: 101, 12…\" />" +
-        "</div>" +
-        "<div class=\"form-group\" style=\"margin-bottom:0\">" +
-        "<label for=\"f-visit-dept\">Unidad destino</label>" +
-        "<select name=\"deptId\" id=\"f-visit-dept\" required><option value=\"\">—</option></select>" +
-        "</div></div>" +
-        "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.75rem;line-height:1.35\">Escriba el número para acotar la lista. Las unidades se muestran en orden creciente (1, 2, 10…).</p></div>" +
-        "<div class=\"form-group\" id=\"vis-row-visit-depto-prov\" style=\"display:none\"><label>Unidad destino (proveedores)</label><p class=\"page-desc\" style=\"margin:0;font-size:0.78rem;line-height:1.35\">Asignación fija a la unidad <strong>Admin</strong> (conserjería / administración).</p></div></div>" +
-        "<div class=\"cg-form-block\">" +
-        "<p class=\"cg-form-block-title\">Ingreso</p>" +
-        "<div class=\"form-group\"><label>Fecha y hora</label><input name=\"at\" type=\"datetime-local\" required /></div></div>" +
-        "<div class=\"cg-form-block\">" +
-        "<p class=\"cg-form-block-title\">Vehículo (opcional)</p>" +
-        "<div class=\"form-group\"><label><input type=\"checkbox\" name=\"vehicular\" id=\"v-veh\" /> Visita vehicular</label></div>" +
-        "<div id=\"veh-extra\" style=\"display:none\">" +
-        "<div class=\"cg-form-grid-2\">" +
-        "<div class=\"form-group\"><label>Patente</label><input name=\"plate\" placeholder=\"Ej: ABCD12\" autocomplete=\"off\" /></div>" +
-        "<div class=\"form-group\"><label>Estacionamiento (visita)</label>" +
-        "<input type=\"text\" name=\"visitorParkingCode\" list=\"visitor-parking-suggest\" placeholder=\"Ej: V-2, visitas 5…\" autocomplete=\"off\" /></div></div>" +
-        "<datalist id=\"visitor-parking-suggest\">" + vpDatalist + "</datalist>" +
-        "<p class=\"page-desc\" style=\"margin:0.15rem 0 0;font-size:0.75rem;line-height:1.35\">Texto libre; si configuró sugerencias en Administración, aparecerán al escribir.</p></div></div>" +
-        "<button type=\"submit\" class=\"btn btn-primary\"><i class=\"fa-solid fa-right-to-bracket\"></i> Registrar ingreso</button></form></div></div>" +
+        "<div class=\"card cg-card-accent--visit\"><div class=\"card-h\"><h3>Registrar ingreso</h3>" +
+        "<div class=\"toolbar\" style=\"flex-wrap:wrap;gap:0.5rem\">" +
+        "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"visitRegAdd\" data-cg-empty=\"1\"><i class=\"fa-solid fa-plus\"></i> Nueva visita</button></div></div>" +
+        "<div class=\"card-b cg-vis-reg-card-b\">" +
+        "<div id=\"vis-reg-stack\" class=\"cg-vis-reg-stack\" aria-live=\"polite\"></div>" +
+        "<datalist id=\"visitor-parking-suggest\">" +
+        vpDatalist +
+        "</datalist></div></div>" +
         "<div class=\"card cg-card-accent--visit\"><div class=\"card-h\"><h3>Historial</h3>" +
         "<div class=\"toolbar\" style=\"flex:1;justify-content:flex-end;flex-wrap:wrap\">" +
         "<select id=\"flt-vis-scope\" style=\"min-width:10.5rem\" title=\"Filtrar listado\">" +
@@ -14097,6 +14081,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         try {
           A.syncDepartamentosModuleFromLocal();
         } catch (eDept) {}
+        if (view === "visitas" && A && typeof A.refreshVisitDeptSelect === "function") {
+          try {
+            A.refreshVisitDeptSelect();
+          } catch (eVisDept) {}
+        }
         if (view === "departamentos") {
           if (typeof window.loadUnitsFromCloud === "function") {
             window.loadUnitsFromCloud(true).catch(function () {});
@@ -14244,6 +14233,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           try {
             A.renderProveedores();
           } catch (ePr) {}
+        }
+        if (view === "visitas" && document.getElementById("vis-reg-stack")) {
+          try {
+            document.querySelectorAll(".cg-vis-proveedor-select").forEach(function (sel) {
+              var cur = sel.value;
+              sel.innerHTML = G.proveedorSelectOptionsHtml();
+              if (cur && Array.prototype.some.call(sel.options, function (o) { return o.value === cur; })) sel.value = cur;
+            });
+          } catch (eVisProv) {}
         }
       }
 
@@ -18058,77 +18056,337 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       });
   }
 
-  function refreshVisitDeptSelect() {
-    var sel = document.getElementById("f-visit-dept");
+  function fillVisitDeptSelectEl(sel, preferredValue) {
     if (!sel) return;
-    var filtEl = document.getElementById("f-visit-dept-filter");
-    var q = filtEl ? G.normalizeUnitNumberKey(filtEl.value) : "";
-    var prev = sel.value;
+    var prev = preferredValue != null ? preferredValue : sel.value;
     var all = visitDepartmentsSortedForForm();
-    var list;
-    if (!q) {
-      list = all;
-    } else {
-      var byPrefix = all.filter(function (d) {
-        return G.normalizeUnitNumberKey(d.number).indexOf(q) === 0;
-      });
-      list = byPrefix.length ? byPrefix : all.filter(function (d) {
-        return G.normalizeUnitNumberKey(d.number).indexOf(q) >= 0;
-      });
-    }
     sel.innerHTML =
       "<option value=\"\">—</option>" +
-      list
+      all
         .map(function (d) {
           return "<option value=\"" + G.escapeAttr(d.id) + "\">" + G.escapeHtml(G.departmentSelectLabel(d)) + "</option>";
         })
         .join("");
-    if (prev && list.some(function (d) { return d.id === prev; })) sel.value = prev;
+    if (prev && all.some(function (d) { return d.id === prev; })) sel.value = prev;
   }
 
-  A.refreshVisitDeptSelect = refreshVisitDeptSelect;
+  function bindVisitDeptBuscar(form) {
+    var numInp = form.querySelector(".cg-vis-dept-num");
+    var btn = form.querySelector(".cg-vis-dept-buscar");
+    var msg = form.querySelector(".cg-vis-dept-msg");
+    var sel = form.querySelector(".cg-vis-dept-select");
+    if (!numInp || !btn || !msg || !sel) return;
+    function runBuscar() {
+      msg.textContent = "";
+      var dept = deptResolveByNumberInput(numInp.value);
+      if (!dept) {
+        msg.textContent = "No encontramos ese número de departamento. Revise e intente de nuevo.";
+        return;
+      }
+      msg.textContent = "Unidad encontrada: depto " + dept.number + ".";
+      sel.value = dept.id;
+    }
+    btn.addEventListener("click", function (evB) {
+      evB.preventDefault();
+      runBuscar();
+    });
+    numInp.addEventListener("keydown", function (evK) {
+      if (evK.key === "Enter") {
+        evK.preventDefault();
+        runBuscar();
+      }
+    });
+  }
 
-  A.visitFormToggleTipoIngreso = function () {
-    var pers = document.getElementById("v-ing-persona");
+  function visitRegProvHintHtml() {
+    var nProv = (G.state.proveedores || []).length;
+    if (nProv > 0) {
+      return "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.76rem;line-height:1.35\">Proveedores: elija la empresa registrada o cargue una nueva en el módulo <strong>Proveedores</strong>.</p>";
+    }
+    return (
+      "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.76rem;line-height:1.35\">Aún no hay empresas registradas. " +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"proveedores\"><i class=\"fa-solid fa-truck\"></i> Ir a Proveedores</button></p>"
+    );
+  }
+
+  function buildVisitRegSheetHtml() {
+    return (
+      "<div class=\"cg-vis-reg-sheet\">" +
+      "<div class=\"cg-vis-reg-sheet-h\">" +
+      "<h4><i class=\"fa-solid fa-user-plus\" style=\"opacity:0.85\"></i> Ingreso de visita</h4>" +
+      "<button type=\"button\" class=\"btn btn-sm btn-secondary\" data-cg-vis-close=\"1\" title=\"Cerrar este formulario\" aria-label=\"Cerrar formulario\"><i class=\"fa-solid fa-xmark\"></i></button>" +
+      "</div>" +
+      "<div class=\"cg-vis-reg-sheet-b\">" +
+      "<form class=\"cg-vis-reg-form cg-visit-form\" action=\"#\" method=\"post\">" +
+      "<div class=\"cg-form-block\">" +
+      "<p class=\"cg-form-block-title\">Tipo de ingreso</p>" +
+      "<div class=\"form-group\">" +
+      "<span class=\"page-desc\" style=\"display:block;margin-bottom:0.2rem;font-size:0.8rem\">¿Quién ingresa?</span>" +
+      "<div class=\"cg-vis-type-pick\" role=\"radiogroup\" aria-label=\"Tipo de ingreso\">" +
+      "<label class=\"cg-vis-type-opt\">" +
+      "<input type=\"radio\" name=\"visitIngreso\" value=\"persona\" checked />" +
+      "<span class=\"cg-vis-type-opt-inner\"><strong>Visita particular</strong><small>Persona que visita a un residente</small></span></label>" +
+      "<label class=\"cg-vis-type-opt\">" +
+      "<input type=\"radio\" name=\"visitIngreso\" value=\"proveedor\" />" +
+      "<span class=\"cg-vis-type-opt-inner\"><strong>Proveedor</strong><small>Empresa de mantención, delivery B2B, etc.</small></span></label></div>" +
+      visitRegProvHintHtml() +
+      "</div></div>" +
+      "<div class=\"cg-form-block\">" +
+      "<p class=\"cg-form-block-title\">Visitante y destino</p>" +
+      "<div class=\"cg-vis-row-persona form-group\">" +
+      "<div class=\"cg-form-grid-2\">" +
+      "<div class=\"form-group\" style=\"margin-bottom:0\"><label>Nombre visitante<input name=\"visitor\" autocomplete=\"name\" placeholder=\"Ej: Ana Pérez\" spellcheck=\"true\" /></label></div>" +
+      "<div class=\"form-group\" style=\"margin-bottom:0\"><label>RUT (opcional)<input name=\"visitorRut\" class=\"cg-vis-rut\" type=\"text\" inputmode=\"text\" autocomplete=\"off\" placeholder=\"12.345.678-9\" maxlength=\"14\" title=\"Formato chileno: 12.345.678-9\" /></label></div></div>" +
+      "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.74rem;line-height:1.35\">Al registrar, el nombre se ajusta a mayúscula inicial en cada palabra (español). El RUT se formatea al escribir.</p></div>" +
+      "<div class=\"cg-vis-row-proveedor form-group\" style=\"display:none\">" +
+      "<div class=\"cg-form-grid-2\">" +
+      "<div class=\"form-group\"><label>Empresa (registrada)<select name=\"proveedorId\" class=\"cg-vis-proveedor-select\">" +
+      G.proveedorSelectOptionsHtml() +
+      "</select></label></div>" +
+      "<div class=\"form-group\"><label>Persona que ingresa (opcional)<input name=\"visitContact\" placeholder=\"Técnico, motorista…\" autocomplete=\"name\" spellcheck=\"true\" /></label></div>" +
+      "<div class=\"form-group cg-span-2\"><label>RUT de quien ingresa (opcional)<input name=\"visitContactRut\" class=\"cg-vis-rut\" type=\"text\" inputmode=\"text\" autocomplete=\"off\" placeholder=\"12.345.678-9\" maxlength=\"14\" title=\"Formato chileno: 12.345.678-9\" /></label></div></div></div>" +
+      "<div class=\"cg-form-block cg-vis-unidad-block\">" +
+      "<p class=\"cg-form-block-title\">Unidad destino</p>" +
+      "<div class=\"form-group\"><label>Número de departamento</label>" +
+      "<div class=\"toolbar\" style=\"gap:0.5rem;width:100%;align-items:stretch\">" +
+      "<input type=\"text\" class=\"cg-vis-dept-num\" autocomplete=\"off\" placeholder=\"Ej: 1501, 12-B\" style=\"flex:1;min-width:0;padding:0.45rem 0.65rem;border:1px solid var(--gray-200);border-radius:8px;font:inherit\" />" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm cg-vis-dept-buscar\">Buscar</button></div></div>" +
+      "<p class=\"page-desc cg-vis-dept-msg\" style=\"margin:0.35rem 0 0;font-size:0.82rem\"></p>" +
+      "<div class=\"form-group cg-vis-row-dept-select\"><label>Unidad</label>" +
+      "<select name=\"deptId\" class=\"cg-vis-dept-select\" required><option value=\"\">—</option></select></div>" +
+      "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.75rem;line-height:1.35\">Escriba el número y pulse <strong>Buscar</strong> o elija en la lista (orden numérico).</p></div>" +
+      "<div class=\"form-group cg-vis-row-visit-depto-prov\" style=\"display:none\"><label>Unidad destino (proveedores)</label><p class=\"page-desc\" style=\"margin:0;font-size:0.78rem;line-height:1.35\">Asignación fija a la unidad <strong>Admin</strong> (conserjería / administración).</p></div></div>" +
+      "<div class=\"cg-form-block\">" +
+      "<p class=\"cg-form-block-title\">Ingreso</p>" +
+      "<div class=\"form-group\"><label>Fecha y hora</label><input name=\"at\" type=\"datetime-local\" required /></div></div>" +
+      "<div class=\"cg-form-block\">" +
+      "<p class=\"cg-form-block-title\">Vehículo (opcional)</p>" +
+      "<div class=\"form-group\"><label><input type=\"checkbox\" name=\"vehicular\" class=\"cg-vis-veh\" value=\"1\" /> Visita vehicular</label></div>" +
+      "<div class=\"cg-vis-veh-extra\" style=\"display:none\">" +
+      "<div class=\"cg-form-grid-2\">" +
+      "<div class=\"form-group\"><label>Patente</label><input name=\"plate\" placeholder=\"Ej: ABCD12\" autocomplete=\"off\" /></div>" +
+      "<div class=\"form-group\"><label>Estacionamiento (visita)</label>" +
+      "<input type=\"text\" name=\"visitorParkingCode\" list=\"visitor-parking-suggest\" placeholder=\"Ej: V-2, visitas 5…\" autocomplete=\"off\" /></div></div>" +
+      "<p class=\"page-desc\" style=\"margin:0.15rem 0 0;font-size:0.75rem;line-height:1.35\">Texto libre; si configuró sugerencias en Administración, aparecerán al escribir.</p></div></div>" +
+      "<button type=\"submit\" class=\"btn btn-primary\"><i class=\"fa-solid fa-right-to-bracket\"></i> Registrar ingreso</button></form></div></div>"
+    );
+  }
+
+  A.visitFormToggleTipoIngresoForm = function (form) {
+    if (!form) return;
+    var pers = form.querySelector('input[name="visitIngreso"][value="persona"]');
     var isPers = !pers || pers.checked;
-    var rp = document.getElementById("vis-row-persona");
-    var rq = document.getElementById("vis-row-proveedor");
-    var vi = document.getElementById("f-visit-visitor");
-    var ps = document.getElementById("f-visit-proveedor");
-    var deptRow = document.getElementById("vis-row-visit-dept");
-    var deptProv = document.getElementById("vis-row-visit-depto-prov");
-    var fdept = document.getElementById("f-visit-dept");
-    var deptFilt = document.getElementById("f-visit-dept-filter");
-    var rutP = document.getElementById("f-visit-rut");
-    var rutC = document.getElementById("f-visit-rut-contact");
+    var rp = form.querySelector(".cg-vis-row-persona");
+    var rq = form.querySelector(".cg-vis-row-proveedor");
+    var vi = form.querySelector('input[name="visitor"]');
+    var ps = form.querySelector(".cg-vis-proveedor-select");
+    var deptBlock = form.querySelector(".cg-vis-unidad-block");
+    var deptProv = form.querySelector(".cg-vis-row-visit-depto-prov");
+    var fdept = form.querySelector(".cg-vis-dept-select");
+    var numInp = form.querySelector(".cg-vis-dept-num");
+    var msg = form.querySelector(".cg-vis-dept-msg");
+    var rutP = form.querySelector('input[name="visitorRut"]');
+    var rutC = form.querySelector('input[name="visitContactRut"]');
     if (rp) rp.style.display = isPers ? "block" : "none";
     if (rq) rq.style.display = isPers ? "none" : "block";
     if (vi) {
       vi.required = isPers;
       if (!isPers) vi.value = "";
     }
-    if (rutP) {
-      if (!isPers) rutP.value = "";
-    }
-    if (rutC) {
-      if (isPers) rutC.value = "";
-    }
+    if (rutP && !isPers) rutP.value = "";
+    if (rutC && isPers) rutC.value = "";
     if (ps) ps.required = !isPers;
-    if (deptRow && deptProv && fdept) {
+    if (deptBlock && deptProv && fdept) {
       if (isPers) {
-        deptRow.style.display = "";
+        deptBlock.style.display = "";
         deptProv.style.display = "none";
         fdept.required = true;
-        refreshVisitDeptSelect();
+        fillVisitDeptSelectEl(fdept);
       } else {
-        deptRow.style.display = "none";
+        deptBlock.style.display = "none";
         deptProv.style.display = "";
         fdept.required = false;
         fdept.value = "";
-        if (deptFilt) deptFilt.value = "";
+        if (numInp) numInp.value = "";
+        if (msg) msg.textContent = "";
       }
     }
   };
+
+  function refreshVisitDeptSelect() {
+    document.querySelectorAll(".cg-vis-dept-select").forEach(function (sel) {
+      fillVisitDeptSelectEl(sel, sel.value);
+    });
+  }
+
+  A.refreshVisitDeptSelect = refreshVisitDeptSelect;
+
+  A.visitRegAdd = function () {
+    var stack = document.getElementById("vis-reg-stack");
+    if (!stack) return;
+    stack.insertAdjacentHTML("beforeend", buildVisitRegSheetHtml());
+    var forms = stack.querySelectorAll(".cg-vis-reg-form");
+    bindOneVisitForm(forms[forms.length - 1]);
+  };
+
+  function bindOneVisitForm(form) {
+    if (!form || form.getAttribute("data-cg-vis-bound") === "1") return;
+    form.setAttribute("data-cg-vis-bound", "1");
+    var selDept = form.querySelector(".cg-vis-dept-select");
+    fillVisitDeptSelectEl(selDept);
+    bindVisitDeptBuscar(form);
+    var atEl = form.elements.namedItem("at");
+    if (atEl && !atEl.value) atEl.value = localDatetimeValue(new Date());
+    A.visitFormToggleTipoIngresoForm(form);
+    visitFormBindRutInputs(form);
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var fd = new FormData(form);
+      var ingreso = (fd.get("visitIngreso") || "persona").toString();
+      var vehEl = form.querySelector(".cg-vis-veh");
+      var veh = vehEl && vehEl.checked;
+      var vpc = veh ? (fd.get("visitorParkingCode") || "").toString().trim() : "";
+      var visitor = "";
+      var proveedorId = "";
+      var visitKind = "persona";
+      var deptId = "";
+      var visitorRutStr = "";
+      if (ingreso === "proveedor") {
+        proveedorId = (fd.get("proveedorId") || "").toString();
+        if (!proveedorId) {
+          G.toast("Seleccione la empresa proveedora o regístrela en Proveedores", "error");
+          return;
+        }
+        var pr = proveedorById(proveedorId);
+        if (!pr) {
+          G.toast("Proveedor no válido", "error");
+          return;
+        }
+        visitKind = "proveedor";
+        var contact = (fd.get("visitContact") || "").toString().trim();
+        if (contact) {
+          var vc = G.validate.textBlock(contact, { label: "Contacto en proveedor", min: 2, max: 120 });
+          if (!vc.ok) {
+            G.toast(vc.message, "error");
+            return;
+          }
+          contact = G.validate.visitNameTitleCaseEs(vc.value);
+        }
+        var vRc = G.validate.chileRutFormattedOrEmpty((fd.get("visitContactRut") || "").toString());
+        if (!vRc.ok) {
+          G.toast(vRc.message, "error");
+          return;
+        }
+        visitorRutStr = vRc.value || "";
+        visitor = contact ? pr.empresa + " — " + contact : pr.empresa;
+        var adm = G.deptForVisitProveedorTarget();
+        deptId = adm ? adm.id : "";
+        if (!deptId) {
+          G.toast("No existe la unidad «Admin» en departamentos. Agréguela en el módulo Departamentos.", "error");
+          return;
+        }
+      } else {
+        var vn = G.validate.visitPersonName((fd.get("visitor") || "").toString());
+        if (!vn.ok) {
+          G.toast(vn.message, "error");
+          return;
+        }
+        visitor = vn.value;
+        var vRu = G.validate.chileRutFormattedOrEmpty((fd.get("visitorRut") || "").toString());
+        if (!vRu.ok) {
+          G.toast(vRu.message, "error");
+          return;
+        }
+        visitorRutStr = vRu.value || "";
+        deptId = (fd.get("deptId") || "").toString();
+        var vd = G.validate.departmentIdExists(deptId, G.state.departments);
+        if (!vd.ok) {
+          G.toast(vd.message, "error");
+          return;
+        }
+        deptId = vd.value;
+      }
+      if (ingreso === "proveedor") {
+        var vdp = G.validate.departmentIdExists(deptId, G.state.departments);
+        if (!vdp.ok) {
+          G.toast(vdp.message, "error");
+          return;
+        }
+        deptId = vdp.value;
+      }
+      var vAt = G.validate.datetimeLocal(fd.get("at"), "Fecha y hora de ingreso");
+      if (!vAt.ok) {
+        G.toast(vAt.message, "error");
+        return;
+      }
+      if (vAt.date.getTime() > Date.now() + 2 * 60 * 60000) {
+        G.toast("La fecha y hora de ingreso no puede ser tan en el futuro. Revise el reloj del equipo.", "error");
+        return;
+      }
+      var plateNorm = "";
+      if (veh) {
+        var vp = G.validate.vehiclePlate(fd.get("plate") || "");
+        if (!vp.ok) {
+          G.toast(vp.message, "error");
+          return;
+        }
+        plateNorm = vp.value;
+        var vpk = G.validate.visitorParkingCode(vpc, G.state.config);
+        if (!vpk.ok) {
+          G.toast(vpk.message, "error");
+          return;
+        }
+        vpc = vpk.value;
+      }
+      var rec = {
+        id: G.uid(),
+        visitor: visitor,
+        visitorRut: visitorRutStr || "",
+        deptId: deptId,
+        at: vAt.iso,
+        vehicular: veh,
+        plate: plateNorm,
+        visitorParkingCode: vpc,
+        parkingSlotId: "",
+        outAt: null,
+        visitKind: visitKind,
+        proveedorId: proveedorId || "",
+        registradoPor: conserjeNombreSesion(),
+        salidaRegistradoPor: ""
+      };
+      G.state.visits = G.state.visits.concat([rec]);
+      var depIng = G.deptById(deptId);
+      G.logConserjeActivity(
+        "visita_ingreso",
+        "Ingreso de visita — " +
+          (visitKind === "proveedor" ? "Proveedor" : "Persona") +
+          " — " +
+          (visitor || "—") +
+          (visitorRutStr ? " — RUT " + visitorRutStr : "") +
+          (depIng ? " — Depto " + depIng.number : "")
+      );
+      G.toast("Ingreso registrado");
+      form.reset();
+      var atReset = form.elements.namedItem("at");
+      if (atReset) atReset.value = localDatetimeValue(new Date());
+      fillVisitDeptSelectEl(form.querySelector(".cg-vis-dept-select"));
+      var numR = form.querySelector(".cg-vis-dept-num");
+      var msgR = form.querySelector(".cg-vis-dept-msg");
+      if (numR) numR.value = "";
+      if (msgR) msgR.textContent = "";
+      var ve = form.querySelector(".cg-vis-veh-extra");
+      if (ve) ve.style.display = "none";
+      var vehCb = form.querySelector(".cg-vis-veh");
+      if (vehCb) vehCb.checked = false;
+      var persR = form.querySelector('input[name="visitIngreso"][value="persona"]');
+      if (persR) persR.checked = true;
+      A.visitFormToggleTipoIngresoForm(form);
+      var selP = form.querySelector(".cg-vis-proveedor-select");
+      if (selP) selP.innerHTML = G.proveedorSelectOptionsHtml();
+      A.renderVisitas();
+      UI.checkVehicularVisitWarnings();
+    });
+  }
 
   A.renderVisitas = function () {
     var q = ((document.getElementById("flt-vis-q") || {}).value || "").toLowerCase();
@@ -18371,9 +18629,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
   function visitFormBindRutInputs(form) {
     if (!form) return;
-    ["f-visit-rut", "f-visit-rut-contact"].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (!el || el.getAttribute("data-cg-rut-fmt") === "1") return;
+    form.querySelectorAll(".cg-vis-rut").forEach(function (el) {
+      if (el.getAttribute("data-cg-rut-fmt") === "1") return;
       el.setAttribute("data-cg-rut-fmt", "1");
       el.addEventListener("input", function () {
         el.value = visitFormFormatRutAsYouType(el.value);
@@ -18382,152 +18639,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
 
   A.bindVisitas = function () {
-    var f = document.getElementById("f-visit");
-    if (f && f.at && !f.at.value) f.at.value = localDatetimeValue(new Date());
-    A.visitFormToggleTipoIngreso();
-    visitFormBindRutInputs(f);
-    if (f) {
-      f.onsubmit = function (e) {
-        e.preventDefault();
-        var fd = new FormData(f);
-        var ingreso = (fd.get("visitIngreso") || "persona").toString();
-        var vehEl = f.querySelector("#v-veh") || f.elements.vehicular;
-        var veh = vehEl && vehEl.checked;
-        var vpc = veh ? (fd.get("visitorParkingCode") || "").toString().trim() : "";
-        var visitor = "";
-        var proveedorId = "";
-        var visitKind = "persona";
-        var deptId = "";
-        var visitorRutStr = "";
-        if (ingreso === "proveedor") {
-          proveedorId = (fd.get("proveedorId") || "").toString();
-          if (!proveedorId) {
-            G.toast("Seleccione la empresa proveedora o regístrela en Proveedores", "error");
-            return;
-          }
-          var pr = proveedorById(proveedorId);
-          if (!pr) {
-            G.toast("Proveedor no válido", "error");
-            return;
-          }
-          visitKind = "proveedor";
-          var contact = (fd.get("visitContact") || "").toString().trim();
-          if (contact) {
-            var vc = G.validate.textBlock(contact, { label: "Contacto en proveedor", min: 2, max: 120 });
-            if (!vc.ok) {
-              G.toast(vc.message, "error");
-              return;
-            }
-            contact = G.validate.visitNameTitleCaseEs(vc.value);
-          }
-          var vRc = G.validate.chileRutFormattedOrEmpty((fd.get("visitContactRut") || "").toString());
-          if (!vRc.ok) {
-            G.toast(vRc.message, "error");
-            return;
-          }
-          visitorRutStr = vRc.value || "";
-          visitor = contact ? pr.empresa + " — " + contact : pr.empresa;
-          var adm = G.deptForVisitProveedorTarget();
-          deptId = adm ? adm.id : "";
-          if (!deptId) {
-            G.toast("No existe la unidad «Admin» en departamentos. Agréguela en el módulo Departamentos.", "error");
-            return;
-          }
-        } else {
-          var vn = G.validate.visitPersonName((fd.get("visitor") || "").toString());
-          if (!vn.ok) {
-            G.toast(vn.message, "error");
-            return;
-          }
-          visitor = vn.value;
-          var vRu = G.validate.chileRutFormattedOrEmpty((fd.get("visitorRut") || "").toString());
-          if (!vRu.ok) {
-            G.toast(vRu.message, "error");
-            return;
-          }
-          visitorRutStr = vRu.value || "";
-          deptId = (fd.get("deptId") || "").toString();
-          var vd = G.validate.departmentIdExists(deptId, G.state.departments);
-          if (!vd.ok) {
-            G.toast(vd.message, "error");
-            return;
-          }
-          deptId = vd.value;
-        }
-        if (ingreso === "proveedor") {
-          var vdp = G.validate.departmentIdExists(deptId, G.state.departments);
-          if (!vdp.ok) {
-            G.toast(vdp.message, "error");
-            return;
-          }
-          deptId = vdp.value;
-        }
-        var vAt = G.validate.datetimeLocal(fd.get("at"), "Fecha y hora de ingreso");
-        if (!vAt.ok) {
-          G.toast(vAt.message, "error");
-          return;
-        }
-        if (vAt.date.getTime() > Date.now() + 2 * 60 * 60000) {
-          G.toast("La fecha y hora de ingreso no puede ser tan en el futuro. Revise el reloj del equipo.", "error");
-          return;
-        }
-        var plateNorm = "";
-        if (veh) {
-          var vp = G.validate.vehiclePlate(fd.get("plate") || "");
-          if (!vp.ok) {
-            G.toast(vp.message, "error");
-            return;
-          }
-          plateNorm = vp.value;
-          var vpk = G.validate.visitorParkingCode(vpc, G.state.config);
-          if (!vpk.ok) {
-            G.toast(vpk.message, "error");
-            return;
-          }
-          vpc = vpk.value;
-        }
-        var rec = {
-          id: G.uid(),
-          visitor: visitor,
-          visitorRut: visitorRutStr || "",
-          deptId: deptId,
-          at: vAt.iso,
-          vehicular: veh,
-          plate: plateNorm,
-          visitorParkingCode: vpc,
-          parkingSlotId: "",
-          outAt: null,
-          visitKind: visitKind,
-          proveedorId: proveedorId || "",
-          registradoPor: conserjeNombreSesion(),
-          salidaRegistradoPor: ""
-        };
-        var list = G.state.visits.concat([rec]);
-        G.state.visits = list;
-        var depIng = G.deptById(deptId);
-        G.logConserjeActivity(
-          "visita_ingreso",
-          "Ingreso de visita — " +
-            (visitKind === "proveedor" ? "Proveedor" : "Persona") +
-            " — " +
-            (visitor || "—") +
-            (visitorRutStr ? " — RUT " + visitorRutStr : "") +
-            (depIng ? " — Depto " + depIng.number : "")
-        );
-        G.toast("Ingreso registrado");
-        f.reset();
-        f.at.value = localDatetimeValue(new Date());
-        refreshVisitDeptSelect();
-        var ve = document.getElementById("veh-extra");
-        if (ve) ve.style.display = "none";
-        var pers = document.getElementById("v-ing-persona");
-        if (pers) pers.checked = true;
-        A.visitFormToggleTipoIngreso();
-        var sel = document.getElementById("f-visit-proveedor");
-        if (sel) sel.innerHTML = G.proveedorSelectOptionsHtml();
-        A.renderVisitas();
-        UI.checkVehicularVisitWarnings();
-      };
+    var stack = document.getElementById("vis-reg-stack");
+    if (stack) {
+      if (!stack.querySelector(".cg-vis-reg-sheet")) {
+        stack.insertAdjacentHTML("beforeend", buildVisitRegSheetHtml());
+      }
+      stack.querySelectorAll(".cg-vis-reg-form").forEach(function (fm) {
+        bindOneVisitForm(fm);
+      });
     }
     A.renderVisitas();
   };
@@ -21139,6 +21258,21 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (window.CG_ACTIONS && CG_ACTIONS.renderAdmin) CG_ACTIONS.renderAdmin(tab);
         return;
       }
+      var visClose = t.closest("[data-cg-vis-close]");
+      if (visClose) {
+        e.preventDefault();
+        var sheet = visClose.closest(".cg-vis-reg-sheet");
+        var stack = document.getElementById("vis-reg-stack");
+        if (sheet && stack && stack.contains(sheet)) {
+          var nSheets = stack.querySelectorAll(".cg-vis-reg-sheet").length;
+          if (nSheets <= 1) {
+            if (window.CG && window.CG.toast) window.CG.toast("Debe quedar al menos un formulario de visita abierto.", "warn");
+            return;
+          }
+          sheet.remove();
+        }
+        return;
+      }
       var actEl = t.closest("[data-cg-act]");
       if (actEl && dispatchAct(actEl, e)) return;
       var winFn = t.closest("[data-cg-win]");
@@ -21259,10 +21393,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             return;
           }
         }
-        if (el.id === "f-visit-dept-filter" && window.CG_ACTIONS && CG_ACTIONS.refreshVisitDeptSelect) {
-          CG_ACTIONS.refreshVisitDeptSelect();
-          return;
-        }
         if (el.id === "unitsFilter" && typeof window.updateUnitsTable === "function") {
           window.updateUnitsTable();
           return;
@@ -21294,16 +21424,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           CG_ACTIONS.renderVisitas();
           return;
         }
-        if (
-          (el.id === "v-ing-persona" || el.id === "v-ing-prov") &&
-          window.CG_ACTIONS &&
-          typeof CG_ACTIONS.visitFormToggleTipoIngreso === "function"
-        ) {
-          CG_ACTIONS.visitFormToggleTipoIngreso();
+        if (el.name === "visitIngreso" && el.closest && el.closest(".cg-vis-reg-form") && window.CG_ACTIONS && CG_ACTIONS.visitFormToggleTipoIngresoForm) {
+          CG_ACTIONS.visitFormToggleTipoIngresoForm(el.closest(".cg-vis-reg-form"));
           return;
         }
-        if (el.id === "v-veh") {
-          var vex = document.getElementById("veh-extra");
+        if (el.classList && el.classList.contains("cg-vis-veh") && el.closest && el.closest(".cg-vis-reg-form")) {
+          var vform = el.closest(".cg-vis-reg-form");
+          var vex = vform.querySelector(".cg-vis-veh-extra");
           if (vex) vex.style.display = el.checked ? "block" : "none";
           return;
         }
