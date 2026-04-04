@@ -2163,6 +2163,21 @@
       opacity: 0.85;
       font-size: 0.78rem;
     }
+    .cg-dash-bday-lead {
+      margin: 0 0 0.45rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #9d174d;
+      line-height: 1.35;
+      letter-spacing: -0.02em;
+    }
+    .cg-dash-bday-msg {
+      margin: 0 0 0.75rem;
+      font-size: 0.9rem;
+      line-height: 1.55;
+      color: #831843;
+      font-weight: 500;
+    }
     /* Dashboard: tarjetas KPI más compactas y fila de gráficos */
     .cg-dash-stat-grid {
       display: grid;
@@ -13573,7 +13588,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<h1 class=\"page-title\">Dashboard</h1>" +
         "<p class=\"page-desc\">Resumen de actividad en conserjería (visitas, reservas, encomiendas, novedades y registro de operaciones por usuario).</p>" +
         "<div class=\"card cg-dash-bday-card\" id=\"dash-staff-bday-card\" style=\"display:none;border-left:4px solid #db2777\">" +
-        "<div class=\"card-h cg-dash-bday-card-h\"><h3><i class=\"fa-solid fa-cake-candles\" style=\"opacity:0.9\"></i> Cumpleaños del personal hoy</h3></div>" +
+        "<div class=\"card-h cg-dash-bday-card-h\"><h3><i class=\"fa-solid fa-cake-candles\" style=\"opacity:0.9\"></i> Un día especial para el equipo</h3></div>" +
         "<div class=\"card-b\" id=\"dash-staff-bday-body\" aria-live=\"polite\"></div></div>" +
         "<div class=\"card cg-dash-veh-card\" id=\"dash-veh-card\" style=\"display:none;border-left:4px solid #ea580c\">" +
         "<div class=\"card-h\"><h3><i class=\"fa-solid fa-car-side\" style=\"opacity:0.85\"></i> Visitas vehiculares en curso</h3>" +
@@ -19801,7 +19816,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var age = staffBirthdayAgeYears(e.dob, now, e.noYear);
         return (
           "<li class=\"cg-dash-bday-chip\" tabindex=\"0\" role=\"group\" aria-label=\"" +
-          G.escapeAttr("Cumpleaños: " + (e.name || "")) +
+          G.escapeAttr("Feliz cumpleaños: " + (e.name || "")) +
           "\"><span>" +
           G.escapeHtml(e.name || "—") +
           "</span>" +
@@ -19811,8 +19826,21 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         );
       })
       .join("");
+    var nB = today.length;
+    var warmMsg =
+      nB === 1
+        ? "Hoy celebramos contigo. Gracias por tu dedicación en la conserjería y por el trato cercano que brindas cada día a residentes y visitas. Te deseamos un cumpleaños lleno de alegría, buena salud y momentos memorables junto a quienes más quieres."
+        : "Hoy celebramos con ustedes. Gracias por su dedicación en la conserjería y por el esfuerzo diario que hace del edificio un lugar más acogedor. Les deseamos un cumpleaños lleno de alegría, buena salud y momentos inolvidables junto a las personas que más quieren.";
     body.innerHTML =
-      "<p class=\"page-desc\" style=\"margin:0 0 0.65rem;font-weight:600;color:#9d174d\">¡Cumpleaños hoy! 🎉</p>" +
+      "<p class=\"cg-dash-bday-lead\">¡Feliz cumpleaños" +
+      (nB === 1 ? "!" : " a quienes cumplen hoy!") +
+      " 🎂✨</p>" +
+      "<p class=\"cg-dash-bday-msg\">" +
+      G.escapeHtml(warmMsg) +
+      "</p>" +
+      "<p class=\"page-desc\" style=\"margin:0 0 0.5rem;font-size:0.8rem;font-weight:600;color:#be185d;opacity:0.95\">" +
+      (nB === 1 ? "Cumpleañero del día" : "Cumpleañeros del día") +
+      "</p>" +
       "<ul class=\"cg-dash-bday-list\">" +
       chips +
       "</ul>";
