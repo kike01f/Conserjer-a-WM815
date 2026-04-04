@@ -2163,9 +2163,6 @@
       opacity: 0.85;
       font-size: 0.78rem;
     }
-    .cg-dash-bday-card.is-collapsed .cg-dash-bday-detail {
-      display: none;
-    }
     /* Dashboard: tarjetas KPI más compactas y fila de gráficos */
     .cg-dash-stat-grid {
       display: grid;
@@ -13540,8 +13537,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<h1 class=\"page-title\">Dashboard</h1>" +
         "<p class=\"page-desc\">Resumen de actividad en conserjería (visitas, reservas, encomiendas, novedades y registro de operaciones por usuario).</p>" +
         "<div class=\"card cg-dash-bday-card\" id=\"dash-staff-bday-card\" style=\"display:none;border-left:4px solid #db2777\">" +
-        "<div class=\"card-h cg-dash-bday-card-h\"><h3><i class=\"fa-solid fa-cake-candles\" style=\"opacity:0.9\"></i> Cumpleaños del personal hoy</h3>" +
-        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"dash-staff-bday-toggle\" aria-expanded=\"true\" title=\"Mostrar u ocultar texto de ayuda\">Ocultar ayuda</button></div>" +
+        "<div class=\"card-h cg-dash-bday-card-h\"><h3><i class=\"fa-solid fa-cake-candles\" style=\"opacity:0.9\"></i> Cumpleaños del personal hoy</h3></div>" +
         "<div class=\"card-b\" id=\"dash-staff-bday-body\" aria-live=\"polite\"></div></div>" +
         "<div class=\"card cg-dash-veh-card\" id=\"dash-veh-card\" style=\"display:none;border-left:4px solid #ea580c\">" +
         "<div class=\"card-h\"><h3><i class=\"fa-solid fa-car-side\" style=\"opacity:0.85\"></i> Visitas vehiculares en curso</h3>" +
@@ -19691,7 +19687,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           G.escapeHtml(e.name || "—") +
           "</span>" +
           (e.cargo ? "<small>" + G.escapeHtml(e.cargo) + "</small>" : "") +
-          (age != null ? "<small>" + age + " años</small>" : "") +
+          (age != null && age > 0 ? "<small>" + age + " años</small>" : "") +
           "</li>"
         );
       })
@@ -19700,19 +19696,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<p class=\"page-desc\" style=\"margin:0 0 0.65rem;font-weight:600;color:#9d174d\">¡Cumpleaños hoy! 🎉</p>" +
       "<ul class=\"cg-dash-bday-list\">" +
       chips +
-      "</ul>" +
-      "<div class=\"cg-dash-bday-detail page-desc\" style=\"margin:0.75rem 0 0;font-size:0.82rem;line-height:1.45\">" +
-      "Registro en <strong>Administración → RRHH</strong>. Puede importar listados básicos desde Excel (.xlsx).</div>";
-    var togg = document.getElementById("dash-staff-bday-toggle");
-    if (togg && !togg.getAttribute("data-cg-bday-bound")) {
-      togg.setAttribute("data-cg-bday-bound", "1");
-      togg.addEventListener("click", function () {
-        card.classList.toggle("is-collapsed");
-        var open = !card.classList.contains("is-collapsed");
-        togg.setAttribute("aria-expanded", open ? "true" : "false");
-        togg.textContent = open ? "Ocultar ayuda" : "Mostrar ayuda";
-      });
-    }
+      "</ul>";
   };
 
   function buildRenderAdminRrhhHtml() {
