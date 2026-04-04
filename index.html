@@ -2557,7 +2557,7 @@
     }
     /* Tarjeta festiva en panel de control (misma zona que cumpleaños / alertas) */
     #dash-festive-mount:not(:empty) {
-      margin-bottom: 1rem;
+      margin-bottom: 0.55rem;
     }
     .cg-dash-festive-card {
       position: relative;
@@ -2608,6 +2608,13 @@
     .cg-dash-festive-card > .card-b {
       position: relative;
       z-index: 1;
+    }
+    .cg-dash-festive-card > .card-h.cg-dash-bday-card-h {
+      border-bottom: none;
+      padding: 0.5rem 0.85rem;
+    }
+    .cg-dash-festive-card > .card-b {
+      padding: 0.6rem 0.85rem 0.7rem;
     }
     .cg-dash-festive-card .card-h h3 {
       display: flex;
@@ -3159,6 +3166,9 @@
       padding: 1.25rem;
       flex: 1;
       animation: fadeIn 0.35s ease;
+    }
+    .content:has(.cg-dash-page) {
+      padding: 0.85rem 1rem 1rem;
     }
     .page-title { font-size: 1.35rem; color: var(--blue-900); margin-bottom: 0.25rem; }
     .page-desc { color: var(--gray-600); font-size: 0.9rem; margin-bottom: 1.25rem; }
@@ -3944,6 +3954,80 @@
     .cg-adm-dash-alert-status--bad {
       background: #fee2e2;
       color: #991b1b;
+    }
+    /* Panel de control: menos aire entre bloques (solo vista dashboard) */
+    .cg-dash-page > .page-title {
+      font-size: 1.2rem;
+      margin-bottom: 0.08rem;
+      letter-spacing: -0.02em;
+    }
+    .cg-dash-page .card {
+      margin-bottom: 0.55rem;
+    }
+    .cg-dash-page .cg-dash-stat-grid > .card,
+    .cg-dash-page .cg-dash-charts-row > .card {
+      margin-bottom: 0;
+    }
+    .cg-dash-page .cg-dash-bday-card {
+      margin-bottom: 0.42rem;
+    }
+    .cg-dash-page #dash-festive-mount:not(:empty) {
+      margin-bottom: 0.42rem;
+    }
+    .cg-dash-page .cg-dash-sched-mount .cg-dash-sched-card {
+      margin-bottom: 0.45rem;
+    }
+    .cg-dash-page .cg-dash-stat-grid {
+      gap: 0.35rem;
+      margin-bottom: 0.48rem;
+    }
+    .cg-dash-page .cg-dash-charts-row {
+      gap: 0.48rem;
+      margin-bottom: 0.55rem;
+    }
+    .cg-dash-page .cg-dash-chart-card .card-h {
+      padding: 0.42rem 0.65rem;
+    }
+    .cg-dash-page .cg-dash-chart-card .card-h h3 {
+      font-size: 0.8rem;
+    }
+    .cg-dash-page .cg-dash-chart-card .card-b {
+      padding: 0.42rem 0.65rem 0.52rem;
+    }
+    .cg-dash-page .cg-dash-chart-meta {
+      margin-bottom: 0.28rem;
+    }
+    .cg-dash-page .cg-dash-chart-wrap {
+      height: 168px;
+    }
+    .cg-dash-page .cg-dash-nov-card .card-h,
+    .cg-dash-page .cg-dash-act-card .card-h {
+      padding: 0.48rem 0.72rem;
+    }
+    .cg-dash-page .cg-dash-nov-card .card-h h3,
+    .cg-dash-page .cg-dash-act-card .card-h h3 {
+      font-size: 0.86rem;
+    }
+    .cg-dash-page .cg-dash-nov-card .card-b {
+      padding: 0.55rem 0.72rem 0.62rem;
+    }
+    .cg-dash-page .cg-dash-act-card .card-b {
+      padding: 0.52rem 0.72rem 0.58rem;
+    }
+    .cg-dash-page .cg-dash-act-toolbar {
+      margin-bottom: 0.48rem;
+    }
+    .cg-dash-page .cg-dash-stat-card--compact .card-h {
+      padding: 0.28rem 0.48rem;
+    }
+    .cg-dash-page .cg-dash-stat-card--compact .card-b {
+      padding: 0.32rem 0.48rem 0.4rem;
+    }
+    .cg-dash-page .cg-dash-festive-card > .card-h.cg-dash-bday-card-h {
+      padding: 0.42rem 0.72rem;
+    }
+    .cg-dash-page .cg-dash-festive-card > .card-b {
+      padding: 0.48rem 0.72rem 0.58rem;
     }
     /* Dashboard: tarjetas KPI más compactas y fila de gráficos */
     .cg-dash-stat-grid {
@@ -16276,6 +16360,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       const novRec = novedadesArr.slice().sort(function (a, b) { return new Date(b.at) - new Date(a.at); }).slice(0, 5);
       const actTable = buildDashMonthlyConserjeActivityHtml();
       return (
+        "<div class=\"cg-dash-page\">" +
         "<h1 class=\"page-title\">Panel de control</h1>" +
         "<div id=\"dash-festive-mount\" class=\"cg-dash-festive-mount\" aria-live=\"polite\"></div>" +
         "<div class=\"card cg-dash-bday-card\" id=\"dash-staff-bday-card\" style=\"display:none;border-left:3px solid #db2777\">" +
@@ -16326,7 +16411,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           return "<li style=\"padding:0.5rem 0;border-bottom:1px solid var(--gray-200)\"><strong>#" + (n.seq || "—") + "</strong> · " + G.fmtDate(n.at) +
             " — " + G.escapeHtml(tx.slice(0, 80)) + (tx.length > 80 ? "…" : "") + "</li>";
         }).join("") + "</ul>" : "<p class=\"page-desc\">Sin novedades.</p>") +
-        "</div></div>"
+        "</div></div></div>"
       );
     }
 
