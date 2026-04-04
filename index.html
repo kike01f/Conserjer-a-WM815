@@ -2792,6 +2792,8 @@
     @media (prefers-reduced-motion: reduce) {
       .cg-festive-banner__shimmer,
       .cg-festive-float,
+      .cg-sidebar-festive-fx__shimmer,
+      .cg-sidebar-festive-float,
       .cg-festive-dash-h-icon,
       .cg-dash-festive-card .card-h h3,
       .cg-dash-festive-card .card-b .cg-dash-bday-msg,
@@ -2807,6 +2809,10 @@
     @media (max-width: 540px) {
       .cg-festive-float--4,
       .cg-festive-float--5 {
+        display: none;
+      }
+      .cg-sidebar-festive-float--4,
+      .cg-sidebar-festive-float--5 {
         display: none;
       }
       .cg-festive-dash-h-icon {
@@ -2837,6 +2843,111 @@
       border-right: 1px solid color-mix(in srgb, var(--cg-sidebar-p) 28%, #334155);
       box-shadow:
         4px 0 24px -8px rgba(0, 0, 0, 0.35);
+    }
+    /* Efecto tipo publicación festiva, colores basados en la paleta del menú (--cg-sidebar-p) */
+    #app-main:not(.cg-festive-on) .cg-sidebar-festive-fx {
+      display: none;
+    }
+    .cg-sidebar-festive-fx {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+    .cg-sidebar-festive-fx__shimmer {
+      position: absolute;
+      top: -45%;
+      left: 0;
+      width: 46%;
+      height: 190%;
+      background: linear-gradient(
+        100deg,
+        transparent 0%,
+        color-mix(in srgb, var(--cg-sidebar-p) 14%, transparent) 36%,
+        color-mix(in srgb, var(--cg-sidebar-p-light) 42%, rgba(255, 255, 255, 0.14)) 50%,
+        color-mix(in srgb, var(--cg-sidebar-p) 12%, transparent) 64%,
+        transparent 100%
+      );
+      animation: cg-festive-shimmer 6s ease-in-out infinite;
+      opacity: 0.55;
+    }
+    .cg-sidebar-festive-fx__floats {
+      position: absolute;
+      inset: 0;
+    }
+    .cg-sidebar-festive-float {
+      position: absolute;
+      font-size: 0.72rem;
+      line-height: 1;
+      color: color-mix(in srgb, var(--cg-sidebar-p-light) 58%, #94a3b8);
+      opacity: 0.32;
+      animation: cg-festive-float-bob 3.4s ease-in-out infinite;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    }
+    .cg-sidebar-festive-float--1 {
+      top: 14%;
+      right: 10%;
+    }
+    .cg-sidebar-festive-float--2 {
+      top: 42%;
+      right: 6%;
+      font-size: 0.62rem;
+      animation-duration: 2.85s;
+      opacity: 0.28;
+    }
+    .cg-sidebar-festive-float--3 {
+      bottom: 28%;
+      right: 14%;
+      font-size: 0.58rem;
+      animation-duration: 3.9s;
+    }
+    .cg-sidebar-festive-float--4 {
+      top: 58%;
+      right: 22%;
+      font-size: 0.54rem;
+      animation-duration: 2.5s;
+      opacity: 0.26;
+    }
+    .cg-sidebar-festive-float--5 {
+      bottom: 16%;
+      right: 8%;
+      font-size: 0.5rem;
+      animation-duration: 4.2s;
+      opacity: 0.24;
+    }
+    #app-main.cg-festive-preview-active .cg-sidebar-festive-fx__shimmer {
+      animation-duration: 4s;
+    }
+    #app-main.cg-festive-theme--labor .cg-sidebar-festive-float {
+      color: color-mix(in srgb, #fbbf24 22%, color-mix(in srgb, var(--cg-sidebar-p-light) 55%, #94a3b8));
+    }
+    #app-main.cg-festive-theme--patrias .cg-sidebar-festive-float:nth-child(odd) {
+      color: color-mix(in srgb, #60a5fa 28%, color-mix(in srgb, var(--cg-sidebar-p-light) 50%, #94a3b8));
+    }
+    #app-main.cg-festive-theme--patrias .cg-sidebar-festive-float:nth-child(even) {
+      color: color-mix(in srgb, #f87171 24%, color-mix(in srgb, var(--cg-sidebar-p-light) 48%, #94a3b8));
+    }
+    #app-main.cg-festive-theme--navidad .cg-sidebar-festive-float:nth-child(odd) {
+      color: color-mix(in srgb, #34d399 26%, color-mix(in srgb, var(--cg-sidebar-p-light) 52%, #94a3b8));
+    }
+    #app-main.cg-festive-theme--navidad .cg-sidebar-festive-float:nth-child(even) {
+      color: color-mix(in srgb, #fb7185 22%, color-mix(in srgb, var(--cg-sidebar-p-light) 48%, #94a3b8));
+    }
+    #app-main.cg-festive-theme--newyear .cg-sidebar-festive-float {
+      color: color-mix(in srgb, #fde047 30%, color-mix(in srgb, var(--cg-sidebar-p-light) 45%, #a5b4fc));
+      opacity: 0.38;
+    }
+    #app-main.cg-festive-theme--newyear .cg-sidebar-festive-fx__shimmer {
+      opacity: 0.62;
+      background: linear-gradient(
+        100deg,
+        transparent 0%,
+        color-mix(in srgb, var(--cg-sidebar-p) 12%, transparent) 34%,
+        color-mix(in srgb, #fde047 18%, var(--cg-sidebar-p-light) 35%, rgba(255, 255, 255, 0.1)) 50%,
+        color-mix(in srgb, #a78bfa 12%, transparent) 66%,
+        transparent 100%
+      );
     }
     .sidebar-brand,
     .nav-scroll,
@@ -5847,6 +5958,16 @@
 
   <div id="app-main" class="hidden" aria-hidden="true">
     <aside class="sidebar" id="sidebar" aria-label="Conserjería — panel lateral">
+      <div class="cg-sidebar-festive-fx" aria-hidden="true">
+        <div class="cg-sidebar-festive-fx__shimmer"></div>
+        <div class="cg-sidebar-festive-fx__floats">
+          <span class="cg-sidebar-festive-float cg-sidebar-festive-float--1"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+          <span class="cg-sidebar-festive-float cg-sidebar-festive-float--2"><i class="fa-solid fa-sparkles" aria-hidden="true"></i></span>
+          <span class="cg-sidebar-festive-float cg-sidebar-festive-float--3"><i class="fa-solid fa-heart" aria-hidden="true"></i></span>
+          <span class="cg-sidebar-festive-float cg-sidebar-festive-float--4"><i class="fa-solid fa-music" aria-hidden="true"></i></span>
+          <span class="cg-sidebar-festive-float cg-sidebar-festive-float--5"><i class="fa-solid fa-gift" aria-hidden="true"></i></span>
+        </div>
+      </div>
       <div class="sidebar-brand">
         <div class="sidebar-brand-icon" aria-hidden="true">
           <img src="https://img.mailinblue.com/8323725/images/content_library/original/6844749040dd0f16c5341248.png" alt="" />
