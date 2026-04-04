@@ -3304,6 +3304,34 @@
     table.data-table tr.cg-row-visit-grace:hover td { background: rgba(254, 202, 202, 0.6); }
     table.data-table tr.cg-row-visit-multa td { background: rgba(248, 113, 113, 0.35); }
     table.data-table tr.cg-row-visit-multa:hover td { background: rgba(248, 113, 113, 0.48); }
+    table.data-table th.cg-vis-mail-th,
+    table.data-table td.cg-vis-mail-cell {
+      width: 2.1rem;
+      text-align: center;
+      padding-left: 0.35rem;
+      padding-right: 0.35rem;
+      vertical-align: middle;
+    }
+    .cg-vis-mail-check {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.28rem;
+      height: 1.28rem;
+      border-radius: 50%;
+      background: rgba(22, 163, 74, 0.14);
+      color: #15803d;
+      font-size: 0.58rem;
+      line-height: 1;
+    }
+    td.cg-enc-mail-cell {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.22rem;
+      justify-content: center;
+      align-items: center;
+      min-width: 2.85rem;
+    }
 
     #dash-veh-card .cg-dash-veh-item {
       border-radius: 10px;
@@ -17986,6 +18014,19 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return residentEmailForDept(e.deptId);
   }
 
+  /**
+   * mailto de avisos de encomienda: mismos destinatarios que visitas (toda la unidad con e-mail + ficha);
+   * si no hay ninguno, mismo fallback que residentEmailForEncomienda (destinatario elegido o ficha).
+   */
+  function residentEmailsForEncomiendaNotify(e) {
+    e = e || {};
+    var all = residentEmailsAllForDept(e.deptId);
+    if (all && String(all.email || "").trim()) {
+      return { email: String(all.email).trim(), fuente: all.fuente || "" };
+    }
+    return residentEmailForEncomienda(e);
+  }
+
   /** mailto solo con texto plano (máxima compatibilidad en Gmail, Outlook, móvil). Varios Para: separados por coma. */
   function mailtoHrefPlain(toEmail, subject, bodyPlain) {
     var MAX = 32000;
@@ -18742,7 +18783,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   A.encomiendaNotifyModal = function (id, kind) {
     var e = (G.state.encomiendas || []).find(function (x) { return x.id === id; });
     if (!e) return;
-    var inf = residentEmailForEncomienda(e);
+    var inf = residentEmailsForEncomiendaNotify(e);
     var mail = inf.email;
     var resNm = encomiendaDestinatarioDisplay(e);
     var plain = encomiendaBodyText(e, kind);
@@ -18756,10 +18797,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var modalTitle = kind === "llegada" ? "Aviso al residente — llegada de encomienda" : "Correo de confirmación de retiro";
     UI.openModal(
       "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>" + G.escapeHtml(modalTitle) + "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
-      "<div class=\"modal-b\"><p class=\"page-desc\">Destinatario del aviso: <strong>" + G.escapeHtml(resNm) + "</strong></p>" +
-      "<p class=\"page-desc\" style=\"margin-top:0\">Destinatario: <strong>" + G.escapeHtml(mail || "—") + "</strong>" +
-      (inf.fuente ? " <span style=\"opacity:.85\">(" + G.escapeHtml(inf.fuente) + ")</span>" : "") +
-      ". <strong>Abrir correo</strong> inserta el mensaje de abajo (texto plano con formato y emojis; compatible con todos los clientes).</p>" +
+      "<div class=\"modal-b\"><p class=\"page-desc\">Paquete asociado a: <strong>" + G.escapeHtml(resNm) + "</strong></p>" +
+      "<p class=\"page-desc\" style=\"margin-top:0\">" +
+      (mail
+        ? "Integrantes de la unidad con e-mail (campo Para): <strong>" +
+          G.escapeHtml(mail.replace(/,/g, ", ")) +
+          "</strong>" +
+          (inf.fuente ? " <span style=\"opacity:.85\">(" + G.escapeHtml(inf.fuente) + ")</span>" : "") +
+          ". <strong>Abrir correo</strong> inserta el mensaje de abajo en todos los destinatarios (texto plano con formato y emojis; compatible con todos los clientes)."
+        : "<strong>Sin dirección de correo disponible</strong> en la ficha del departamento ni en integrantes del panel.") +
+      "</p>" +
       "<p class=\"page-desc\" style=\"margin-top:0\">Sin servidor SMTP: envío desde su cliente habitual. Opcional: <em>Copiar diseño HTML</em> si desea colores al pegar en el cuerpo.</p>" +
       "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje que se envía</p>" +
       "<textarea id=\"" + taId + "\" style=\"width:100%;min-height:180px;font-family:ui-monospace,monospace;font-size:0.8rem;line-height:1.45;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:0.5rem\">" + G.escapeHtml(plain) + "</textarea>" +
@@ -18777,7 +18824,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.escapeHtml(id) +
       "\" data-cg-param=\"" +
       G.escapeHtml(encKind) +
-      "\">Marcar aviso como enviado</button>" +
+      "\" title=\"Tras enviar desde su cliente, deja un check en el listado\">" +
+      "<i class=\"fa-solid fa-check\"></i> Marcar correo enviado</button>" +
       "</div></div><div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cerrar</button></div></div>"
     );
     setTimeout(function () {
@@ -18839,6 +18887,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<a class=\"btn btn-primary btn-sm\" href=\"" + mailto.replace(/"/g, "&quot;") + "\"><i class=\"fa-solid fa-envelope\"></i> Abrir correo</a>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"btn-visit-mail-copy-html\"><i class=\"fa-solid fa-palette\"></i> Copiar diseño HTML</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"clipboardCopyByElId\" data-cg-id=\"" + G.escapeHtml(taId) + "\">Copiar texto plano</button>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" style=\"margin-left:auto\" data-cg-act=\"visitMarkResidentNotified\" data-cg-id=\"" +
+      G.escapeHtml(visitId) +
+      "\" title=\"Tras enviar desde su cliente, deja un check en el historial\"><i class=\"fa-solid fa-check\"></i> Marcar correo enviado</button>" +
       "</div></div><div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cerrar</button></div></div>"
     );
     setTimeout(function () {
@@ -18900,6 +18951,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"clipboardCopyByElId\" data-cg-id=\"" +
       G.escapeHtml(taId) +
       "\">Copiar texto plano</button>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" style=\"margin-left:auto\" data-cg-act=\"visitMarkResidentNotified\" data-cg-id=\"" +
+      G.escapeHtml(rec.id) +
+      "\" title=\"Tras enviar desde su cliente, deja un check en el historial\"><i class=\"fa-solid fa-check\"></i> Marcar correo enviado</button>" +
       "</div></div><div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cerrar</button></div></div>"
     );
     setTimeout(function () {
@@ -18925,9 +18979,32 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "enc_correo",
       "Marcó aviso de correo (" + (kind === "llegada" ? "llegada" : "retiro") + ") como enviado — encomienda"
     );
-    G.toast("Aviso registrado");
+    G.toast("Aviso por correo registrado en el listado");
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("encomiendas");
     UI.closeModal();
     A.renderEncomiendas();
+  };
+
+  /** Conserje confirma que avisó a la unidad por correo (constancia en historial de visitas). */
+  A.visitMarkResidentNotified = function (visitId) {
+    if (!visitId) return;
+    var now = new Date().toISOString();
+    var found = false;
+    G.state.visits = (G.state.visits || []).map(function (x) {
+      if (x.id !== visitId) return x;
+      found = true;
+      return Object.assign({}, x, { residentNotifiedAt: now });
+    });
+    if (!found) {
+      G.toast("No se encontró el registro de visita", "error");
+      return;
+    }
+    G.logConserjeActivity("visita_correo", "Marcó aviso por correo a la unidad como enviado — visita");
+    G.toast("Aviso por correo registrado en el historial");
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("visits");
+    UI.closeModal();
+    A.renderVisitas();
+    if (A.renderDashboardVehAlerts) A.renderDashboardVehAlerts();
   };
 
   function renderEncDestinatarioPanel(deptId, preselect) {
@@ -19282,7 +19359,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         return blob.indexOf(q) >= 0;
       });
     }
-    var html = "<table class=\"data-table\"><thead><tr><th>Recepción</th><th>Depto</th><th>Residente</th><th>Descripción</th><th>Quién retira</th><th>Conserje</th><th>Estado</th><th>Avisos</th><th></th></tr></thead><tbody>";
+    var html =
+      "<table class=\"data-table\"><thead><tr><th class=\"cg-vis-mail-th\" title=\"Aviso por correo marcado como enviado (llegada y/o retiro)\"><span class=\"sr-only\">Correo</span><i class=\"fa-solid fa-envelope\" style=\"font-size:0.65rem;opacity:0.75\" aria-hidden=\"true\"></i></th><th>Recepción</th><th>Depto</th><th>Residente</th><th>Descripción</th><th>Quién retira</th><th>Conserje</th><th>Estado</th><th></th></tr></thead><tbody>";
     if (!rows.length) {
       html += "<tr><td class=\"cg-empty-table\" colspan=\"9\">No hay encomiendas con este filtro. Use <strong>Nueva encomienda</strong> o cambie el filtro.</td></tr>";
     } else {
@@ -19290,15 +19368,41 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var dep = G.deptById(e.deptId);
         var pend = !e.entregadoAt;
         var st = pend ? "<span class=\"badge badge-ocupado-p\">Pendiente</span>" : "<span class=\"badge badge-libre\">Entregada</span>";
-        var av = [];
-        if (e.notifiedInAt) av.push("Llegada");
-        if (e.notifiedOutAt) av.push("Retiro");
-        var avs = av.length ? av.join(", ") : "—";
         var resShow = encomiendaDestinatarioDisplay(e);
         var retiraCell = e.entregadoAt && e.retiradoPor ? G.escapeHtml(String(e.retiradoPor).trim()) : "—";
-        html += "<tr><td>" + G.fmtDate(e.receivedAt) + "</td><td><strong>" + G.escapeHtml(dep ? dep.number : "—") + "</strong></td>" +
-          "<td style=\"max-width:12rem;font-size:calc(0.908rem * 1.01)\">" + G.escapeHtml(resShow) + "</td>" +
-          "<td>" + G.escapeHtml(e.descripcion || "—") + "</td><td style=\"max-width:10rem;font-size:calc(0.908rem * 1.01)\">" + retiraCell + "</td><td>" + encomiendaRegistroConserjeCellHtml(e) + "</td><td>" + st + "</td><td style=\"font-size:calc(0.858rem * 1.01)\">" + G.escapeHtml(avs) + "</td><td style=\"white-space:nowrap\">";
+        var encMailChecks = "";
+        if (e.notifiedInAt) {
+          encMailChecks +=
+            "<span class=\"cg-vis-mail-check\" title=\"Llegada · correo registrado como enviado · " +
+            G.escapeHtml(G.fmtDate(e.notifiedInAt)) +
+            "\"><i class=\"fa-solid fa-check\" aria-hidden=\"true\"></i></span>";
+        }
+        if (e.notifiedOutAt) {
+          encMailChecks +=
+            "<span class=\"cg-vis-mail-check\" title=\"Retiro · correo registrado como enviado · " +
+            G.escapeHtml(G.fmtDate(e.notifiedOutAt)) +
+            "\"><i class=\"fa-solid fa-check\" aria-hidden=\"true\"></i></span>";
+        }
+        html +=
+          "<tr><td class=\"cg-vis-mail-cell cg-enc-mail-cell\">" +
+          encMailChecks +
+          "</td><td>" +
+          G.fmtDate(e.receivedAt) +
+          "</td><td><strong>" +
+          G.escapeHtml(dep ? dep.number : "—") +
+          "</strong></td>" +
+          "<td style=\"max-width:12rem;font-size:calc(0.908rem * 1.01)\">" +
+          G.escapeHtml(resShow) +
+          "</td>" +
+          "<td>" +
+          G.escapeHtml(e.descripcion || "—") +
+          "</td><td style=\"max-width:10rem;font-size:calc(0.908rem * 1.01)\">" +
+          retiraCell +
+          "</td><td>" +
+          encomiendaRegistroConserjeCellHtml(e) +
+          "</td><td>" +
+          st +
+          "</td><td style=\"white-space:nowrap\">";
         if (pend) {
           html +=
             "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"encomiendaNotifyModal\" data-cg-id=\"" +
@@ -20143,8 +20247,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"cg-stat-chip cg-stat-chip--visit\"><span class=\"cg-stat-chip-val\">" + vehOpenN + "</span><span class=\"cg-stat-chip-lbl\">Vehíc. sin salida</span></div>";
     }
     var isAdmVis = G.currentUser() && G.currentUser().role === "admin";
-    var html = "<table class=\"data-table\"><thead><tr><th>Ingreso</th><th>Depto</th><th>Fecha ingreso</th><th>Vehíc.</th><th>Tiempo</th><th>Salida</th><th>Conserje</th><th></th></tr></thead><tbody>";
-    if (!rows.length) html += "<tr><td class=\"cg-empty-table\" colspan=\"8\">Sin resultados. Cambie el filtro, la búsqueda o registre un nuevo ingreso.</td></tr>";
+    var html =
+      "<table class=\"data-table\"><thead><tr><th class=\"cg-vis-mail-th\" title=\"Aviso por correo a la unidad marcado como enviado\"><span class=\"sr-only\">Correo</span><i class=\"fa-solid fa-envelope\" style=\"font-size:0.65rem;opacity:0.75\" aria-hidden=\"true\"></i></th><th>Ingreso</th><th>Depto</th><th>Fecha ingreso</th><th>Vehíc.</th><th>Tiempo</th><th>Salida</th><th>Conserje</th><th></th></tr></thead><tbody>";
+    if (!rows.length) html += "<tr><td class=\"cg-empty-table\" colspan=\"9\">Sin resultados. Cambie el filtro, la búsqueda o registre un nuevo ingreso.</td></tr>";
     rows.forEach(function (v) {
       var dep = G.deptById(v.deptId);
       var estVis = visitVisitorParkingDisplay(v);
@@ -20200,10 +20305,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       } else {
         timeCell = G.escapeHtml(elapsed);
       }
+      var mailCheckCell = v.residentNotifiedAt
+        ? "<span class=\"cg-vis-mail-check\" title=\"Correo a la unidad registrado como enviado · " +
+          G.escapeHtml(G.fmtDate(v.residentNotifiedAt)) +
+          "\"><i class=\"fa-solid fa-check\" aria-hidden=\"true\"></i></span>"
+        : "";
       html +=
         "<tr" +
         (rowCls ? " class=\"" + rowCls + "\"" : "") +
-        "><td>" +
+        "><td class=\"cg-vis-mail-cell\">" +
+        mailCheckCell +
+        "</td><td>" +
         tipoBadge +
         G.escapeHtml(v.visitor || "—") +
         rutHist +
@@ -20483,6 +20595,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         : "<span class=\"page-desc\">Sin e-mail en la ficha del departamento ni en integrantes de la unidad.</span>") +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"btn-parte-copy-html\"><i class=\"fa-solid fa-palette\"></i> Copiar diseño HTML</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"clipboardCopyByElId\" data-cg-id=\"parte-txt\">Copiar texto plano</button>" +
+      (mailto
+        ? "<button type=\"button\" class=\"btn btn-secondary btn-sm\" style=\"margin-left:auto\" data-cg-act=\"visitMarkResidentNotified\" data-cg-id=\"" +
+          G.escapeHtml(v.id) +
+          "\" title=\"Tras enviar desde su cliente, deja un check en el historial\"><i class=\"fa-solid fa-check\"></i> Marcar correo enviado</button>"
+        : "") +
       "</div></div><div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cerrar</button></div></div>"
     );
     G.logConserjeActivity(
