@@ -4728,13 +4728,42 @@
       line-height: 1.38;
       margin: 0.35rem 0 0;
     }
-    /* Bitácora: siempre legible; el bloqueo por turno solo afecta el formulario «Nueva entrada». */
-    #cg-nov-bitacora-card .timeline,
-    #cg-nov-bitacora-card .tl-item,
-    #cg-nov-bitacora-card .tl-card,
-    #cg-nov-bitacora-card .tl-meta {
-      opacity: 1 !important;
-      filter: none !important;
+    /* Bitácora: conserje sin turno → registros distorsionados / ilegibles hasta abrir turno */
+    .cg-nov-tl-shell {
+      position: relative;
+    }
+    .cg-nov-bitacora-veil-hint {
+      margin: 0 0 0.65rem;
+      padding: 0.55rem 0.85rem;
+      background: linear-gradient(120deg, #fff7ed, #ffedd5);
+      border: 1px solid #fdba74;
+      border-radius: 10px;
+      font-size: 0.82rem;
+      line-height: 1.45;
+      color: #9a3412;
+      font-weight: 600;
+    }
+    #cg-nov-bitacora-card.cg-nov-bitacora--sin-turno .cg-nov-tl-shell .timeline {
+      filter: blur(6px) saturate(0.75);
+      opacity: 0.38;
+      transform: scale(0.985);
+      pointer-events: none;
+      user-select: none;
+      transition: filter 0.28s ease, opacity 0.28s ease, transform 0.28s ease;
+    }
+    #cg-nov-bitacora-card:not(.cg-nov-bitacora--sin-turno) .cg-nov-tl-shell .timeline {
+      filter: none;
+      opacity: 1;
+      transform: none;
+      pointer-events: auto;
+      user-select: auto;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #cg-nov-bitacora-card.cg-nov-bitacora--sin-turno .cg-nov-tl-shell .timeline {
+        transition: none;
+        filter: blur(3px);
+        transform: none;
+      }
     }
     .card-h .cg-nov-bit-toolbar {
       flex: 1 1 100%;
@@ -16078,7 +16107,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"flt-nov-clear\" data-cg-act=\"novedadFilterClear\" title=\"Quitar búsqueda, fechas y categoría\">Limpiar</button>" +
         "</div></div></div><div class=\"card-b\">" +
         "<p id=\"flt-nov-summary\" class=\"page-desc\" style=\"margin:0 0 0.65rem\" aria-live=\"polite\"></p>" +
-        "<div class=\"timeline\" id=\"tl-nov\"></div></div></div>"
+        "<div class=\"cg-nov-tl-shell\">" +
+        "<p id=\"cg-nov-bitacora-veil-hint\" class=\"cg-nov-bitacora-veil-hint\" hidden>Abra su turno en <strong>Control de turno</strong> para ver la bitácora con claridad y poder registrar entradas.</p>" +
+        "<div class=\"timeline\" id=\"tl-nov\"></div></div></div></div>"
       );
     }
 
@@ -22194,12 +22225,24 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
 
   function syncNovedadEntryFormShiftGate() {
-    var f = document.getElementById("f-nov");
-    var msg = document.getElementById("f-nov-gate-msg");
-    var wrap = document.getElementById("f-nov-wrap");
-    if (!f) return;
     var u = G.currentUser();
     var locked = !novedadConserjeMayRegisterNew(u);
+    var bitacoraCard = document.getElementById("cg-nov-bitacora-card");
+    if (bitacoraCard) bitacoraCard.classList.toggle("cg-nov-bitacora--sin-turno", locked);
+    var veilHint = document.getElementById("cg-nov-bitacora-veil-hint");
+    if (veilHint) {
+      if (locked) veilHint.removeAttribute("hidden");
+      else veilHint.setAttribute("hidden", "hidden");
+    }
+    var tlNov = document.getElementById("tl-nov");
+    if (tlNov) {
+      if (locked) tlNov.setAttribute("aria-hidden", "true");
+      else tlNov.removeAttribute("aria-hidden");
+    }
+    var f = document.getElementById("f-nov");
+    if (!f) return;
+    var msg = document.getElementById("f-nov-gate-msg");
+    var wrap = document.getElementById("f-nov-wrap");
     var hint =
       "Abra su turno en el recuadro <strong>Control de turno</strong> para poder registrar entradas en el libro.";
     var catEl = f.querySelector('[name="category"]');
@@ -22541,6 +22584,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<p class=\"page-desc\">" +
         (total ? "Ninguna entrada coincide con los filtros. Pruebe limpiar o ampliar fechas." : "Sin registros todavía.") +
         "</p>";
+      syncNovedadEntryFormShiftGate();
       return;
     }
     var isAdm = G.currentUser() && G.currentUser().role === "admin";
@@ -22614,6 +22658,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "</div></div>"
       );
     }).join("");
+    syncNovedadEntryFormShiftGate();
   };
 
   A.bindNovedades = function () {
