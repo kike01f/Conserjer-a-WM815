@@ -749,7 +749,7 @@
   <!-- Módulo Departamentos: UI incrustada; datos en localStorage (prefijo CG.LS + wm815_*). -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Syne:wght@600;700;800&display=optional" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Syne:wght@600;700;800&display=optional" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" />
   <!-- ——— CSS aplicación (tokens, layout shell, módulos, impresión, modales) ——— -->
   <style>
@@ -1652,68 +1652,150 @@
       padding-top: max(1rem, env(safe-area-inset-top));
       box-sizing: border-box;
       overflow: auto;
-      background: rgba(15, 23, 42, 0.58);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
+      background:
+        radial-gradient(ellipse 120% 80% at 10% 20%, rgba(99, 102, 241, 0.35) 0%, transparent 50%),
+        radial-gradient(ellipse 100% 60% at 90% 80%, rgba(244, 114, 182, 0.22) 0%, transparent 45%),
+        radial-gradient(circle at 50% 50%, rgba(14, 165, 233, 0.12) 0%, transparent 55%),
+        rgba(15, 23, 42, 0.72);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
     }
     #cg-user-manual-overlay[hidden] {
       display: none !important;
     }
     #cg-user-manual-overlay .cg-user-manual-dialog {
       width: 100%;
-      max-width: 920px;
-      max-height: min(92vh, 900px);
+      max-width: 960px;
+      max-height: min(93vh, 920px);
       margin-bottom: 1.5rem;
-      background: var(--gray-50, #f8fafc);
-      border-radius: 16px;
-      border: 1px solid var(--gray-200, #e2e8f0);
-      box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.35);
+      background: linear-gradient(145deg, #fafbff 0%, #f4f6fb 48%, #f0f4f8 100%);
+      border-radius: 22px;
+      border: 1px solid color-mix(in srgb, #6366f1 18%, transparent);
+      box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.65) inset,
+        0 28px 56px -16px rgba(15, 23, 42, 0.45),
+        0 12px 32px -8px rgba(99, 102, 241, 0.15);
       display: flex;
       flex-direction: column;
       overflow: hidden;
     }
     #cg-user-manual-overlay .cg-user-manual-head {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
-      gap: 0.75rem;
-      padding: 0.85rem 1.1rem;
-      background: #fff;
-      border-bottom: 1px solid var(--gray-200, #e2e8f0);
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      background: linear-gradient(105deg, #1e1b4b 0%, #312e81 42%, #4338ca 100%);
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+    #cg-user-manual-overlay .cg-user-manual-head::after {
+      content: "";
+      position: absolute;
+      inset: -40% -20% auto auto;
+      width: 280px;
+      height: 280px;
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.14) 0%, transparent 68%);
+      pointer-events: none;
+      animation: cg-manual-head-glow 14s ease-in-out infinite alternate;
+    }
+    @keyframes cg-manual-head-glow {
+      from { transform: translate(0, 0) scale(1); opacity: 0.85; }
+      to { transform: translate(-12px, 8px) scale(1.08); opacity: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #cg-user-manual-overlay .cg-user-manual-head::after { animation: none; }
+    }
+    #cg-user-manual-overlay .cg-user-manual-head-main {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+    #cg-user-manual-overlay .cg-user-manual-head-badge {
+      width: 3rem;
+      height: 3rem;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06));
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.35rem;
+      flex-shrink: 0;
     }
     #cg-user-manual-overlay .cg-user-manual-head h2 {
       margin: 0;
-      font-size: 1.05rem;
+      font-family: "Bricolage Grotesque", "Syne", system-ui, sans-serif;
+      font-size: 1.2rem;
       font-weight: 700;
-      color: var(--gray-800, #1e293b);
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+      color: #fff;
+    }
+    #cg-user-manual-overlay .cg-user-manual-head-sub {
+      margin: 0.2rem 0 0;
+      font-size: 0.78rem;
+      opacity: 0.88;
+      font-weight: 500;
+      max-width: 26rem;
+    }
+    #cg-user-manual-overlay .cg-user-manual-head .btn {
+      position: relative;
+      z-index: 1;
+      flex-shrink: 0;
+      border-color: rgba(255, 255, 255, 0.35);
+      color: #fff;
+      background: rgba(255, 255, 255, 0.12);
+    }
+    #cg-user-manual-overlay .cg-user-manual-head .btn:hover {
+      background: rgba(255, 255, 255, 0.22);
+      color: #fff;
     }
     #cg-user-manual-overlay .cg-user-manual-body {
-      padding: 0.75rem 1rem 1rem;
+      padding: 1rem 1.15rem 1.15rem;
       overflow: auto;
       flex: 1;
       min-height: 0;
+      background: linear-gradient(180deg, transparent 0%, rgba(99, 102, 241, 0.03) 100%);
     }
     .cg-manual-root {
-      --cg-manual-accent: var(--blue-600, #2563eb);
+      --cg-manual-accent: #4f46e5;
+      --cg-manual-accent-soft: color-mix(in srgb, #4f46e5 14%, transparent);
+      font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
     }
     .cg-manual-layout {
       display: grid;
-      grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
-      gap: 1rem;
+      grid-template-columns: minmax(0, 238px) minmax(0, 1fr);
+      gap: 1.15rem;
       align-items: start;
     }
-    @media (max-width: 720px) {
+    @media (max-width: 760px) {
       .cg-manual-layout {
         grid-template-columns: 1fr;
       }
     }
-    .cg-manual-toc {
-      background: #fff;
-      border: 1px solid var(--gray-200, #e2e8f0);
-      border-radius: 12px;
-      padding: 0.5rem 0;
+    .cg-manual-toc-wrap {
       position: sticky;
       top: 0;
+    }
+    .cg-manual-toc-title {
+      font-family: "Bricolage Grotesque", "Syne", system-ui, sans-serif;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #64748b;
+      margin: 0 0 0.45rem 0.35rem;
+    }
+    .cg-manual-toc {
+      background: #fff;
+      border: 1px solid color-mix(in srgb, var(--cg-manual-accent) 12%, #e2e8f0);
+      border-radius: 16px;
+      padding: 0.4rem;
+      box-shadow: 0 4px 20px -6px rgba(15, 23, 42, 0.08);
     }
     .cg-manual-toc ol {
       list-style: none;
@@ -1721,76 +1803,392 @@
       padding: 0;
     }
     .cg-manual-toc li {
-      margin: 0;
+      margin: 0 0 0.28rem;
+    }
+    .cg-manual-toc li:last-child {
+      margin-bottom: 0;
     }
     .cg-manual-toc button {
       width: 100%;
       text-align: left;
-      padding: 0.45rem 0.75rem;
-      font-size: 0.78rem;
-      line-height: 1.35;
+      padding: 0.5rem 0.55rem 0.5rem 0.45rem;
+      font-size: 0.72rem;
+      line-height: 1.3;
       border: none;
       background: transparent;
       cursor: pointer;
-      color: var(--gray-700, #334155);
-      border-left: 3px solid transparent;
+      color: #475569;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-family: "DM Sans", system-ui, sans-serif;
+      font-weight: 500;
+      transition: background 0.15s, color 0.15s, transform 0.15s;
+    }
+    .cg-manual-toc-num {
+      width: 1.35rem;
+      height: 1.35rem;
+      border-radius: 8px;
+      background: #f1f5f9;
+      color: #64748b;
+      font-size: 0.62rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-family: "Bricolage Grotesque", sans-serif;
+    }
+    .cg-manual-toc-ic {
+      width: 1.5rem;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.85rem;
+      flex-shrink: 0;
     }
     .cg-manual-toc button:hover {
-      background: var(--gray-100, #f1f5f9);
+      background: #f8fafc;
+      color: #0f172a;
     }
     .cg-manual-toc button.cg-manual-toc--active {
-      border-left-color: var(--cg-manual-accent);
-      background: color-mix(in srgb, var(--cg-manual-accent) 10%, transparent);
+      background: linear-gradient(120deg, var(--cg-manual-accent-soft), color-mix(in srgb, var(--cg-manual-accent) 8%, #fff));
+      color: #1e1b4b;
       font-weight: 700;
-      color: var(--gray-900, #0f172a);
+      box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--cg-manual-accent) 35%, transparent);
+    }
+    .cg-manual-toc button.cg-manual-toc--active .cg-manual-toc-num {
+      background: var(--cg-manual-accent);
+      color: #fff;
+    }
+    .cg-manual-toc button.cg-manual-toc--active .cg-manual-toc-ic {
+      color: var(--cg-manual-accent);
     }
     .cg-manual-panel {
       background: #fff;
-      border: 1px solid var(--gray-200, #e2e8f0);
-      border-radius: 12px;
-      padding: 1rem 1.1rem;
-      min-height: 280px;
-    }
-    .cg-manual-step h3 {
-      margin: 0 0 0.65rem;
-      font-size: 1.05rem;
-      color: var(--gray-900, #0f172a);
-    }
-    .cg-manual-step p,
-    .cg-manual-step li {
-      font-size: 0.9rem;
-      line-height: 1.55;
-      color: var(--gray-700, #334155);
-    }
-    .cg-manual-step ul,
-    .cg-manual-step ol {
-      margin: 0.35rem 0 0.5rem 1.1rem;
-      padding: 0;
-    }
-    .cg-manual-step[hidden] {
-      display: none !important;
+      border: 1px solid color-mix(in srgb, var(--cg-manual-accent) 10%, #e2e8f0);
+      border-radius: 18px;
+      padding: 1.1rem 1.2rem 1.15rem;
+      min-height: 300px;
+      box-shadow: 0 6px 28px -12px rgba(15, 23, 42, 0.1);
     }
     .cg-manual-progress {
-      height: 4px;
-      background: var(--gray-200, #e2e8f0);
-      border-radius: 4px;
-      margin-bottom: 0.85rem;
+      height: 6px;
+      background: #e2e8f0;
+      border-radius: 99px;
+      margin-bottom: 1rem;
       overflow: hidden;
     }
     .cg-manual-progress-bar {
       height: 100%;
-      background: var(--cg-manual-accent);
-      border-radius: 4px;
-      transition: width 0.25s ease;
+      border-radius: 99px;
+      background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+      background-size: 200% 100%;
+      transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+      animation: cg-manual-progress-shimmer 4s linear infinite;
+    }
+    @keyframes cg-manual-progress-shimmer {
+      0% { background-position: 0% 50%; }
+      100% { background-position: 200% 50%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cg-manual-progress-bar { animation: none; }
+    }
+    .cg-manual-step[hidden] {
+      display: none !important;
+    }
+    .cg-manual-step--animate {
+      animation: cg-manual-step-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    @keyframes cg-manual-step-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cg-manual-step--animate { animation: none; }
+    }
+    .cg-manual-step {
+      --step-hue: 239;
+      --step-accent: hsl(var(--step-hue), 72%, 52%);
+      --step-soft: hsla(var(--step-hue), 65%, 56%, 0.12);
+    }
+    .cg-manual-step[data-manual-theme="coral"] { --step-hue: 350; }
+    .cg-manual-step[data-manual-theme="teal"] { --step-hue: 175; }
+    .cg-manual-step[data-manual-theme="amber"] { --step-hue: 38; }
+    .cg-manual-step[data-manual-theme="sky"] { --step-hue: 200; }
+    .cg-manual-step[data-manual-theme="violet"] { --step-hue: 265; }
+    .cg-manual-step[data-manual-theme="emerald"] { --step-hue: 155; }
+    .cg-manual-step[data-manual-theme="slate"] { --step-hue: 220; }
+    .cg-manual-step__hero {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 0.85rem;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding: 0.85rem 1rem;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--step-soft), #fff 55%, hsla(var(--step-hue), 40%, 96%, 0.9));
+      border: 1px solid hsla(var(--step-hue), 35%, 50%, 0.15);
+      position: relative;
+      overflow: hidden;
+    }
+    .cg-manual-step__hero::before {
+      content: "";
+      position: absolute;
+      inset: auto -30% -60% auto;
+      width: 140px;
+      height: 140px;
+      background: radial-gradient(circle, hsla(var(--step-hue), 70%, 60%, 0.2) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cg-manual-step__icon {
+      width: 3.1rem;
+      height: 3.1rem;
+      border-radius: 14px;
+      background: linear-gradient(145deg, var(--step-accent), hsl(var(--step-hue), 55%, 42%));
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.35rem;
+      flex-shrink: 0;
+      box-shadow: 0 8px 20px -6px hsla(var(--step-hue), 60%, 40%, 0.55);
+      position: relative;
+      z-index: 1;
+    }
+    .cg-manual-step__titles {
+      position: relative;
+      z-index: 1;
+      min-width: 0;
+    }
+    .cg-manual-step__kicker {
+      margin: 0;
+      font-family: "DM Sans", system-ui, sans-serif;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: hsl(var(--step-hue), 30%, 42%);
+    }
+    .cg-manual-step h3 {
+      margin: 0.15rem 0 0;
+      font-family: "Bricolage Grotesque", "Syne", system-ui, sans-serif;
+      font-size: 1.22rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: #0f172a;
+      line-height: 1.2;
+    }
+    .cg-manual-step__svg-deco {
+      width: 4.5rem;
+      height: 4.5rem;
+      flex-shrink: 0;
+      opacity: 0.85;
+      position: relative;
+      z-index: 1;
+    }
+    .cg-manual-lead {
+      font-size: 0.98rem;
+      line-height: 1.65;
+      color: #334155;
+      margin: 0 0 1rem;
+    }
+    .cg-manual-lead strong {
+      color: #0f172a;
+    }
+    .cg-manual-feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .cg-manual-card {
+      display: flex;
+      gap: 0.65rem;
+      padding: 0.75rem 0.8rem;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fafafa 0%, #fff 100%);
+      border: 1px solid #e8ecf1;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .cg-manual-card:hover {
+      border-color: hsla(var(--step-hue), 45%, 55%, 0.35);
+      box-shadow: 0 6px 16px -8px hsla(var(--step-hue), 50%, 40%, 0.2);
+    }
+    .cg-manual-card__icon {
+      width: 2.25rem;
+      height: 2.25rem;
+      border-radius: 10px;
+      background: var(--step-soft);
+      color: var(--step-accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+    .cg-manual-card__body strong {
+      font-family: "DM Sans", system-ui, sans-serif;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #0f172a;
+      display: block;
+      margin-bottom: 0.2rem;
+    }
+    .cg-manual-card__body p {
+      margin: 0;
+      font-family: "Source Serif 4", Georgia, serif;
+      font-size: 0.84rem;
+      line-height: 1.5;
+      color: #475569;
+    }
+    .cg-manual-callout {
+      display: flex;
+      gap: 0.65rem;
+      align-items: flex-start;
+      padding: 0.85rem 1rem;
+      border-radius: 12px;
+      margin-top: 0.5rem;
+      font-family: "DM Sans", system-ui, sans-serif;
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+    .cg-manual-callout--tip {
+      background: linear-gradient(120deg, #ecfdf5, #f0fdf4);
+      border: 1px solid #a7f3d0;
+      color: #065f46;
+    }
+    .cg-manual-callout--note {
+      background: linear-gradient(120deg, #eff6ff, #f8fafc);
+      border: 1px solid #bfdbfe;
+      color: #1e40af;
+    }
+    .cg-manual-callout > i {
+      font-size: 1.1rem;
+      margin-top: 0.08rem;
+      flex-shrink: 0;
+    }
+    .cg-manual-flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem 0.5rem;
+      margin: 0.85rem 0;
+      padding: 0.75rem;
+      background: #f8fafc;
+      border-radius: 12px;
+      border: 1px dashed #cbd5e1;
+    }
+    .cg-manual-flow__node {
+      font-family: "DM Sans", system-ui, sans-serif;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.35rem 0.65rem;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      color: #334155;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .cg-manual-flow__node i {
+      color: var(--step-accent);
+    }
+    .cg-manual-flow__arrow {
+      color: #94a3b8;
+      font-size: 0.75rem;
+    }
+    .cg-manual-media-strip {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin: 0.75rem 0 0;
+    }
+    .cg-manual-media-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: 99px;
+      background: hsla(var(--step-hue), 50%, 96%, 1);
+      border: 1px solid hsla(var(--step-hue), 35%, 80%, 0.5);
+      font-family: "DM Sans", system-ui, sans-serif;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: hsl(var(--step-hue), 35%, 28%);
+    }
+    .cg-manual-step ul.cg-manual-list {
+      margin: 0.5rem 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .cg-manual-step ul.cg-manual-list li {
+      position: relative;
+      padding-left: 1.35rem;
+      margin-bottom: 0.45rem;
+      font-size: 0.92rem;
+      line-height: 1.55;
+      color: #475569;
+    }
+    .cg-manual-step ul.cg-manual-list li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.55rem;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--step-accent);
+      box-shadow: 0 0 0 3px var(--step-soft);
     }
     .cg-manual-nav {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.5rem;
+      gap: 0.6rem;
       justify-content: space-between;
-      margin-top: 1.1rem;
-      padding-top: 0.85rem;
-      border-top: 1px solid var(--gray-100, #f1f5f9);
+      align-items: center;
+      margin-top: 1.15rem;
+      padding-top: 1rem;
+      border-top: 1px solid #f1f5f9;
+    }
+    .cg-manual-counter-pill {
+      font-family: "DM Sans", system-ui, sans-serif;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.35rem 0.75rem;
+      border-radius: 99px;
+      background: #f1f5f9;
+      color: #475569;
+    }
+    .cg-page-compact .cg-manual-intro {
+      margin-bottom: 1.25rem;
+      padding: 1rem 1.15rem;
+      border-radius: 16px;
+      background: linear-gradient(115deg, #eef2ff 0%, #faf5ff 50%, #fdf4ff 100%);
+      border: 1px solid #e9d5ff;
+      position: relative;
+      overflow: hidden;
+    }
+    .cg-page-compact .cg-manual-intro::before {
+      content: "";
+      position: absolute;
+      top: -50%;
+      right: -10%;
+      width: 180px;
+      height: 180px;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cg-page-compact .cg-manual-intro h1.page-title {
+      position: relative;
+      z-index: 1;
+      font-family: "Bricolage Grotesque", "Syne", sans-serif;
+      letter-spacing: -0.03em;
+    }
+    .cg-page-compact .cg-manual-intro .page-desc {
+      position: relative;
+      z-index: 1;
     }
     #login-screen .login-box .btn-login {
       width: 100%;
@@ -14759,106 +15157,274 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return leaderTable + logSection;
     }
 
+    function cgManualHeroSvg(i) {
+      var g = "cg-msvg-g-" + i;
+      var svgs = [
+        '<svg class="cg-manual-step__svg-deco" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="' + g + '" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#6366f1"/><stop offset="100%" stop-color="#c084fc"/></linearGradient></defs><rect x="12" y="12" width="76" height="76" rx="18" fill="none" stroke="url(#' + g + ')" stroke-width="2.5" opacity="0.55"/><circle cx="50" cy="50" r="22" fill="url(#' + g + ')" opacity="0.2"/><path d="M35 52 L47 64 L68 38" fill="none" stroke="url(#' + g + ')" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        '<svg class="cg-manual-step__svg-deco" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="' + g + '" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#0ea5e9"/><stop offset="100%" stop-color="#6366f1"/></linearGradient></defs><path d="M50 18 L82 38 L82 70 L50 90 L18 70 L18 38 Z" fill="none" stroke="url(#' + g + ')" stroke-width="2.2"/><circle cx="50" cy="54" r="14" fill="url(#' + g + ')" opacity="0.25"/></svg>',
+        '<svg class="cg-manual-step__svg-deco" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="' + g + '" x1="0%" y1="50%" x2="100%" y2="50%"><stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#14b8a6"/></linearGradient></defs><rect x="22" y="28" width="56" height="44" rx="6" fill="url(#' + g + ')" opacity="0.2"/><path d="M30 50 H70 M50 38 V62" stroke="url(#' + g + ')" stroke-width="3" stroke-linecap="round"/><circle cx="50" cy="78" r="6" fill="url(#' + g + ')" opacity="0.5"/></svg>',
+        '<svg class="cg-manual-step__svg-deco" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="' + g + '" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#ef4444"/></linearGradient></defs><rect x="18" y="22" width="64" height="48" rx="8" fill="none" stroke="url(#' + g + ')" stroke-width="2"/><circle cx="38" cy="78" r="5" fill="url(#' + g + ')" opacity="0.6"/><circle cx="50" cy="78" r="5" fill="url(#' + g + ')" opacity="0.45"/><circle cx="62" cy="78" r="5" fill="url(#' + g + ')" opacity="0.3"/></svg>',
+        '<svg class="cg-manual-step__svg-deco" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="' + g + '" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient></defs><rect x="20" y="30" width="60" height="36" rx="6" fill="url(#' + g + ')" opacity="0.15"/><path d="M28 44 H72 M28 54 H58" stroke="url(#' + g + ')" stroke-width="2.5" stroke-linecap="round"/><circle cx="72" cy="54" r="8" fill="url(#' + g + ')" opacity="0.35"/></svg>',
+        '<svg class="cg-manual-step__svg-deco" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="' + g + '" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#d946ef"/><stop offset="100%" stop-color="#6366f1"/></linearGradient></defs><rect x="28" y="22" width="44" height="34" rx="4" fill="none" stroke="url(#' + g + ')" stroke-width="2"/><path d="M32 60 L50 78 L68 60" fill="none" stroke="url(#' + g + ')" stroke-width="2.5" stroke-linecap="round"/><circle cx="50" cy="42" r="8" fill="url(#' + g + ')" opacity="0.3"/></svg>',
+        '<svg class="cg-manual-step__svg-deco" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="' + g + '" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#64748b"/><stop offset="100%" stop-color="#94a3b8"/></linearGradient></defs><path d="M25 35 Q50 20 75 35 L75 65 Q50 80 25 65 Z" fill="url(#' + g + ')" opacity="0.18"/><line x1="35" y1="48" x2="65" y2="48" stroke="url(#' + g + ')" stroke-width="2"/><line x1="35" y1="56" x2="55" y2="56" stroke="url(#' + g + ')" stroke-width="2" opacity="0.6"/></svg>',
+        '<svg class="cg-manual-step__svg-deco" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="' + g + '" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#06b6d4"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs><circle cx="35" cy="40" r="14" fill="url(#' + g + ')" opacity="0.22"/><circle cx="65" cy="40" r="14" fill="url(#' + g + ')" opacity="0.18"/><path d="M25 72 Q50 55 75 72" fill="none" stroke="url(#' + g + ')" stroke-width="2.5"/></svg>',
+        '<svg class="cg-manual-step__svg-deco" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="' + g + '" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#22c55e"/><stop offset="100%" stop-color="#0ea5e9"/></linearGradient></defs><path d="M50 22 L58 42 L80 42 L62 56 L70 78 L50 64 L30 78 L38 56 L20 42 L42 42 Z" fill="url(#' + g + ')" opacity="0.22"/></svg>'
+      ];
+      return svgs[i % svgs.length];
+    }
+
+    function cgManualCard(ic, title, txt) {
+      return (
+        "<div class=\"cg-manual-card\">" +
+        "<span class=\"cg-manual-card__icon\"><i class=\"fa-solid " +
+        ic +
+        "\" aria-hidden=\"true\"></i></span>" +
+        "<div class=\"cg-manual-card__body\"><strong>" +
+        G.escapeHtml(title) +
+        "</strong><p>" +
+        G.escapeHtml(txt) +
+        "</p></div></div>"
+      );
+    }
+
     function cgUserManualWizardMarkup() {
+      var nSteps = 9;
       var steps = [
         {
           t: "Bienvenida",
-          h:
-            "<p>Esta aplicación centraliza el trabajo diario de conserjería: visitas, encomiendas, libro de novedades, reservas, proveedores y consulta de departamentos y estacionamientos.</p>" +
-            "<p><strong>Sin iniciar sesión</strong> puede abrir este mismo manual desde el botón en la pantalla de login. <strong>Dentro de la app</strong>, use el módulo <strong>Manual de usuario</strong> en el menú lateral.</p>"
+          theme: "violet",
+          icon: "fa-compass",
+          tocIcon: "fa-door-open",
+          lead:
+            "Una sola herramienta para el día a día en conserjería: registro, trazabilidad y comunicación con las unidades, con diseño pensado para pantallas de recepción y uso rápido.",
+          cards: [
+            { ic: "fa-user-clock", title: "Visitas", txt: "Ingresos, salidas, historial y avisos por correo a la unidad." },
+            { ic: "fa-box-open", title: "Encomiendas", txt: "Recepción, retiros y notificaciones con constancia en el listado." },
+            { ic: "fa-book", title: "Novedades", txt: "Turno, bitácora y comunicación entre conserjes y administración." },
+            { ic: "fa-chart-pie", title: "Panel", txt: "Resumen del día, alertas y accesos directos a lo urgente." }
+          ],
+          callout:
+            "<div class=\"cg-manual-callout cg-manual-callout--tip\"><i class=\"fa-solid fa-lightbulb\" aria-hidden=\"true\"></i><span><strong>Sin sesión:</strong> desde el login puede abrir este manual completo. <strong>Con sesión:</strong> menú lateral → <strong>Manual de usuario</strong>.</span></div>",
+          media:
+            "<div class=\"cg-manual-media-strip\"><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-mobile-screen\" aria-hidden=\"true\"></i> Responsive</span><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-cloud\" aria-hidden=\"true\"></i> Sincronización</span><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-shield-halved\" aria-hidden=\"true\"></i> Roles</span></div>"
         },
         {
           t: "Inicio de sesión",
-          h:
-            "<p>Ingrese su <strong>usuario</strong> y <strong>contraseña</strong> y pulse <strong>Iniciar sesión</strong>. Si olvida la contraseña, un administrador puede restablecerla desde <strong>Administración</strong>.</p>" +
-            "<ul><li>No deje espacios antes ni después del usuario.</li><li>Respete mayúsculas en la contraseña si las usó al crearla.</li><li>Si otro conserje tiene el turno abierto, el sistema puede impedir que usted entre: debe cerrarse ese turno primero.</li></ul>"
+          theme: "sky",
+          icon: "fa-right-to-bracket",
+          tocIcon: "fa-key",
+          lead:
+            "Sus credenciales son personales. Si falla el acceso, revise espacios en blanco y mayúsculas; solo un administrador puede crear usuarios o ayudarle con la contraseña.",
+          cards: [
+            { ic: "fa-user", title: "Usuario", txt: "Sin espacios al inicio o al final. Si copia y pega, asegúrese de no incluir saltos de línea." },
+            { ic: "fa-lock", title: "Contraseña", txt: "Distingue mayúsculas y minúsculas. No la comparta ni la deje visible en recepción." },
+            { ic: "fa-user-shield", title: "Administrador", txt: "La gestión de personal y permisos está en Administración (solo rol admin)." }
+          ],
+          list: [
+            "Si otro conserje tiene un turno abierto que bloquea el sistema, debe cerrarse antes de que usted entre (normativa del edificio).",
+            "Cierre sesión al alejarse del puesto, aunque sea unos minutos."
+          ],
+          callout:
+            "<div class=\"cg-manual-callout cg-manual-callout--note\"><i class=\"fa-solid fa-circle-info\" aria-hidden=\"true\"></i><span>Primer uso en un navegador nuevo: puede aparecer el asistente para crear el primer administrador; después siempre usará el inicio de sesión habitual.</span></div>"
         },
         {
           t: "Turno de conserjería",
-          h:
-            "<p>Los conserjes deben <strong>abrir su turno</strong> en el módulo <strong>Libro de novedades</strong> antes de usar el resto de módulos (visitas, encomiendas, etc.).</p>" +
-            "<ul><li>Entre a <strong>Libro de novedades</strong> y registre la apertura de turno según las indicaciones en pantalla.</li><li>El módulo <strong>Manual de usuario</strong> y el propio libro de novedades están disponibles aunque el turno no esté abierto.</li><li>Al terminar, cierre el turno en el mismo libro o siga la normativa del edificio.</li></ul>"
+          theme: "emerald",
+          icon: "fa-clock-rotate-left",
+          tocIcon: "fa-clipboard-list",
+          lead:
+            "El turno es el “permiso de circulación” del conserje dentro de la app: mientras no esté abierto, la mayoría de módulos permanecen bloqueados para evitar registros fuera de contexto.",
+          flow:
+            "<div class=\"cg-manual-flow\" aria-hidden=\"false\"><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-book\" aria-hidden=\"true\"></i> Novedades</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-play\" aria-hidden=\"true\"></i> Abrir turno</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-check\" aria-hidden=\"true\"></i> Resto de módulos</span></div>",
+          cards: [
+            { ic: "fa-unlock", title: "Qué se desbloquea", txt: "Visitas, encomiendas, reservas, proveedores, panel, etc., según permisos del edificio." },
+            { ic: "fa-book-open", title: "Excepciones", txt: "Este manual y el Libro de novedades siguen disponibles para abrir o cerrar turno." },
+            { ic: "fa-moon", title: "Cierre", txt: "Al finalizar, cierre el turno en novedades o siga el protocolo indicado por administración." }
+          ]
         },
         {
           t: "Panel de control",
-          h:
-            "<p>El <strong>Panel de control</strong> resume actividad reciente: visitas y encomiendas del día, alertas de visitas vehiculares prolongadas y accesos rápidos.</p>" +
-            "<ul><li>Revise los avisos en tarjetas de color según gravedad.</li><li>Use los botones para ir al módulo correspondiente.</li></ul>"
+          theme: "amber",
+          icon: "fa-gauge-high",
+          tocIcon: "fa-chart-line",
+          lead:
+            "Vista de mando: números del día, comparativas simples, alertas de estacionamiento de visitas y atajos para actuar sin perder tiempo.",
+          cards: [
+            { ic: "fa-car", title: "Alertas vehículos", txt: "Colores según gravedad: avisos antes del límite, gracia y multa/parte." },
+            { ic: "fa-arrow-pointer", title: "Accesos rápidos", txt: "Botones que llevan al módulo correcto con un clic." },
+            { ic: "fa-rectangle-list", title: "Actividad", txt: "Bitácora reciente de acciones relevantes en el sistema." }
+          ],
+          media:
+            "<div class=\"cg-manual-media-strip\"><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-eye\" aria-hidden=\"true\"></i> Revise al inicio del turno</span><span class=\"cg-manual-media-chip\"><i class=\"fa-solid fa-bell\" aria-hidden=\"true\"></i> Priorice alertas rojas</span></div>"
         },
         {
           t: "Visitas",
-          h:
-            "<p>Registre <strong>ingreso</strong> de visitantes o proveedores y, cuando corresponda, <strong>salida</strong>. Las visitas peatonales pueden cerrarse automáticamente según la configuración.</p>" +
-            "<ul><li><strong>Registrar:</strong> complete tipo de ingreso, datos del visitante, departamento y, si aplica, patente y estacionamiento de visitas.</li><li><strong>Historial:</strong> filtre por abierto, hoy o todos; busque por nombre, RUT o depto.</li><li><strong>Correo a la unidad:</strong> al avisar por correo, use <strong>Abrir correo</strong>; el sistema deja una constancia (check) en el historial. Si solo copia y pega el texto, use <strong>Marcar correo enviado</strong>.</li></ul>"
+          theme: "teal",
+          icon: "fa-user-clock",
+          tocIcon: "fa-id-card",
+          lead:
+            "Documente cada ingreso con la misma seriedad que un libro físico: datos completos, departamento correcto y salida cuando corresponda.",
+          cards: [
+            { ic: "fa-pen-to-square", title: "Registrar", txt: "Persona o proveedor, RUT si aplica, depto, vehículo y código de estacionamiento de visitas." },
+            { ic: "fa-list", title: "Historial", txt: "Filtros por abiertos, hoy o todos; búsqueda por texto en nombre, RUT o número de unidad." },
+            { ic: "fa-envelope", title: "Correo a la unidad", txt: "Abrir correo registra constancia (check). Si envía solo copiando texto, use Marcar correo enviado." }
+          ],
+          list: [
+            "Las visitas peatonales pueden comportarse distinto según configuración (a veces sin botón de salida).",
+            "Parte o multa vehicular: siga los modales y el texto indicado para administración."
+          ]
         },
         {
           t: "Encomiendas",
-          h:
-            "<p>Registre paquetes recibidos, asocie <strong>departamento</strong> y destinatario cuando exista en el panel, y marque la <strong>entrega</strong> al retirar.</p>" +
-            "<ul><li>Puede enviar avisos por correo (llegada y confirmación de retiro) a los integrantes de la unidad con e-mail.</li><li>Al usar <strong>Abrir correo</strong> se registra la constancia en el listado (iconos de check).</li></ul>"
+          theme: "coral",
+          icon: "fa-box-open",
+          tocIcon: "fa-dolly",
+          lead:
+            "Cadena completa: llegada del paquete → aviso al residente → retiro con identificación del retirador y cierre en el sistema.",
+          cards: [
+            { ic: "fa-box", title: "Al recibir", txt: "Descripción visible, depto, destinatario del panel si existe." },
+            { ic: "fa-paper-plane", title: "Avisos", txt: "Correo a todos los e-mails de la unidad configurados en ficha e integrantes." },
+            { ic: "fa-circle-check", title: "Constancia", txt: "Iconos de check para llegada y/o retiro cuando marca el envío." }
+          ],
+          callout:
+            "<div class=\"cg-manual-callout cg-manual-callout--tip\"><i class=\"fa-solid fa-envelope-open-text\" aria-hidden=\"true\"></i><span>El sistema abre su Outlook, Gmail u otro cliente; <strong>no envía</strong> el mensaje por sí solo: usted confirma y envía.</span></div>"
         },
         {
           t: "Libro de novedades",
-          h:
-            "<p>Además del turno, aquí se documentan incidencias, mantenimiento, seguridad y mensajes entre turnos.</p>" +
-            "<ul><li>Elija categoría y redacte con claridad para el siguiente conserje o administración.</li><li>Use filtros por fecha o texto para encontrar entradas antiguas.</li></ul>"
+          theme: "slate",
+          icon: "fa-book",
+          tocIcon: "fa-feather-pointed",
+          lead:
+            "Es la memoria del edificio entre turnos: mantenimiento, seguridad, incidentes, proveedores y mensajes para administración.",
+          cards: [
+            { ic: "fa-tags", title: "Categorías", txt: "Elija la que mejor describa el hecho; ayuda a filtrar después." },
+            { ic: "fa-filter", title: "Filtros", txt: "Por fechas rápidas (hoy, semana, mes) o búsqueda libre." },
+            { ic: "fa-users", title: "Equipo", txt: "El chat del personal es aparte; las novedades quedan en la línea de tiempo." }
+          ]
         },
         {
-          t: "Reservas y proveedores",
-          h:
-            "<p><strong>Reservas:</strong> gestione espacios comunes definidos por administración (fechas, unidad asociada, nota).</p>" +
-            "<p><strong>Proveedores:</strong> mantenga el catálogo de empresas que ingresan al edificio; facilita registrar visitas de proveedor.</p>" +
-            "<p><strong>Departamentos, estacionamientos y bodegas:</strong> suelen usarse para consulta y registro según los permisos que le asigne un administrador.</p>"
+          t: "Reservas y catálogos",
+          theme: "sky",
+          icon: "fa-layer-group",
+          tocIcon: "fa-calendar-days",
+          lead:
+            "Reservas de espacios comunes, proveedores frecuentes y, según permisos, consulta o edición de departamentos, estacionamiento y bodegas.",
+          cards: [
+            { ic: "fa-calendar-check", title: "Reservas", txt: "Ventanas de tiempo, unidad asociada y notas para el evento." },
+            { ic: "fa-truck", title: "Proveedores", txt: "Empresa y tipo de servicio para agilizar visitas de proveedor." },
+            { ic: "fa-building", title: "Maestros", txt: "Datos base del edificio: unidades, residentes en panel, E y bodegas." }
+          ],
+          flow:
+            "<div class=\"cg-manual-flow\"><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-gear\" aria-hidden=\"true\"></i> Admin define</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-id-badge\" aria-hidden=\"true\"></i> Conserje opera</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-database\" aria-hidden=\"true\"></i> Registro unificado</span></div>"
         },
         {
-          t: "Ayuda, correo y salir",
-          h:
-            "<p>Los avisos por correo se abren en su programa de correo (Outlook, Gmail, etc.); la aplicación no envía mensajes sola.</p>" +
-            "<ul><li>Siempre que pueda, use el botón <strong>Abrir correo</strong> para dejar constancia automática.</li><li>Para dudas técnicas del sistema puede usar el enlace de contacto en la pantalla de inicio (logo inferior).</li><li><strong>Cerrar sesión</strong> al terminar su turno o si deja el puesto desatendido.</li></ul>"
+          t: "Correo, ayuda y salida",
+          theme: "violet",
+          icon: "fa-circle-question",
+          tocIcon: "fa-life-ring",
+          lead:
+            "Cierre del recorrido: buenas prácticas de comunicación con unidades, ayuda del proveedor del software y seguridad de la sesión.",
+          cards: [
+            { ic: "fa-at", title: "Correo", txt: "Prefiera siempre Abrir correo para dejar rastro en visitas y encomiendas." },
+            { ic: "fa-handshake-angle", title: "Soporte Elevate", txt: "Logo inferior en login: contacto para incidencias técnicas del sistema." },
+            { ic: "fa-arrow-right-from-bracket", title: "Cerrar sesión", txt: "Botón en el menú lateral al terminar o al cambiar de persona en el puesto." }
+          ],
+          list: [
+            "Si comparte PC, no guarde contraseñas del navegador en la recepción.",
+            "Ante dudas de normativa del edificio (multas, cartas), consulte siempre a administración."
+          ],
+          callout:
+            "<div class=\"cg-manual-callout cg-manual-callout--note\"><i class=\"fa-solid fa-heart\" aria-hidden=\"true\"></i><span>¡Gracias por mantener el registro al día: es la base de una convivencia ordenada y transparente!</span></div>"
         }
       ];
       var toc = "";
       var panels = "";
       var i;
       for (i = 0; i < steps.length; i++) {
+        var st = steps[i];
         toc +=
           "<li><button type=\"button\" data-cg-manual-go=\"" +
           i +
-          "\">" +
+          "\"><span class=\"cg-manual-toc-num\">" +
           (i + 1) +
-          ". " +
-          G.escapeHtml(steps[i].t) +
-          "</button></li>";
+          "</span><span class=\"cg-manual-toc-ic\"><i class=\"fa-solid " +
+          (st.tocIcon || "fa-circle") +
+          "\" aria-hidden=\"true\"></i></span><span>" +
+          G.escapeHtml(st.t) +
+          "</span></button></li>";
+        var cardsHtml = "";
+        var c;
+        if (st.cards) {
+          for (c = 0; c < st.cards.length; c++) {
+            cardsHtml += cgManualCard(st.cards[c].ic, st.cards[c].title, st.cards[c].txt);
+          }
+        }
+        var listHtml = "";
+        if (st.list) {
+          listHtml = "<ul class=\"cg-manual-list\">";
+          var li;
+          for (li = 0; li < st.list.length; li++) {
+            listHtml += "<li>" + G.escapeHtml(st.list[li]) + "</li>";
+          }
+          listHtml += "</ul>";
+        }
+        var bodyInner =
+          "<p class=\"cg-manual-lead\">" +
+          G.escapeHtml(st.lead) +
+          "</p>" +
+          (st.flow || "") +
+          (cardsHtml ? "<div class=\"cg-manual-feature-grid\">" + cardsHtml + "</div>" : "") +
+          listHtml +
+          (st.callout || "") +
+          (st.media || "");
         panels +=
-          "<section class=\"cg-manual-step\"" +
+          "<section class=\"cg-manual-step" +
+          (i === 0 ? " cg-manual-step--animate" : "") +
+          "\"" +
           (i === 0 ? "" : " hidden") +
-          " data-cg-manual-step=\"" +
+          " data-manual-theme=\"" +
+          (st.theme || "violet") +
+          "\" data-cg-manual-step=\"" +
           i +
           "\" aria-labelledby=\"cg-ms-" +
           i +
-          "\"><h3 id=\"cg-ms-" +
+          "\">" +
+          "<div class=\"cg-manual-step__hero\">" +
+          "<div class=\"cg-manual-step__icon\"><i class=\"fa-solid " +
+          st.icon +
+          "\" aria-hidden=\"true\"></i></div>" +
+          "<div class=\"cg-manual-step__titles\">" +
+          "<p class=\"cg-manual-step__kicker\">Paso " +
+          (i + 1) +
+          " de " +
+          nSteps +
+          "</p>" +
+          "<h3 id=\"cg-ms-" +
           i +
           "\">" +
-          (i + 1) +
-          ". " +
-          G.escapeHtml(steps[i].t) +
-          "</h3>" +
-          steps[i].h +
-          "</section>";
+          G.escapeHtml(st.t) +
+          "</h3></div>" +
+          cgManualHeroSvg(i) +
+          "</div>" +
+          "<div class=\"cg-manual-step__body\">" +
+          bodyInner +
+          "</div></section>";
       }
       return (
         "<div id=\"cg-manual-root\" class=\"cg-manual-root\">" +
         "<div class=\"cg-manual-layout\">" +
+        "<div class=\"cg-manual-toc-wrap\">" +
+        "<p class=\"cg-manual-toc-title\">Índice</p>" +
         "<nav class=\"cg-manual-toc\" aria-label=\"Pasos del manual\"><ol>" +
         toc +
-        "</ol></nav>" +
+        "</ol></nav></div>" +
         "<div class=\"cg-manual-panel\">" +
         "<div class=\"cg-manual-progress\" aria-hidden=\"true\"><div class=\"cg-manual-progress-bar\" id=\"cg-manual-progress-bar\" style=\"width:0%\"></div></div>" +
         panels +
         "<div class=\"cg-manual-nav\">" +
-        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"cg-manual-prev\">Anterior</button>" +
-        "<span class=\"page-desc\" style=\"margin:0;align-self:center;font-size:0.78rem\" id=\"cg-manual-counter\"></span>" +
-        "<button type=\"button\" class=\"btn btn-primary btn-sm\" id=\"cg-manual-next\">Siguiente</button>" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"cg-manual-prev\"><i class=\"fa-solid fa-arrow-left\" aria-hidden=\"true\"></i> Anterior</button>" +
+        "<span class=\"cg-manual-counter-pill\" id=\"cg-manual-counter\"></span>" +
+        "<button type=\"button\" class=\"btn btn-primary btn-sm\" id=\"cg-manual-next\">Siguiente <i class=\"fa-solid fa-arrow-right\" aria-hidden=\"true\"></i></button>" +
         "</div></div></div></div>"
       );
     }
@@ -14879,6 +15445,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var j;
         for (j = 0; j < stepEls.length; j++) {
           stepEls[j].hidden = j !== cur;
+          stepEls[j].classList.remove("cg-manual-step--animate");
+        }
+        if (stepEls[cur]) {
+          void stepEls[cur].offsetWidth;
+          stepEls[cur].classList.add("cg-manual-step--animate");
         }
         tocBtns.forEach(function (btn, j) {
           btn.classList.toggle("cg-manual-toc--active", j === cur);
@@ -14886,7 +15457,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (bar) bar.style.width = ((100 * (cur + 1)) / n).toFixed(1) + "%";
         if (ctr) ctr.textContent = "Paso " + (cur + 1) + " de " + n;
         if (prev) prev.disabled = cur === 0;
-        if (next) next.textContent = cur >= n - 1 ? "Fin del recorrido" : "Siguiente";
+        if (next) {
+          if (cur >= n - 1) {
+            next.innerHTML = "<i class=\"fa-solid fa-flag-checkered\" aria-hidden=\"true\"></i> Fin del recorrido";
+          } else {
+            next.innerHTML = "Siguiente <i class=\"fa-solid fa-arrow-right\" aria-hidden=\"true\"></i>";
+          }
+        }
       }
       tocBtns.forEach(function (btn) {
         btn.addEventListener("click", function () {
@@ -14907,8 +15484,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         ex.innerHTML =
           "<div class=\"cg-user-manual-dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"cg-user-manual-title\">" +
           "<div class=\"cg-user-manual-head\">" +
-          "<h2 id=\"cg-user-manual-title\">Manual de usuario — Conserjes</h2>" +
-          "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"cg-user-manual-close\" aria-label=\"Cerrar manual\">Cerrar</button>" +
+          "<div class=\"cg-user-manual-head-main\">" +
+          "<div class=\"cg-user-manual-head-badge\" aria-hidden=\"true\"><i class=\"fa-solid fa-book-open\"></i></div>" +
+          "<div>" +
+          "<h2 id=\"cg-user-manual-title\">Manual de usuario</h2>" +
+          "<p class=\"cg-user-manual-head-sub\">Guía interactiva: turno, visitas, encomiendas, novedades y panel — con iconos y pasos claros.</p>" +
+          "</div></div>" +
+          "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"cg-user-manual-close\" aria-label=\"Cerrar manual\"><i class=\"fa-solid fa-xmark\" aria-hidden=\"true\"></i> Cerrar</button>" +
           "</div>" +
           "<div class=\"cg-user-manual-body\">" +
           cgUserManualWizardMarkup() +
@@ -14947,8 +15529,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function pageManual() {
       return (
         "<div class=\"cg-page-compact\">" +
+        "<div class=\"cg-manual-intro\">" +
         "<h1 class=\"page-title\">Manual de usuario</h1>" +
-        "<p class=\"page-desc\" style=\"margin-top:0\">Guía paso a paso para conserjes. Elija un tema a la izquierda o avance con <strong>Siguiente</strong> y <strong>Anterior</strong>.</p>" +
+        "<p class=\"page-desc\" style=\"margin-top:0\">Guía paso a paso para conserjes. Use el <strong>índice</strong> a la izquierda o avance con <strong>Anterior</strong> y <strong>Siguiente</strong>. Los recuadros con iconos resumen cada módulo.</p>" +
+        "</div>" +
         cgUserManualWizardMarkup() +
         "</div>"
       );
