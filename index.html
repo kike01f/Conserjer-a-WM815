@@ -19245,6 +19245,65 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return "";
   }
 
+  /** Ingreso visita: solo unidades habitacionales (no Admin / virtual). */
+  function visitIngresoNotifyDeptIsResidential(deptId) {
+    if (!deptId) return false;
+    var d = G.deptById(deptId);
+    if (!d) return false;
+    if (d.id === G.ADMIN_UNIT_ID || d.isVirtualAdmin) return false;
+    if (G.normalizeUnitNumberKey && G.normalizeUnitNumberKey(d.number || "") === "admin") return false;
+    return true;
+  }
+
+  /** Texto plano: aviso a integrantes de la unidad por ingreso de visita. */
+  function visitIngresoNotifyBodyText(rec) {
+    rec = rec || {};
+    var dep = G.deptById(rec.deptId);
+    var depto = dep ? dep.number : "—";
+    var tipo = visitIsProveedor(rec) ? "Proveedor" : "Persona";
+    var sig = cgEmailSignaturePlain();
+    var lines = [
+      "Estimado/a residente del domicilio " + depto + ":",
+      "",
+      "Le informamos que se ha registrado un ingreso de visita asociado a su unidad.",
+      "",
+      "Tipo de ingreso: " + tipo,
+      "Visitante / registro: " + (rec.visitor || "—"),
+    ];
+    if (String(rec.visitorRut || "").trim()) lines.push("RUT: " + String(rec.visitorRut).trim());
+    lines.push("Unidad: " + depto);
+    lines.push("Fecha y hora de ingreso: " + G.fmtDate(rec.at));
+    if (rec.vehicular) {
+      lines.push("Vehículo: sí");
+      lines.push("Patente: " + (rec.plate || "—"));
+      var estIng = visitVisitorParkingDisplay(rec);
+      if (estIng) lines.push("Estacionamiento (visitas): " + estIng);
+    } else {
+      lines.push("Vehículo: no");
+    }
+    lines.push("Registrado en conserjería por: " + (rec.registradoPor || "—"));
+    lines.push("");
+    lines.push("Ante cualquier consulta, comuníquese con conserjería o administración.");
+    return lines.join("\n") + sig;
+  }
+
+  /** Abre cliente de correo con integrantes de la unidad en Para (mismo mensaje). */
+  function visitIngresoOpenResidentMail(rec) {
+    if (!visitIngresoNotifyDeptIsResidential(rec.deptId)) return false;
+    var inf = residentEmailsAllForDept(rec.deptId);
+    if (!inf.email) return false;
+    var dep = G.deptById(rec.deptId);
+    var deptLbl = dep ? dep.number : "—";
+    var subjIng = "Aviso de ingreso de visita — Depto " + deptLbl;
+    var bodyIng = visitIngresoNotifyBodyText(rec);
+    try {
+      window.open(mailtoHrefPlain(inf.email, subjIng, bodyIng), "_blank", "noopener,noreferrer");
+    } catch (eIng) {
+      return false;
+    }
+    return true;
+  }
+
   function proveedorById(id) {
     if (!id) return null;
     return (G.state.proveedores || []).find(function (p) { return p.id === id; });
@@ -19774,7 +19833,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           (visitorRutStr ? " — RUT " + visitorRutStr : "") +
           (depIng ? " — Depto " + depIng.number : "")
       );
-      G.toast("Ingreso registrado");
+      var mailIngresoOk = visitIngresoOpenResidentMail(rec);
+      if (mailIngresoOk) {
+        G.toast("Ingreso registrado. Correo de aviso a integrantes de la unidad abierto (revise y envíe).", "success");
+      } else if (visitIngresoNotifyDeptIsResidential(rec.deptId)) {
+        G.toast("Ingreso registrado. Ningún integrante tiene e-mail en el panel para aviso automático.", "warn");
+      } else {
+        G.toast("Ingreso registrado");
+      }
       form.reset();
       var atReset = form.elements.namedItem("at");
       if (atReset) atReset.value = localDatetimeValue(new Date());
