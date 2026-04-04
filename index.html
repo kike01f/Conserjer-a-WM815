@@ -17792,13 +17792,19 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
               : phase === "multa"
                 ? "Multa aplicable. Puede generar el parte y notificar al residente (correo automático si hay e-mail)."
                 : "Dentro del tiempo permitido.";
-        var mailBtns =
-          "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"openVisitVehResidentWarn\" data-cg-id=\"" +
-          G.escapeHtml(v.id) +
-          "\">Aviso 30 min</button> " +
-          "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"openVisitVehResidentMulta\" data-cg-id=\"" +
-          G.escapeHtml(v.id) +
-          "\">Correo multa</button> ";
+        var mailBtns = "";
+        if (phase === "warn") {
+          mailBtns +=
+            "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"openVisitVehResidentWarn\" data-cg-id=\"" +
+            G.escapeHtml(v.id) +
+            "\">Aviso 30 min</button> ";
+        }
+        if (phase === "multa") {
+          mailBtns +=
+            "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"openVisitVehResidentMulta\" data-cg-id=\"" +
+            G.escapeHtml(v.id) +
+            "\">Correo multa</button> ";
+        }
         var noMail = !resEm ? "<span class=\"page-desc\" style=\"font-size:0.72rem\">Sin e-mail en ficha.</span> " : "";
         var parteBtn = visitParteMultaApplies(v)
           ? "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"visitParte\" data-cg-id=\"" +
