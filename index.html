@@ -17971,9 +17971,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     );
   }
 
+  /** Tamaño fijo logo firma (px): Outlook ignora height:auto y width:% en muchas tablas. */
+  var CG_EMAIL_APP_LOGO_W = 156;
+  var CG_EMAIL_APP_LOGO_H = 156;
+
   /**
    * Firma HTML inline (tablas) para Gmail/Outlook; enlaces con UTM (logo / botón / variantes).
-   * Sin comentarios HTML en salida para no inflar el cuerpo.
+   * Logo: tabla anidada + width/height fijos en px (Outlook no aplica bien width:% ni height:auto en imgs).
    */
   function cgEmailBuildingSignatureHtml() {
     var uLogo = G.escapeAttr(CG_EMAIL_FIRMA_URL_LOGO);
@@ -17981,10 +17985,46 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var uAppLogo = G.escapeAttr(CG_EMAIL_APP_LOGO_URL);
     var uIconNet = G.escapeAttr("https://img.icons8.com/material-rounded/48/FFFFFF/internet.png");
     var uIconLeaf = G.escapeAttr("https://img.icons8.com/material-rounded/48/74bd20/leaf.png");
+    var w = CG_EMAIL_APP_LOGO_W;
+    var h = CG_EMAIL_APP_LOGO_H;
     var mso =
       "<!--[if mso]>" +
       "<xml><o:OfficeDocumentSettings><o:AllowPNG/><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>" +
       "<![endif]-->";
+    var logoAlt = "Edificio WM815 — " + CG_EMAIL_FIRMA_LINE1;
+    var logoBlock =
+      '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;border-collapse:collapse;mso-table-lspace:0;mso-table-rspace:0;">' +
+      "<tr>" +
+      '<td width="' +
+      w +
+      '" height="' +
+      h +
+      '" align="center" valign="middle" style="width:' +
+      w +
+      "px;height:" +
+      h +
+      'px;padding:0;line-height:0;font-size:0;mso-line-height-rule:exactly;vertical-align:middle;text-align:center;background-color:#fafafa;">' +
+      '<a href="' +
+      uLogo +
+      '" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:#3f3d56;">' +
+      '<img src="' +
+      uAppLogo +
+      '" width="' +
+      w +
+      '" height="' +
+      h +
+      '" border="0" alt="' +
+      G.escapeAttr(logoAlt) +
+      '" referrerpolicy="no-referrer" style="display:block;width:' +
+      w +
+      "px;height:" +
+      h +
+      "px;max-width:" +
+      w +
+      "px;max-height:" +
+      h +
+      'px;margin:0 auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;line-height:0;mso-line-height-rule:exactly;" />' +
+      "</a></td></tr></table>";
     return (
       mso +
       '<table style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;width:100%;max-width:510px;color:#3f3d56;" role="presentation" border="0" width="510" cellspacing="0" cellpadding="0">' +
@@ -17996,14 +18036,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       '<td style="padding:0;vertical-align:top;background-color:#ffffff;" bgcolor="#FFFFFF">' +
       '<table style="border-collapse:collapse;table-layout:fixed;width:100%;" role="presentation" border="0" width="100%" cellspacing="0" cellpadding="0">' +
       "<tbody><tr>" +
-      '<td style="width:168px;padding:8px 8px 8px 10px;vertical-align:middle;text-align:center;font-size:0;line-height:0;" valign="middle">' +
-      '<a style="text-decoration:none;color:#3f3d56;display:inline-block;" href="' +
-      uLogo +
-      '" target="_blank" rel="noopener noreferrer">' +
-      '<img style="display:block;width:100%;max-width:156px;height:auto;margin:0 auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;background-color:transparent;object-fit:contain;" src="' +
-      uAppLogo +
-      '" alt="Logo" width="156" border="0">' +
-      "</a></td>" +
+      '<td width="168" style="width:168px;padding:8px 8px 8px 10px;vertical-align:middle;text-align:center;line-height:0;font-size:0;mso-line-height-rule:exactly;" valign="middle">' +
+      logoBlock +
+      "</td>" +
       '<td style="padding:8px 12px 8px 10px;vertical-align:middle;" valign="middle">' +
       '<p style="margin:0 0 5px 0;padding-left:9px;border-left:3px solid #74BD20;font-size:17px;line-height:1.2;color:#434343;font-weight:bold;letter-spacing:-0.02em;">' +
       '<span style="color:#000000;">' +
