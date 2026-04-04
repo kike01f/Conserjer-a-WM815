@@ -17485,7 +17485,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (d && String(d.email || "").trim()) {
       return { email: String(d.email).trim(), fuente: "ficha departamento" };
     }
-    var u = (G.state.buildingUnits || []).find(function (x) { return x.id === deptId; });
+    var u = buildingUnitForDeptId(deptId);
     if (!u) return { email: "", fuente: "" };
     var rows = (u.residentIds || []).map(function (rid) {
       return (G.state.buildingResidents || []).find(function (r) { return r.id === rid; });
@@ -17502,8 +17502,29 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
 
   /**
-   * Correos solo de integrantes de la unidad (residentes vinculados en el panel), sin duplicados.
-   * No usa el e-mail de la ficha del departamento: solo personas registradas en la unidad con e-mail.
+   * Unidad del edificio asociada al id de departamento (visitas/encomiendas).
+   * Si no hay fila con el mismo id (datos legacy), coincide por número de unidad.
+   */
+  function buildingUnitForDeptId(deptId) {
+    if (!deptId) return null;
+    var units = G.state.buildingUnits || [];
+    var u = units.find(function (x) { return x.id === deptId; });
+    if (u) return u;
+    var d = G.deptById(deptId);
+    if (!d || typeof G.normalizeUnitNumberKey !== "function") return null;
+    var kn = G.normalizeUnitNumberKey(d.number || "");
+    if (!kn) return null;
+    var i;
+    for (i = 0; i < units.length; i++) {
+      if (G.normalizeUnitNumberKey((units[i].number || "") + "") === kn) return units[i];
+    }
+    return null;
+  }
+
+  /**
+   * Correos para avisos a la unidad, sin duplicados.
+   * - residentIds de la unidad + buildingResidents con unidadId coincidente (id depto y/o id fila unidad).
+   * - E-mail de la ficha del departamento (G.deptById), si existe.
    */
   function residentEmailsAllForDept(deptId) {
     var seen = {};
@@ -17516,11 +17537,29 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       seen[key] = true;
       list.push(em);
     }
-    var u = (G.state.buildingUnits || []).find(function (x) { return x.id === deptId; });
+    function attachFromResident(r) {
+      if (!r || r.tipo === "visita") return;
+      if (String(r.email || "").trim()) add(r.email);
+    }
+    var u = buildingUnitForDeptId(deptId);
+    var unitIdKeys = {};
+    if (deptId) unitIdKeys[deptId] = true;
+    if (u && u.id) unitIdKeys[u.id] = true;
+
     (u && u.residentIds ? u.residentIds : []).forEach(function (rid) {
       var r = (G.state.buildingResidents || []).find(function (x) { return x.id === rid; });
-      if (r && r.tipo !== "visita" && String(r.email || "").trim()) add(r.email);
+      attachFromResident(r);
     });
+
+    (G.state.buildingResidents || []).forEach(function (r) {
+      if (!r || !r.unidadId) return;
+      if (!unitIdKeys[r.unidadId]) return;
+      attachFromResident(r);
+    });
+
+    var dCard = G.deptById(deptId);
+    if (dCard && String(dCard.email || "").trim()) add(dCard.email);
+
     return {
       email: list.join(","),
       emails: list,
@@ -19321,14 +19360,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     rec = rec || {};
     var dep = G.deptById(rec.deptId);
     var depto = dep ? dep.number : "—";
-    var tipo = visitIsProveedor(rec) ? "Proveedor" : "Persona";
     var sig = cgEmailSignaturePlain();
     var lines = [
       "Estimado/a residente del domicilio " + depto + ":",
       "",
       "Le informamos que se ha registrado un ingreso de visita asociado a su unidad.",
       "",
-      "Tipo de ingreso: " + tipo,
       "Visitante / registro: " + (rec.visitor || "—"),
     ];
     if (String(rec.visitorRut || "").trim()) lines.push("RUT: " + String(rec.visitorRut).trim());
@@ -19362,11 +19399,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       resName && resName !== "—"
         ? "Estimado/a " + resName + ", residente del domicilio " + depto + ":"
         : "Estimado/a residente del domicilio " + depto + ":";
-    var tipo = visitIsProveedor(rec) ? "Proveedor" : "Persona";
-    var rowsData = [
-      { l: "Tipo de ingreso", v: tipo },
-      { l: "Visitante / registro", v: rec.visitor || "—" }
-    ];
+    var rowsData = [{ l: "Visitante / registro", v: rec.visitor || "—" }];
     if (String(rec.visitorRut || "").trim()) rowsData.push({ l: "RUT", v: String(rec.visitorRut).trim() });
     rowsData.push({ l: "Unidad", v: depto });
     rowsData.push({ l: "Fecha y hora de ingreso", v: G.fmtDate(rec.at) });
@@ -20434,11 +20467,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "Se ha excedido el tiempo máximo del estacionamiento de visitas (N° " +
       (dep && dep.number != null ? String(dep.number) : "—") +
       ")";
-    var mail = (dep && dep.email) ? String(dep.email).trim() : "";
+    var infParte = residentEmailsAllForDept(v.deptId);
+    var mail = infParte.email;
     var mailto = mail ? mailtoHrefPlain(mail, subj, plain) : "";
     UI.openModal(
       "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>Parte y envío</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
-      "<div class=\"modal-b\"><p class=\"page-desc\"><strong>Abrir correo</strong> inserta el texto formateado de abajo (compatible con Gmail, Outlook y móvil). Opcional: <em>Copiar diseño HTML</em> para pegar con colores.</p>" +
+      "<div class=\"modal-b\"><p class=\"page-desc\"><strong>Abrir correo</strong> coloca en el campo Para el correo de la ficha del departamento y el de cada integrante de la unidad con e-mail en el panel (sin duplicar). Texto compatible con Gmail, Outlook y móvil. Opcional: <em>Copiar diseño HTML</em> para pegar con colores.</p>" +
       "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje que se envía</p>" +
       "<textarea id=\"parte-txt\" style=\"width:100%;min-height:200px;font-family:ui-monospace,monospace;font-size:0.8rem;line-height:1.45;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:0.5rem\">" + G.escapeHtml(plain) + "</textarea>" +
       "<p class=\"page-desc\" style=\"margin:0.75rem 0 0.25rem;font-size:0.8rem\">Vista previa con colores (opcional)</p>" +
@@ -20446,7 +20480,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"toolbar\" style=\"margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem\">" +
       (mailto
         ? "<a class=\"btn btn-primary btn-sm\" href=\"" + mailto.replace(/"/g, "&quot;") + "\"><i class=\"fa-solid fa-envelope\"></i> Abrir correo</a>"
-        : "<span class=\"page-desc\">Sin correo en ficha del departamento.</span>") +
+        : "<span class=\"page-desc\">Sin e-mail en la ficha del departamento ni en integrantes de la unidad.</span>") +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"btn-parte-copy-html\"><i class=\"fa-solid fa-palette\"></i> Copiar diseño HTML</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"clipboardCopyByElId\" data-cg-id=\"parte-txt\">Copiar texto plano</button>" +
       "</div></div><div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cerrar</button></div></div>"
