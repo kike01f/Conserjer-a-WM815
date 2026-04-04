@@ -16625,92 +16625,23 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var deptLbl = dep ? dep.number : "—";
     var res = residentEmailForDept(v.deptId);
     var subj = "Aviso conserjería: visita vehicular próxima al límite de 5 h — Depto " + deptLbl;
-    var body =
-      "Estimado/a residente,\n\n" +
-      "Le informamos que la visita vehicular registrada asociada a su unidad está a menos de 30 minutos de alcanzar el límite de 5 horas de estadía en estacionamiento de visitas.\n\n" +
-      "Datos del registro:\n" +
-      "· Unidad: " +
-      deptLbl +
-      "\n" +
-      "· Visitante: " +
-      (v.visitor || "—") +
-      "\n" +
-      "· Patente: " +
-      (v.plate || "—") +
-      "\n" +
-      "· Ingreso: " +
-      G.fmtDate(v.at) +
-      "\n\n" +
-      "Por favor coordine la salida del vehículo o la gestión según normativa del edificio.\n\n" +
-      G.APP_BRAND_NAME +
-      " — Conserjería";
-    return { email: res.email, subj: subj, body: body };
+    return { email: res.email, subj: subj, body: visitVehResidentNotifyBodyText(v, "warn30") };
   }
 
   function visitBuildMultaMail(v) {
     var dep = G.deptById(v.deptId);
     var deptLbl = dep ? dep.number : "—";
     var res = residentEmailForDept(v.deptId);
-    var elapsed = Date.now() - new Date(v.at).getTime();
     var subj = "Notificación: exceso de tiempo visita vehicular / multa — Depto " + deptLbl;
-    var body =
-      "Estimado/a residente,\n\n" +
-      "Tras el límite de 5 horas y el periodo de gracia de 15 minutos, se registra exceso de permanencia del vehículo en visita asociado a su unidad.\n\n" +
-      "Según el protocolo del edificio puede proceder la aplicación de multa y el parte elaborado desde conserjería.\n\n" +
-      "Resumen:\n" +
-      "· Unidad: " +
-      deptLbl +
-      "\n" +
-      "· Visitante: " +
-      (v.visitor || "—") +
-      "\n" +
-      "· Patente: " +
-      (v.plate || "—") +
-      "\n" +
-      "· Ingreso: " +
-      G.fmtDate(v.at) +
-      "\n" +
-      "· Tiempo aprox. en edificio: " +
-      (elapsed / 3600000).toFixed(2) +
-      " h\n\n" +
-      "Para regularización o consultas, contacte a administración.\n\n" +
-      G.APP_BRAND_NAME +
-      " — Conserjería";
-    return { email: res.email, subj: subj, body: body };
+    return { email: res.email, subj: subj, body: visitVehResidentNotifyBodyText(v, "multa") };
   }
 
   A.openVisitVehResidentWarn = function (id) {
-    var v = (G.state.visits || []).find(function (x) {
-      return x.id === id;
-    });
-    if (!v || !v.vehicular || v.outAt || visitIsProveedor(v)) return;
-    var o = visitBuildWarn30Mail(v);
-    if (!o.email) {
-      G.toast("No hay correo de residente en la ficha de la unidad", "error");
-      return;
-    }
-    try {
-      window.open(mailtoHrefPlain(o.email, o.subj, o.body), "_blank", "noopener,noreferrer");
-    } catch (e1) {
-      G.toast("No se pudo abrir el cliente de correo", "warn");
-    }
+    A.visitVehResidentNotifyModal(id, "warn30");
   };
 
   A.openVisitVehResidentMulta = function (id) {
-    var v = (G.state.visits || []).find(function (x) {
-      return x.id === id;
-    });
-    if (!v || !v.vehicular || v.outAt || visitIsProveedor(v)) return;
-    var o = visitBuildMultaMail(v);
-    if (!o.email) {
-      G.toast("No hay correo de residente en la ficha de la unidad", "error");
-      return;
-    }
-    try {
-      window.open(mailtoHrefPlain(o.email, o.subj, o.body), "_blank", "noopener,noreferrer");
-    } catch (e2) {
-      G.toast("No se pudo abrir el cliente de correo", "warn");
-    }
+    A.visitVehResidentNotifyModal(id, "multa");
   };
 
   A.processVehicularVisitAlerts = function () {
@@ -17238,6 +17169,208 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     });
   }
 
+  /** Texto plano para mailto (avisos visita vehicular al residente). */
+  function visitVehResidentNotifyBodyText(v, kind) {
+    var dep = G.deptById(v.deptId);
+    var depto = dep ? dep.number : "—";
+    var resName = G.deptResidentDisplayName(v.deptId);
+    var saludo =
+      resName && resName !== "—"
+        ? "Estimado/a " + resName + " (depto. " + depto + ")"
+        : "Estimado/a residente del departamento " + depto;
+    var est = typeof visitVisitorParkingDisplay === "function" ? visitVisitorParkingDisplay(v) : "";
+    var thin = "────────────────────────────────────────\n";
+    var bar = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+    var brand = G.APP_BRAND_NAME;
+    if (kind === "warn30") {
+      return (
+        thin +
+        "  🏢  " +
+        brand +
+        "  ·  Aviso visita vehicular (30 min al límite)  🚗\n" +
+        thin +
+        "\n" +
+        "  " +
+        saludo +
+        ",\n\n" +
+        "  Le informamos que la visita vehicular asociada a su unidad está a menos\n" +
+        "  de 30 minutos de alcanzar el límite de 5 horas en estacionamiento de visitas.\n\n" +
+        bar +
+        "  Datos del registro\n" +
+        bar +
+        "\n" +
+        "  🏠  Unidad\n      " +
+        depto +
+        "\n\n" +
+        "  👤  Visitante\n      " +
+        (v.visitor || "—") +
+        "\n\n" +
+        "  🚙  Patente\n      " +
+        (v.plate || "—") +
+        "\n\n" +
+        (est
+          ? "  🅿️  Estacionamiento (visitas)\n      " + est + "\n\n"
+          : "") +
+        "  🕐  Ingreso\n      " +
+        G.fmtDate(v.at) +
+        "\n\n" +
+        "  Por favor coordine la salida del vehículo o la gestión según la normativa del edificio.\n\n" +
+        thin +
+        "  ✉️  " +
+        brand +
+        " · " +
+        new Date().toLocaleString("es-CL", { dateStyle: "short", timeStyle: "short" }) +
+        "\n" +
+        thin
+      );
+    }
+    var elapsed = Date.now() - new Date(v.at).getTime();
+    var hStr = (elapsed / 3600000).toFixed(2);
+    return (
+      thin +
+      "  🏢  " +
+      brand +
+      "  ·  Exceso de tiempo / multa visita vehicular  ⚠️\n" +
+      thin +
+      "\n" +
+      "  " +
+      saludo +
+      ",\n\n" +
+      "  Tras el límite de 5 horas y el periodo de gracia de 15 minutos, se registra\n" +
+      "  exceso de permanencia del vehículo en visita asociado a su unidad.\n\n" +
+      "  Según el protocolo del edificio puede proceder la aplicación de multa y el\n" +
+      "  parte elaborado desde conserjería.\n\n" +
+      bar +
+      "  Resumen\n" +
+      bar +
+      "\n" +
+      "  🏠  Unidad\n      " +
+      depto +
+      "\n\n" +
+      "  👤  Visitante\n      " +
+      (v.visitor || "—") +
+      "\n\n" +
+      "  🚙  Patente\n      " +
+      (v.plate || "—") +
+      "\n\n" +
+      (est
+        ? "  🅿️  Estacionamiento (visitas)\n      " + est + "\n\n"
+        : "") +
+      "  🕐  Ingreso\n      " +
+      G.fmtDate(v.at) +
+      "\n\n" +
+      "  ⏱️  Tiempo aprox. en edificio\n      " +
+      hStr +
+      " h\n\n" +
+      "  Para regularización o consultas, contacte a administración.\n\n" +
+      thin +
+      "  ✉️  " +
+      brand +
+      " · " +
+      new Date().toLocaleString("es-CL", { dateStyle: "short", timeStyle: "short" }) +
+      "\n" +
+      thin
+    );
+  }
+
+  /** HTML con misma envoltura que encomiendas (buildEmailShell + tabla de detalle). */
+  function visitVehResidentNotifyBodyHtml(v, kind) {
+    var C = typeof G.getEmailShellThemeColors === "function" ? G.getEmailShellThemeColors() : {};
+    var accRibbon = C.ribbon || "#74bd20";
+    var headDark = C.headG1 || "#1e3a0f";
+    var dep = G.deptById(v.deptId);
+    var depto = dep ? dep.number : "—";
+    var resName = G.deptResidentDisplayName(v.deptId);
+    var saludo =
+      resName && resName !== "—"
+        ? "Estimado/a " + resName + " (depto. " + depto + "):"
+        : "Estimado/a residente del departamento " + depto + ":";
+    var est = typeof visitVisitorParkingDisplay === "function" ? visitVisitorParkingDisplay(v) : "";
+    var rowsData = [
+      { l: "Unidad", v: depto },
+      { l: "Visitante", v: v.visitor || "—" },
+      { l: "Patente", v: v.plate || "—" }
+    ];
+    if (est) rowsData.push({ l: "Estacionamiento (visitas)", v: est });
+    rowsData.push({ l: "Ingreso", v: G.fmtDate(v.at) });
+    if (kind === "multa") {
+      var elapsed = Date.now() - new Date(v.at).getTime();
+      rowsData.push({ l: "Tiempo aprox. en edificio", v: (elapsed / 3600000).toFixed(2) + " h" });
+    }
+    var tableRows = rowsData
+      .map(function (r, i) {
+        return emailDetailRow(r.l, r.v, i === rowsData.length - 1);
+      })
+      .join("");
+    if (kind === "warn30") {
+      var introW =
+        "Le informamos que la visita vehicular registrada asociada a su unidad está a <strong style=\"color:#9a3412;\">menos de 30 minutos</strong> de alcanzar el límite de <strong>5 horas</strong> de estadía en estacionamiento de visitas.";
+      var innerW =
+        "<p style=\"margin:0 0 16px 0;font-size:17px;font-weight:600;color:" +
+        headDark +
+        ";line-height:1.35;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;border-left:3px solid #ea580c;padding-left:14px;\">" +
+        emailHtmlEscape(saludo) +
+        "</p>" +
+        "<p style=\"margin:0 0 22px;color:" +
+        (C.innerText || "#3f3f46") +
+        ";font-size:15px;line-height:1.6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;\">" +
+        introW +
+        "</p>" +
+        "<p style=\"margin:0 0 22px;color:" +
+        (C.footerMuted || "#52525b") +
+        ";font-size:15px;line-height:1.6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;\">Por favor coordine la salida del vehículo o la gestión según la normativa del edificio.</p>" +
+        emailDetailTableOpen("Datos del registro", "#c2410c") +
+        tableRows +
+        emailDetailTableClose();
+      return buildEmailShell({
+        title: "Aviso visita vehicular",
+        brandLine: G.APP_BRAND_NAME,
+        subtitleHtml:
+          "Unidad <strong style=\"color:#18181b;\">" +
+          emailHtmlEscape(depto) +
+          "</strong>" +
+          (resName && resName !== "—" ? " · " + emailHtmlEscape(resName) : ""),
+        ribbonText: "Menos de 30 min al límite de 5 h",
+        ribbonColor: "#ea580c",
+        inner: innerW,
+        footer: "Mensaje generado desde " + G.APP_BRAND_NAME + "."
+      });
+    }
+    var alertBox =
+      '<div style="margin:0 0 18px 0;padding:14px 18px;border-radius:8px;background:#fef2f2;border:1px solid #fecdd3;border-left:3px solid #dc2626;">' +
+      '<p style="margin:0;font-size:15px;color:#991b1b;line-height:1.55;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;"><strong>Exceso de tiempo.</strong> Tras el límite de 5 horas y 15 minutos de gracia, según el protocolo del edificio puede proceder la <strong>multa</strong> y el parte desde conserjería.</p></div>';
+    var introM =
+      "Le enviamos este resumen para su conocimiento y eventual regularización con administración.";
+    var innerM =
+      alertBox +
+      "<p style=\"margin:0 0 16px 0;font-size:17px;font-weight:600;color:" +
+      headDark +
+      ";line-height:1.35;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;border-left:3px solid #dc2626;padding-left:14px;\">" +
+      emailHtmlEscape(saludo) +
+      "</p>" +
+      "<p style=\"margin:0 0 22px;color:" +
+      (C.innerText || "#3f3f46") +
+      ";font-size:15px;line-height:1.6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;\">" +
+      emailHtmlEscape(introM) +
+      "</p>" +
+      emailDetailTableOpen("Resumen del registro", "#b91c1c") +
+      tableRows +
+      emailDetailTableClose();
+    return buildEmailShell({
+      title: "Notificación visita vehicular",
+      brandLine: G.APP_BRAND_NAME,
+      subtitleHtml:
+        "Unidad <strong style=\"color:#18181b;\">" +
+        emailHtmlEscape(depto) +
+        "</strong>" +
+        (resName && resName !== "—" ? " · " + emailHtmlEscape(resName) : ""),
+      ribbonText: "Exceso de tiempo / multa",
+      ribbonColor: "#b91c1c",
+      inner: innerM,
+      footer: "Mensaje generado desde " + G.APP_BRAND_NAME + "."
+    });
+  }
+
   function visitParteBodyHtml(v, dep, estacionamientoVisita, hours) {
     var C = typeof G.getEmailShellThemeColors === "function" ? G.getEmailShellThemeColors() : {};
     var headDark = C.headG1 || "#1e3a0f";
@@ -17484,6 +17617,63 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var prev = document.getElementById("enc-mail-preview");
       if (prev) prev.innerHTML = htmlBody;
       var btnH = document.getElementById("btn-enc-copy-html");
+      if (btnH) {
+        btnH.onclick = function () {
+          A.copyRichEmail(htmlBody, plain);
+        };
+      }
+    }, 0);
+  };
+
+  A.visitVehResidentNotifyModal = function (visitId, kind) {
+    var v = (G.state.visits || []).find(function (x) {
+      return x.id === visitId;
+    });
+    if (!v || !v.vehicular || v.outAt || visitIsProveedor(v)) return;
+    var inf = residentEmailForDept(v.deptId);
+    var mail = inf.email;
+    if (!mail) {
+      G.toast("No hay correo de residente en la ficha de la unidad", "error");
+      return;
+    }
+    var k = kind === "multa" ? "multa" : "warn30";
+    var plain = visitVehResidentNotifyBodyText(v, k);
+    var htmlBody = visitVehResidentNotifyBodyHtml(v, k);
+    var dep = G.deptById(v.deptId);
+    var deptLbl = dep ? dep.number : "—";
+    var subj =
+      k === "warn30"
+        ? "Aviso conserjería: visita vehicular próxima al límite de 5 h — Depto " + deptLbl
+        : "Notificación: exceso de tiempo visita vehicular / multa — Depto " + deptLbl;
+    var mailto = mailtoHrefPlain(mail, subj, plain);
+    var taId = "visit-mail-txt-" + visitId + "-" + k;
+    var prevId = "visit-mail-preview-" + visitId + "-" + k;
+    var modalTitle =
+      k === "warn30" ? "Aviso al residente — visita vehicular (30 min al límite)" : "Aviso al residente — exceso de tiempo / multa";
+    var resNm = G.deptResidentDisplayName(v.deptId);
+    UI.openModal(
+      "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>" + G.escapeHtml(modalTitle) + "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
+      "<div class=\"modal-b\"><p class=\"page-desc\">Unidad: <strong>" + G.escapeHtml(deptLbl) + "</strong>" +
+      (resNm && resNm !== "—" ? " · " + G.escapeHtml(resNm) : "") +
+      "</p>" +
+      "<p class=\"page-desc\" style=\"margin-top:0\">Correo: <strong>" + G.escapeHtml(mail) + "</strong>" +
+      (inf.fuente ? " <span style=\"opacity:.85\">(" + G.escapeHtml(inf.fuente) + ")</span>" : "") +
+      ". <strong>Abrir correo</strong> inserta el mensaje de abajo en texto plano (compatible con todos los clientes).</p>" +
+      "<p class=\"page-desc\" style=\"margin-top:0\">Sin servidor SMTP: envío desde su cliente habitual. Use <em>Copiar diseño HTML</em> para el mismo contenido con el estilo de los avisos de encomiendas (colores al pegar en Gmail, Outlook…).</p>" +
+      "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje (texto plano para mailto)</p>" +
+      "<textarea id=\"" + taId + "\" style=\"width:100%;min-height:200px;font-family:ui-monospace,monospace;font-size:0.8rem;line-height:1.45;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:0.5rem\">" + G.escapeHtml(plain) + "</textarea>" +
+      "<p class=\"page-desc\" style=\"margin:0.75rem 0 0.25rem;font-size:0.8rem\">Vista previa con colores (referencia / copiar HTML)</p>" +
+      "<div class=\"email-html-preview\"><div id=\"" + prevId + "\" class=\"email-html-preview-inner\"></div></div>" +
+      "<div class=\"toolbar\" style=\"margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem\">" +
+      "<a class=\"btn btn-primary btn-sm\" href=\"" + mailto.replace(/"/g, "&quot;") + "\"><i class=\"fa-solid fa-envelope\"></i> Abrir correo</a>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"btn-visit-mail-copy-html\"><i class=\"fa-solid fa-palette\"></i> Copiar diseño HTML</button>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"clipboardCopyByElId\" data-cg-id=\"" + G.escapeHtml(taId) + "\">Copiar texto plano</button>" +
+      "</div></div><div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cerrar</button></div></div>"
+    );
+    setTimeout(function () {
+      var prev = document.getElementById(prevId);
+      if (prev) prev.innerHTML = htmlBody;
+      var btnH = document.getElementById("btn-visit-mail-copy-html");
       if (btnH) {
         btnH.onclick = function () {
           A.copyRichEmail(htmlBody, plain);
