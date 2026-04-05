@@ -22273,7 +22273,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"cg-form-grid-2\">" +
       "<div class=\"form-group\"><label>Patente</label><input name=\"plate\" class=\"cg-vis-plate\" placeholder=\"Ej: ABCD12\" autocomplete=\"off\" autocapitalize=\"characters\" spellcheck=\"false\" /></div>" +
       "<div class=\"form-group\"><label>Estacionamiento (visita)</label>" +
-      "<input type=\"text\" name=\"visitorParkingCode\" list=\"visitor-parking-suggest\" placeholder=\"Ej: V-2, visitas 5…\" autocomplete=\"off\" /></div></div>" +
+      "<input type=\"text\" name=\"visitorParkingCode\" class=\"cg-vis-visitor-parking\" list=\"visitor-parking-suggest\" placeholder=\"Complete tras V- (ej. 3 → V-3) o elija sugerencia\" autocomplete=\"off\" /></div></div>" +
       "<p class=\"page-desc\" style=\"margin:0.15rem 0 0;font-size:0.75rem;line-height:1.35\">Texto libre; si configuró sugerencias en Administración, aparecerán al escribir.</p></div></div>" +
       "<button type=\"submit\" class=\"btn btn-primary\"><i class=\"fa-solid fa-right-to-bracket\"></i> Registrar ingreso</button></form></div></div>"
     );
@@ -26838,7 +26838,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (el.classList && el.classList.contains("cg-vis-veh") && el.closest && el.closest(".cg-vis-reg-form")) {
           var vform = el.closest(".cg-vis-reg-form");
           var vex = vform.querySelector(".cg-vis-veh-extra");
-          if (vex) vex.style.display = el.checked ? "block" : "none";
+          var parkInp = vform.querySelector('input[name="visitorParkingCode"]');
+          var plateIn = vform.querySelector('input[name="plate"]');
+          if (el.checked) {
+            if (vex) vex.style.display = "block";
+            if (parkInp && !String(parkInp.value || "").trim()) parkInp.value = "V-";
+          } else {
+            if (vex) vex.style.display = "none";
+            if (parkInp) parkInp.value = "";
+            if (plateIn) plateIn.value = "";
+          }
           return;
         }
         if (el.id === "dash-act-month") {
