@@ -342,10 +342,30 @@
         } catch (eEv) {}
       }
 
+      /** IDs de visitas borradas localmente (no reinyectar al fusionar con snapshot remoto incompleto). */
+      function __cgReadPendingDeletedVisitIds() {
+        var out = Object.create(null);
+        try {
+          var P = window.CG_PERSIST;
+          if (!P || !P.LS || typeof P.localGetRaw !== "function") return out;
+          var raw = P.localGetRaw(P.LS + "__cgPendingDeleted");
+          if (raw == null || raw === "") return out;
+          var o = JSON.parse(raw);
+          var b = o && o.visits;
+          if (!b || typeof b !== "object") return out;
+          var idk;
+          for (idk in b) {
+            if (Object.prototype.hasOwnProperty.call(b, idk) && b[idk]) out[String(idk)] = true;
+          }
+        } catch (ePd) {}
+        return out;
+      }
+
       /**
        * Fusiona el array remoto de visitas con la copia en caché (mismo id): si local ya tenía salida
        * y el snapshot remoto llegó sin outAt o con salida más antigua, se conserva la salida local.
-       * Evita que listas «abiertas» muestren visitas ya salidas por race / last-write-wins en Firestore.
+       * Además reincorpora filas que solo estaban en local (p. ej. últimos ingresos aún no reflejados
+       * en Firestore o snapshot desfasado), excepto ids marcados en __cgPendingDeleted (visits).
        */
       function mergeVisitsPreserveLocalExit(remoteArr, localArr) {
         if (!Array.isArray(remoteArr) || !Array.isArray(localArr)) return remoteArr;
@@ -387,6 +407,22 @@
           } else {
             out.push(rv);
           }
+        }
+
+        var inOut = Object.create(null);
+        for (i = 0; i < out.length; i++) {
+          var oi = out[i];
+          if (oi && oi.id != null && String(oi.id) !== "") inOut[String(oi.id)] = true;
+        }
+        var pendDel = __cgReadPendingDeletedVisitIds();
+        for (i = 0; i < localArr.length; i++) {
+          var lx = localArr[i];
+          if (!lx || lx.id == null || String(lx.id) === "") continue;
+          var lid = String(lx.id);
+          if (inOut[lid]) continue;
+          if (pendDel[lid]) continue;
+          out.push(lx);
+          inOut[lid] = true;
         }
         return out;
       }
