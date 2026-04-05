@@ -27343,9 +27343,453 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     };
   };
 
+  /** Respaldo: todas las claves bajo G.LS + legacy vinculacion_wm815_* (sin sesión activa). */
+  A.backupBuildFullPayload = function () {
+    var entries = [];
+    var P = G.persist;
+    var prefix = G.LS;
+    if (!P || !prefix || typeof P.eachLocalKeyWithPrefix !== "function") return null;
+    P.eachLocalKeyWithPrefix(prefix, function (fullKey) {
+      var shortKey = fullKey.slice(prefix.length);
+      if (shortKey === "session") return;
+      var raw = P.localGetRaw(fullKey);
+      if (raw != null && raw !== "") entries.push({ k: shortKey, raw: String(raw) });
+    });
+    try {
+      var li;
+      for (li = 0; li < localStorage.length; li++) {
+        var fk = localStorage.key(li);
+        if (!fk || fk.indexOf("vinculacion_wm815_") !== 0) continue;
+        if (fk.indexOf(prefix) === 0) continue;
+        var rv = localStorage.getItem(fk);
+        if (rv != null && rv !== "") entries.push({ k: fk, raw: rv, legacy: true });
+      }
+    } catch (eL) {}
+    return {
+      format: "conciergeria_full_backup_v1",
+      exportedAt: new Date().toISOString(),
+      appBrand: typeof G.APP_BRAND_NAME === "string" ? G.APP_BRAND_NAME : "",
+      lsPrefix: prefix,
+      entries: entries
+    };
+  };
+
+  A.backupFullDownload = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede descargar el respaldo.", "error");
+      return;
+    }
+    var payload = A.backupBuildFullPayload();
+    if (!payload || !Array.isArray(payload.entries)) {
+      G.toast("No se pudo generar el respaldo.", "error");
+      return;
+    }
+    var json;
+    try {
+      json = JSON.stringify(payload);
+    } catch (eJ) {
+      G.toast("El respaldo no se pudo serializar (tamaño o datos).", "error");
+      return;
+    }
+    var blob = new Blob([json], { type: "application/json;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    var stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    a.href = url;
+    a.download = "conserjeria_respaldo_completo_" + stamp + ".json";
+    a.click();
+    URL.revokeObjectURL(url);
+    var prev = G.load("backupReminder", {}) || {};
+    if (typeof prev !== "object" || Array.isArray(prev)) prev = {};
+    prev.lastExportAt = payload.exportedAt;
+    if (typeof prev.intervalDays !== "number") prev.intervalDays = 7;
+    G.save("backupReminder", prev);
+    G.toast("Respaldo descargado. Guárdelo en un lugar seguro.");
+  };
+
+  A.backupReminderIntervalSave = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") return;
+    var sel = document.getElementById("cg-backup-interval");
+    if (!sel) return;
+    var n = parseInt(sel.value, 10);
+    if (isNaN(n) || n < 0) n = 7;
+    var prev = G.load("backupReminder", {}) || {};
+    if (typeof prev !== "object" || Array.isArray(prev)) prev = {};
+    var keepLast = prev.lastExportAt;
+    prev.intervalDays = n;
+    prev.lastExportAt = keepLast;
+    G.save("backupReminder", prev);
+    G.toast("Preferencia de recordatorio guardada.");
+  };
+
+  A.backupMaybeWarnIfStale = function () {
+    var meta = G.load("backupReminder", null);
+    if (!meta || typeof meta !== "object") meta = { intervalDays: 7, lastExportAt: null };
+    var days = meta.intervalDays;
+    if (typeof days !== "number" || days <= 0) return;
+    if (!meta.lastExportAt) {
+      try {
+        if (sessionStorage.getItem("cg_bk_intro_once")) return;
+        sessionStorage.setItem("cg_bk_intro_once", "1");
+      } catch (eI) {}
+      G.toast(
+        "Puede descargar un respaldo completo (JSON con todos los módulos) en Administración → Configuración.",
+        "warn"
+      );
+      return;
+    }
+    var lastMs = new Date(meta.lastExportAt).getTime();
+    if (!isFinite(lastMs) || lastMs <= 0) return;
+    if (Date.now() < lastMs + days * 86400000) return;
+    var ymd = new Date().toISOString().slice(0, 10);
+    var flag = "cg_bk_warn_" + ymd;
+    try {
+      if (sessionStorage.getItem(flag)) return;
+      sessionStorage.setItem(flag, "1");
+    } catch (eS) {}
+    G.toast(
+      "Según su recordatorio, conviene un nuevo respaldo completo. Administración → Configuración → Respaldo del sistema.",
+      "warn"
+    );
+  };
+
+  A.backupFullRestoreClick = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede restaurar.", "error");
+      return;
+    }
+    var inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = ".json,application/json";
+    inp.style.cssText = "position:fixed;left:-9999px;width:1px;height:1px;opacity:0";
+    document.body.appendChild(inp);
+    inp.addEventListener("change", function () {
+      var f = inp.files && inp.files[0];
+      try {
+        document.body.removeChild(inp);
+      } catch (eRm) {}
+      if (!f) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var data = JSON.parse(String(reader.result || ""));
+          A.backupFullRestoreApply(data);
+        } catch (eP) {
+          G.toast("No es un JSON válido.", "error");
+        }
+      };
+      reader.onerror = function () {
+        G.toast("No se pudo leer el archivo.", "error");
+      };
+      reader.readAsText(f, "UTF-8");
+    });
+    inp.click();
+  };
+
+  A.backupFullRestoreApply = function (data) {
+    if (!data || data.format !== "conciergeria_full_backup_v1" || !Array.isArray(data.entries)) {
+      G.toast("Archivo no reconocido (se espera respaldo conciergeria_full_backup_v1).", "error");
+      return;
+    }
+    if (
+      !confirm(
+        "Se borrará el almacenamiento local de la app en este navegador y se sustituirá por el archivo. " +
+          "Tras recargar deberá iniciar sesión de nuevo. ¿Continuar?"
+      )
+    ) {
+      return;
+    }
+    if (!confirm("Confirmación final: ¿Restaurar copia del " + String(data.exportedAt || "?") + "?")) return;
+    try {
+      if (typeof G.stopCloudSyncListener === "function") G.stopCloudSyncListener();
+    } catch (e0) {}
+    try {
+      if (typeof G.cloudSyncAbortInFlight === "function") G.cloudSyncAbortInFlight();
+    } catch (e1) {}
+    try {
+      if (typeof G.persist.clearAllAppBrowserStorage === "function") G.persist.clearAllAppBrowserStorage();
+    } catch (eC) {
+      G.toast("No se pudo vaciar el almacenamiento antes de restaurar.", "error");
+      return;
+    }
+    var prefix = G.LS;
+    var i;
+    var row;
+    var ok = 0;
+    for (i = 0; i < data.entries.length; i++) {
+      row = data.entries[i];
+      if (!row || typeof row.k !== "string" || row.k === "session") continue;
+      if (typeof row.raw !== "string") continue;
+      try {
+        if (row.legacy === true) localStorage.setItem(row.k, row.raw);
+        else G.persist.localSetRaw(prefix + row.k, row.raw);
+        ok++;
+      } catch (eW) {}
+    }
+    try {
+      if (window.__cgMemLs && typeof window.__cgMemLs === "object") {
+        for (var mk in window.__cgMemLs) {
+          if (Object.prototype.hasOwnProperty.call(window.__cgMemLs, mk)) delete window.__cgMemLs[mk];
+        }
+      }
+    } catch (eM) {}
+    G.toast("Restauración aplicada (" + ok + " entradas). Recargando…", "success");
+    setTimeout(function () {
+      location.reload();
+    }, 650);
+  };
+
+  /** Grupos para import selectiva (orden de la UI). */
+  A.backupImportGroupMeta = [
+    { id: "users_auth", label: "Usuarios y permisos", hint: "users, roleModules, clave módulo Estadística" },
+    { id: "departamentos", label: "Departamentos", hint: "lista, sync edificio, wm815_* y copias legacy vinculacion_wm815_*" },
+    { id: "visitas", label: "Visitas", hint: "registros y alertas vehiculares" },
+    { id: "encomiendas", label: "Encomiendas", hint: "" },
+    { id: "novedades", label: "Libro de novedades", hint: "" },
+    { id: "reservas", label: "Reservas", hint: "" },
+    { id: "proveedores", label: "Proveedores", hint: "" },
+    { id: "estacionamientos", label: "Estacionamientos", hint: "plazas y rango E-" },
+    { id: "bodegas", label: "Bodegas", hint: "" },
+    { id: "config_app", label: "Configuración y apariencia", hint: "espacios comunes, visitas, paleta, festividades, mes dashboard" },
+    { id: "turnos_chat", label: "Turnos y chat de personal", hint: "tramos, mensajes, presencia, cumpleaños RR.HH." },
+    { id: "panel_bitacora", label: "Panel y bitácora", hint: "actividad conserje, alertas programadas" },
+    { id: "tecnicos", label: "Metadatos técnicos", hint: "banderas migrated_*, cola borrados nube, recordatorio respaldos" },
+    {
+      id: "inicializado",
+      label: "Marcador initialized",
+      hint: "Solo avanzado: indica si ya se sembró la instalación. Puede romper el arranque si no coincide con el resto."
+    },
+    { id: "otros", label: "Otras claves", hint: "Claves del respaldo no asignadas a un grupo anterior" }
+  ];
+
+  A.backupClassifyImportRow = function (row) {
+    if (!row || typeof row.k !== "string" || row.k === "session") return null;
+    if (row.legacy === true) {
+      if (row.k.indexOf("vinculacion_wm815_") === 0) return "departamentos";
+      return "otros";
+    }
+    var k = row.k;
+    var map = {
+      users: "users_auth",
+      roleModules: "users_auth",
+      deptAdminGateVerifier: "users_auth",
+      departments: "departamentos",
+      buildingUnits: "departamentos",
+      buildingResidents: "departamentos",
+      buildingFormerResidents: "departamentos",
+      buildingParking: "departamentos",
+      wm815_units: "departamentos",
+      wm815_former_residents: "departamentos",
+      visits: "visitas",
+      visitVehAlertLog: "visitas",
+      encomiendas: "encomiendas",
+      novedades: "novedades",
+      reservas: "reservas",
+      proveedores: "proveedores",
+      parkingSlots: "estacionamientos",
+      parkingConfig: "estacionamientos",
+      bodegas: "bodegas",
+      config: "config_app",
+      personalization: "config_app",
+      festiveAmbience: "config_app",
+      dashActMonth: "config_app",
+      shiftLogs: "turnos_chat",
+      staffChatMessages: "turnos_chat",
+      chatLastReadByUser: "turnos_chat",
+      staffBirthdays: "turnos_chat",
+      staffPresence: "turnos_chat",
+      conserjeActivityLog: "panel_bitacora",
+      dashScheduledAlerts: "panel_bitacora"
+    };
+    if (map[k]) return map[k];
+    if (k.indexOf("migrated_") === 0 || k === "__cgPendingDeleted") return "tecnicos";
+    if (k === "backupReminder") return "tecnicos";
+    if (k === "initialized") return "inicializado";
+    return "otros";
+  };
+
+  A.backupCountByImportGroup = function (data) {
+    var counts = {};
+    var gi;
+    var meta = A.backupImportGroupMeta;
+    for (gi = 0; gi < meta.length; gi++) counts[meta[gi].id] = 0;
+    var i;
+    var row;
+    var g;
+    for (i = 0; i < data.entries.length; i++) {
+      row = data.entries[i];
+      g = A.backupClassifyImportRow(row);
+      if (!g) continue;
+      counts[g] = (counts[g] || 0) + 1;
+    }
+    return counts;
+  };
+
+  A.backupSelectiveImportClick = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede importar.", "error");
+      return;
+    }
+    var inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = ".json,application/json";
+    inp.style.cssText = "position:fixed;left:-9999px;width:1px;height:1px;opacity:0";
+    document.body.appendChild(inp);
+    inp.addEventListener("change", function () {
+      var f = inp.files && inp.files[0];
+      try {
+        document.body.removeChild(inp);
+      } catch (eRm) {}
+      if (!f) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var data = JSON.parse(String(reader.result || ""));
+          if (!data || data.format !== "conciergeria_full_backup_v1" || !Array.isArray(data.entries)) {
+            G.toast("Archivo no reconocido (respaldo conciergeria_full_backup_v1).", "error");
+            return;
+          }
+          window.__cgBackupSelectivePayload = data;
+          A.backupSelectiveOpenModal(data);
+        } catch (eP) {
+          G.toast("No es un JSON válido.", "error");
+        }
+      };
+      reader.onerror = function () {
+        G.toast("No se pudo leer el archivo.", "error");
+      };
+      reader.readAsText(f, "UTF-8");
+    });
+    inp.click();
+  };
+
+  A.backupSelectiveModalSelectAll = function () {
+    var form = document.getElementById("f-backup-sel");
+    if (!form) return;
+    form.querySelectorAll('input[type="checkbox"][name="cg-bm-grp"]').forEach(function (cb) {
+      if (!cb.disabled) cb.checked = true;
+    });
+  };
+
+  A.backupSelectiveModalSelectNone = function () {
+    var form = document.getElementById("f-backup-sel");
+    if (!form) return;
+    form.querySelectorAll('input[type="checkbox"][name="cg-bm-grp"]').forEach(function (cb) {
+      cb.checked = false;
+    });
+  };
+
+  A.backupSelectiveOpenModal = function (data) {
+    var counts = A.backupCountByImportGroup(data);
+    var meta = A.backupImportGroupMeta;
+    var rows = "";
+    var hi;
+    for (hi = 0; hi < meta.length; hi++) {
+      var g = meta[hi];
+      var c = counts[g.id] || 0;
+      if (c === 0) continue;
+      var disabled = false;
+      var hint = g.hint ? " <span style=\"opacity:0.8;font-size:0.78rem\">(" + G.escapeHtml(g.hint) + ")</span>" : "";
+      rows +=
+        "<label style=\"display:flex;gap:0.5rem;align-items:flex-start;margin:0.35rem 0;cursor:pointer\">" +
+        "<input type=\"checkbox\" name=\"cg-bm-grp\" value=\"" +
+        G.escapeAttr(g.id) +
+        "\" />" +
+        "<span><strong>" +
+        G.escapeHtml(g.label) +
+        "</strong> — " +
+        c +
+        " clave(s)" +
+        hint +
+        "</span></label>";
+    }
+    if (!rows) {
+      G.toast("El archivo no contiene entradas importables (aparte de la sesión).", "warn");
+      return;
+    }
+    var exp = data.exportedAt ? G.escapeHtml(String(data.exportedAt)) : "—";
+    UI.openModal(
+      "<div class=\"modal\" style=\"max-width:32rem\"><div class=\"modal-h\"><h4>Importar módulos desde respaldo</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
+        "<div class=\"modal-b\"><p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Respaldo: <code style=\"font-size:0.8rem\">" +
+        exp +
+        "</code>. Solo se sobrescriben las claves de los grupos que marque. El resto del almacenamiento local <strong>no</strong> se borra. Tras aplicar se recarga la página (mantiene la sesión si no importó usuarios incompatibles).</p>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.65rem;font-size:0.82rem\">Si importa solo parte de los datos, compruebe coherencia (p. ej. IDs de usuario en visitas y turnos).</p>" +
+        "<div class=\"toolbar\" style=\"gap:0.5rem;margin-bottom:0.5rem\">" +
+        "<button type=\"button\" class=\"btn btn-sm btn-secondary\" data-cg-act=\"backupSelectiveModalSelectAll\">Marcar todos</button>" +
+        "<button type=\"button\" class=\"btn btn-sm btn-secondary\" data-cg-act=\"backupSelectiveModalSelectNone\">Quitar todos</button></div>" +
+        "<form id=\"f-backup-sel\" style=\"max-height:min(50vh,22rem);overflow:auto;padding-right:0.25rem\">" +
+        rows +
+        "</form></div>" +
+        "<div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
+        "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"backupSelectiveConfirm\"><i class=\"fa-solid fa-file-import\"></i> Importar selección</button></div></div>"
+    );
+  };
+
+  A.backupSelectiveConfirm = function () {
+    var data = window.__cgBackupSelectivePayload;
+    if (!data || !Array.isArray(data.entries)) {
+      G.toast("No hay respaldo pendiente. Vuelva a elegir el archivo.", "error");
+      return;
+    }
+    var form = document.getElementById("f-backup-sel");
+    if (!form) {
+      G.toast("Formulario no encontrado.", "error");
+      return;
+    }
+    var selected = [];
+    form.querySelectorAll('input[type="checkbox"][name="cg-bm-grp"]:checked').forEach(function (cb) {
+      if (cb.value) selected.push(cb.value);
+    });
+    if (!selected.length) {
+      G.toast("Marque al menos un grupo.", "warn");
+      return;
+    }
+    var setSel = {};
+    var si;
+    for (si = 0; si < selected.length; si++) setSel[selected[si]] = true;
+    if (setSel.inicializado && !confirm("El marcador initialized es solo para casos avanzados. ¿Seguro que desea importarlo?")) return;
+    if (!confirm("Se sobrescribirán en local solo las claves de los grupos elegidos (" + selected.length + "). ¿Continuar?")) return;
+    var prefix = G.LS;
+    var ok = 0;
+    var i;
+    var row;
+    var g;
+    for (i = 0; i < data.entries.length; i++) {
+      row = data.entries[i];
+      if (!row || typeof row.k !== "string" || row.k === "session") continue;
+      if (typeof row.raw !== "string") continue;
+      g = A.backupClassifyImportRow(row);
+      if (!g || !setSel[g]) continue;
+      try {
+        if (row.legacy === true) localStorage.setItem(row.k, row.raw);
+        else G.persist.localSetRaw(prefix + row.k, row.raw);
+        ok++;
+      } catch (eW) {}
+    }
+    window.__cgBackupSelectivePayload = null;
+    try {
+      if (UI.closeModal) UI.closeModal();
+    } catch (eC) {}
+    try {
+      if (typeof G.flushPendingCloudWritesNow === "function") G.flushPendingCloudWritesNow();
+    } catch (eCloud) {}
+    G.toast("Importadas " + ok + " entrada(s). Recargando…", "success");
+    setTimeout(function () {
+      location.reload();
+    }, 500);
+  };
+
   A.renderAdmin = function (tab) {
     var p = renderAdminBindActiveTab(tab);
     if (!p) return;
+    var cuRm = G.currentUser();
+    if (cuRm && cuRm.role === "admin" && typeof A.backupMaybeWarnIfStale === "function") {
+      A.backupMaybeWarnIfStale();
+    }
     if (tab === "staff") {
       p.innerHTML = buildRenderAdminStaffHtml();
     } else if (tab === "perm") {
@@ -27601,6 +28045,45 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var pkTo = typeof cfg.to === "number" && isFinite(cfg.to) ? cfg.to : 20;
       var cfgState = G.state.config && typeof G.state.config === "object" && !Array.isArray(G.state.config) ? G.state.config : {};
       var lines = (Array.isArray(cfgState.commonSpaces) ? cfgState.commonSpaces : []).join("\n");
+      var brMeta = G.load("backupReminder", null);
+      if (!brMeta || typeof brMeta !== "object" || Array.isArray(brMeta)) brMeta = {};
+      var brLast = brMeta.lastExportAt ? G.fmtDate(brMeta.lastExportAt) : "Nunca";
+      var brDays = typeof brMeta.intervalDays === "number" ? brMeta.intervalDays : 7;
+      function backupIntSel(v) {
+        return brDays === v ? " selected" : "";
+      }
+      var backupCard =
+        "<div class=\"card\" style=\"margin-top:1rem\"><div class=\"card-h\"><h3>Respaldo completo del sistema</h3></div><div class=\"card-b\">" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Incluye los datos guardados en <strong>este origen</strong> (protocolo, dominio y puerto): usuarios (con verificadores de contraseña), permisos por rol, departamentos y unidades (<code>wm815_*</code>), visitas, encomiendas, novedades, reservas, proveedores, estacionamientos, bodegas, turnos, chat de personal, bitácora, alertas, personalización, configuración de espacios y estacionamientos de visita, etc. " +
+        "No incluye la <strong>sesión abierta</strong>. Programe recordatorios y descargue el archivo JSON con la periodicidad que defina su política interna.</p>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.65rem;opacity:.92\">Último respaldo registrado en este equipo: <strong>" +
+        G.escapeHtml(brLast) +
+        "</strong></p>" +
+        "<div class=\"toolbar\" style=\"flex-wrap:wrap;gap:0.75rem;align-items:center;margin-bottom:0.75rem\">" +
+        "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"backupFullDownload\"><i class=\"fa-solid fa-download\"></i> Descargar respaldo (.json)</button>" +
+        "<button type=\"button\" class=\"btn btn-secondary\" data-cg-act=\"backupFullRestoreClick\"><i class=\"fa-solid fa-upload\"></i> Restaurar todo (reemplaza local)</button>" +
+        "<button type=\"button\" class=\"btn btn-secondary\" data-cg-act=\"backupSelectiveImportClick\"><i class=\"fa-solid fa-file-import\"></i> Importar solo algunos módulos…</button></div>" +
+        "<div class=\"form-group\" style=\"max-width:26rem\"><label for=\"cg-backup-interval\">Recordatorio si no hay respaldo</label>" +
+        "<select id=\"cg-backup-interval\" class=\"form-input\">" +
+        "<option value=\"0\"" +
+        backupIntSel(0) +
+        ">Nunca</option>" +
+        "<option value=\"3\"" +
+        backupIntSel(3) +
+        ">Cada 3 días</option>" +
+        "<option value=\"7\"" +
+        backupIntSel(7) +
+        ">Cada 7 días</option>" +
+        "<option value=\"14\"" +
+        backupIntSel(14) +
+        ">Cada 14 días</option>" +
+        "<option value=\"30\"" +
+        backupIntSel(30) +
+        ">Cada 30 días</option>" +
+        "</select>" +
+        "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;font-size:0.8rem\">Al abrir cualquier pestaña de administración se muestra un aviso (como máximo una vez al día natural) si ya pasó el plazo desde el último respaldo descargado.</p></div>" +
+        "<p class=\"page-desc\" style=\"margin:0.85rem 0 0;font-size:0.78rem;color:var(--danger-color)\"><strong>Restaurar todo</strong> borra el almacenamiento local de la app y lo sustituye por el archivo. <strong>Importar módulos</strong> solo sobrescribe las claves de los grupos que elija; el resto no se toca. Con nube/Firestore, valide coherencia tras cualquier restauración.</p>" +
+        "</div></div>";
       p.innerHTML = "<div class=\"card\"><div class=\"card-h\"><h3>Rango estacionamientos (códigos E-)</h3></div><div class=\"card-b\">" +
         "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Los valores <em>Desde</em>/<em>Hasta</em> son numéricos; en el mapa se crean como <strong>E-1</strong> … <strong>E-</strong><em>n</em> si aún no existen.</p>" +
         "<div class=\"toolbar\" style=\"gap:1rem\"><label>Desde <input type=\"number\" id=\"cfg-pk-a\" value=\"" + G.escapeAttr(String(pkFrom)) + "\" /></label>" +
@@ -27615,9 +28098,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         G.escapeHtml((Array.isArray(cfgState.visitorParkingCodes) ? cfgState.visitorParkingCodes : []).join("\n")) +
         "</textarea>" +
         "<button type=\"button\" class=\"btn btn-primary\" style=\"margin-top:0.75rem\" data-cg-act=\"cfgVisitorParkingSave\">Guardar estacionamientos visitas</button></div></div>" +
+        backupCard +
         "<div class=\"card\" style=\"margin-top:1rem;border-color:var(--danger-color)\"><div class=\"card-h\"><h3>Zona de mantenimiento</h3></div><div class=\"card-b\">" +
         "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Elimina <strong>por completo</strong> los datos de la app en <strong>este navegador</strong> (localStorage y sessionStorage del producto). Luego se crea una instalación limpia y deberá registrar de nuevo al administrador.</p>" +
         "<button type=\"button\" class=\"btn btn-danger\" data-cg-act=\"resetSystemLocalData\"><i class=\"fa-solid fa-trash-can\"></i> Limpiar almacenamiento local y reiniciar</button></div></div>";
+      var selBr = document.getElementById("cg-backup-interval");
+      if (selBr) {
+        selBr.onchange = function () {
+          if (window.CG_ACTIONS && typeof CG_ACTIONS.backupReminderIntervalSave === "function") CG_ACTIONS.backupReminderIntervalSave();
+        };
+      }
     }
   };
 
