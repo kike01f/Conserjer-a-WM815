@@ -5208,6 +5208,24 @@
       vertical-align: top;
     }
     .data-table td .cg-prov-extras { word-break: break-word; }
+    .cg-prov-contactos-outer { margin-top: 0.35rem; }
+    .cg-prov-contactos-outer > label { display: block; margin-bottom: 0.25rem; }
+    .cg-prov-contacto-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.45rem;
+      padding: 0.5rem 0.55rem;
+      margin-bottom: 0.42rem;
+      border: 1px solid var(--gray-200, #e2e8f0);
+      border-radius: 8px;
+      background: var(--gray-50, #f8fafc);
+    }
+    .cg-prov-contacto-fields { flex: 1; min-width: 0; }
+    .cg-prov-contacto-fields .cg-form-grid-2 { margin: 0; }
+    .cg-prov-contacto-del { flex-shrink: 0; margin-top: 1.55rem; }
+    .cg-prov-contactos-cell { font-size: calc(0.82rem * 1.01); line-height: 1.45; }
+    .cg-prov-contactos-cell .cg-prov-contact-line { display: block; }
+    .cg-prov-contactos-cell .cg-prov-contact-line + .cg-prov-contact-line { margin-top: 0.2rem; }
 
     /* Visitas — selector tipo, lista rápida, badges */
     .cg-vis-type-pick {
@@ -8153,6 +8171,23 @@
       save("migrated_proveedores_v1", true);
     }
 
+    /** Proveedores: array `contactos` [{ nombre, telefono, email }]; migra tel/correo planos al primer contacto. */
+    function migrateProveedoresContactosV1() {
+      if (load("migrated_proveedores_contactos_v1", false)) return;
+      var list = load("proveedores", []);
+      if (!Array.isArray(list)) list = [];
+      list = list.map(function (p) {
+        if (!p || typeof p !== "object") return p;
+        if (Array.isArray(p.contactos)) return p;
+        var t = String(p.telefono || "").trim();
+        var e = String(p.email || "").trim();
+        if (!t && !e) return Object.assign({}, p, { contactos: [] });
+        return Object.assign({}, p, { contactos: [{ nombre: "", telefono: t, email: e }] });
+      });
+      save("proveedores", list);
+      save("migrated_proveedores_contactos_v1", true);
+    }
+
     /** Una vez: si config no tenía visitorParkingCodes, inicializar vacío (sin códigos de ejemplo). */
     function migrateVisitorParkingCodes() {
       if (load("migrated_visitor_parking_v1", false)) return;
@@ -8472,6 +8507,7 @@
         ["rmUserNov20260403", migrateRemoveUserRequestedNovedades20260403],
         ["encomiendas", migrateEncomiendasModule],
         ["proveedores", migrateProveedoresModule],
+        ["proveedoresContactos", migrateProveedoresContactosV1],
         ["visitorParking", migrateVisitorParkingCodes],
         ["shiftLogs", migrateShiftLogs],
         ["staffChat", migrateStaffChat],
@@ -9695,7 +9731,7 @@
     /* ┌─ 11. API pública (único objeto global del core) ─────────────────────────────── */
     window.CG = {
       APP_BRAND_NAME, MANUFACTURER_LOGO_URL,
-      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureCloudInstallBaseline, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateManualUsuarioModule, migrateProveedoresModule, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateVisitPlatesUppercase, migrateDeptRegistroPrefijosEbbBc, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
+      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureCloudInstallBaseline, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateManualUsuarioModule, migrateProveedoresModule, migrateProveedoresContactosV1, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateVisitPlatesUppercase, migrateDeptRegistroPrefijosEbbBc, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
       attachVirtualAdminDepartment,
       authEnsureReady, authValidateDeptGateNewPassword, authVerifyLoginPassword, authCreatePasswordVerifier, authDeptGateExists, authVerifyDeptGate, authSetDeptGateFromPasswords, authSetDeptGateInitial,
       shiftLogTramoIsOpen,
@@ -18836,20 +18872,23 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"cg-page-compact\">" +
         "<h1 class=\"page-title\">Proveedores</h1>" +
         "<div class=\"cg-module-intro\">" +
-        "<p class=\"page-desc\">Registre empresas o contratistas que ingresan al edificio. En <strong>Visitas</strong> puede asociar el ingreso a un proveedor para dejar trazabilidad (empresa, servicio y contacto opcional).</p></div>" +
+        "<p class=\"page-desc\">Registre empresas o contratistas que ingresan al edificio. Puede agregar <strong>varios contactos</strong> (nombre, teléfono y correo) por empresa. En <strong>Visitas</strong> puede asociar el ingreso al proveedor para trazabilidad.</p></div>" +
         "<div class=\"card\"><div class=\"card-h\"><h3>Registrar proveedor</h3></div><div class=\"card-b\">" +
         "<form id=\"f-prov\" action=\"#\" method=\"post\">" +
         "<input type=\"hidden\" name=\"pid\" id=\"prov-pid\" value=\"\" />" +
         "<div class=\"cg-form-grid-2\">" +
         "<div class=\"form-group\"><label for=\"prov-empresa\">Nombre de la empresa *</label><input name=\"empresa\" id=\"prov-empresa\" required placeholder=\"Ej: Mantenciones Norte SpA\" autocomplete=\"organization\" /></div>" +
-        "<div class=\"form-group\"><label for=\"prov-tipo\">Tipo de servicio *</label><input name=\"tipoServicio\" id=\"prov-tipo\" required placeholder=\"Ej: Ascensores, electricidad, agua potable…\" /></div>" +
-        "<div class=\"form-group\"><label for=\"prov-tel\">Teléfono</label><input name=\"telefono\" id=\"prov-tel\" type=\"tel\" placeholder=\"+56 9 …\" autocomplete=\"tel\" /></div>" +
-        "<div class=\"form-group\"><label for=\"prov-email\">Correo electrónico</label><input name=\"email\" id=\"prov-email\" type=\"email\" placeholder=\"contacto@empresa.cl\" autocomplete=\"email\" /></div></div>" +
+        "<div class=\"form-group\"><label for=\"prov-tipo\">Tipo de servicio *</label><input name=\"tipoServicio\" id=\"prov-tipo\" required placeholder=\"Ej: Ascensores, electricidad, agua potable…\" /></div></div>" +
+        "<div class=\"form-group cg-prov-contactos-outer\">" +
+        "<label>Contactos</label>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.45rem;font-size:0.78rem;line-height:1.35\">Una o más personas o canales de contacto. Deje una fila vacía si no aplica; use <strong>Agregar contacto</strong> para más filas.</p>" +
+        "<div id=\"prov-contactos-wrap\" class=\"cg-prov-contactos-wrap\"></div>" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"btn-prov-add-contact\"><i class=\"fa-solid fa-user-plus\" aria-hidden=\"true\"></i> Agregar contacto</button></div>" +
         "<div class=\"toolbar\">" +
         "<button type=\"submit\" class=\"btn btn-primary\"><i class=\"fa-solid fa-floppy-disk\"></i> Guardar</button>" +
         "<button type=\"button\" class=\"btn btn-secondary\" id=\"btn-prov-clear\">Limpiar</button></div></form></div></div>" +
         "<div class=\"card\"><div class=\"card-h\"><h3>Listado</h3>" +
-        "<div class=\"toolbar\"><label class=\"sr-only\" for=\"flt-prov-q\">Filtrar proveedores</label><input type=\"search\" id=\"flt-prov-q\" placeholder=\"Buscar empresa, servicio, teléfono, correo u otros datos…\" aria-label=\"Filtrar listado de proveedores\" /></div></div>" +
+        "<div class=\"toolbar\"><label class=\"sr-only\" for=\"flt-prov-q\">Filtrar proveedores</label><input type=\"search\" id=\"flt-prov-q\" placeholder=\"Buscar empresa, servicio, contactos u otros datos…\" aria-label=\"Filtrar listado de proveedores\" /></div></div>" +
         "<div class=\"card-b\"><div id=\"tbl-prov-wrap\"></div></div></div></div>"
       );
     }
@@ -22665,6 +22704,21 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (pv) {
       parteRows.push({ l: "Empresa proveedora", v: pv.empresa || "—" });
       parteRows.push({ l: "Tipo de servicio (registro)", v: pv.tipoServicio || "—" });
+      var cPv = proveedorContactosNormalized(pv);
+      if (cPv.length) {
+        parteRows.push({
+          l: "Contactos (empresa)",
+          v: cPv
+            .map(function (c) {
+              var bits = [];
+              if (c.nombre) bits.push(c.nombre);
+              if (c.telefono) bits.push(c.telefono);
+              if (c.email) bits.push(c.email);
+              return bits.join(" · ");
+            })
+            .join("; ")
+        });
+      }
     }
     parteRows.push(
       { l: "Patente", v: v.plate || "—" },
@@ -23755,6 +23809,88 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return (G.state.proveedores || []).find(function (p) { return p.id === id; });
   }
 
+  function proveedorContactosNormalized(p) {
+    if (!p || typeof p !== "object") return [];
+    if (Array.isArray(p.contactos) && p.contactos.length) {
+      return p.contactos
+        .map(function (c) {
+          if (!c || typeof c !== "object") return null;
+          return {
+            nombre: String(c.nombre || "").trim(),
+            telefono: String(c.telefono || "").trim(),
+            email: String(c.email || "").trim()
+          };
+        })
+        .filter(function (c) {
+          return c && (c.nombre || c.telefono || c.email);
+        });
+    }
+    var t = String(p.telefono || "").trim();
+    var e = String(p.email || "").trim();
+    if (t || e) return [{ nombre: "", telefono: t, email: e }];
+    return [];
+  }
+
+  function proveedorFullSearchBlob(p) {
+    var blob =
+      (p.empresa || "") +
+      " " +
+      (p.tipoServicio || "") +
+      " " +
+      (p.telefono || "") +
+      " " +
+      (p.email || "") +
+      " ";
+    proveedorContactosNormalized(p).forEach(function (c) {
+      blob += (c.nombre || "") + " " + (c.telefono || "") + " " + (c.email || "") + " ";
+    });
+    blob += proveedorExtrasSearchBlob(p);
+    return blob.toLowerCase();
+  }
+
+  function proveedorContactosCellHtml(p) {
+    var list = proveedorContactosNormalized(p);
+    if (!list.length) return "—";
+    return (
+      "<span class=\"cg-prov-contactos-cell\">" +
+      list
+        .map(function (c) {
+          var parts = [];
+          if (c.nombre) parts.push(c.nombre);
+          if (c.telefono) parts.push(c.telefono);
+          if (c.email) parts.push(c.email);
+          var line = parts.join(" · ");
+          return "<span class=\"cg-prov-contact-line\">" + G.escapeHtml(line) + "</span>";
+        })
+        .join("") +
+      "</span>"
+    );
+  }
+
+  function proveedorClearContactosWrap(wrap) {
+    if (!wrap) return;
+    wrap.innerHTML = "";
+  }
+
+  function proveedorAddContactoRow(wrap, data) {
+    if (!wrap) return;
+    data = data || { nombre: "", telefono: "", email: "" };
+    var row = document.createElement("div");
+    row.className = "cg-prov-contacto-row";
+    row.innerHTML =
+      "<div class=\"cg-prov-contacto-fields\">" +
+      "<div class=\"cg-form-grid-2\">" +
+      "<div class=\"form-group\"><label>Nombre o cargo <span class=\"page-desc\">(opc.)</span></label><input type=\"text\" class=\"prov-c-nombre\" maxlength=\"100\" autocomplete=\"name\" /></div>" +
+      "<div class=\"form-group\"><label>Teléfono <span class=\"page-desc\">(opc.)</span></label><input type=\"tel\" class=\"prov-c-tel\" maxlength=\"40\" autocomplete=\"tel\" /></div>" +
+      "<div class=\"form-group\" style=\"grid-column:1/-1\"><label>Correo <span class=\"page-desc\">(opc.)</span></label><input type=\"email\" class=\"prov-c-email\" maxlength=\"120\" autocomplete=\"email\" /></div>" +
+      "</div></div>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm cg-prov-contacto-del\" aria-label=\"Quitar contacto\"><i class=\"fa-solid fa-trash\" aria-hidden=\"true\"></i></button>";
+    row.querySelector(".prov-c-nombre").value = data.nombre || "";
+    row.querySelector(".prov-c-tel").value = data.telefono || "";
+    row.querySelector(".prov-c-email").value = data.email || "";
+    wrap.appendChild(row);
+  }
+
   function proveedorExtrasSearchBlob(p) {
     var ex = p.extras;
     if (!ex || typeof ex !== "object") return "";
@@ -23799,24 +23935,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     });
     if (q) {
       rows = rows.filter(function (p) {
-        var blob =
-          ((p.empresa || "") +
-            " " +
-            (p.tipoServicio || "") +
-            " " +
-            (p.telefono || "") +
-            " " +
-            (p.email || "") +
-            " " +
-            proveedorExtrasSearchBlob(p))
-            .toLowerCase();
-        return blob.indexOf(q) >= 0;
+        return proveedorFullSearchBlob(p).indexOf(q) >= 0;
       });
     }
     var html =
-      "<table class=\"data-table\"><thead><tr><th>Empresa</th><th>Servicio</th><th>Teléfono</th><th>Correo</th><th>Otros datos</th><th></th></tr></thead><tbody>";
+      "<table class=\"data-table\"><thead><tr><th>Empresa</th><th>Servicio</th><th>Contactos</th><th>Otros datos</th><th></th></tr></thead><tbody>";
     if (!rows.length) {
-      html += "<tr><td class=\"cg-empty-table\" colspan=\"6\">No hay proveedores. Use el formulario superior o ajuste el filtro.</td></tr>";
+      html += "<tr><td class=\"cg-empty-table\" colspan=\"5\">No hay proveedores. Use el formulario superior o ajuste el filtro.</td></tr>";
     } else {
       rows.forEach(function (p) {
         html +=
@@ -23825,9 +23950,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           "</strong></td><td>" +
           G.escapeHtml(p.tipoServicio || "—") +
           "</td><td>" +
-          G.escapeHtml(p.telefono || "—") +
-          "</td><td style=\"font-size:calc(0.858rem * 1.01);word-break:break-all\">" +
-          G.escapeHtml(p.email || "—") +
+          proveedorContactosCellHtml(p) +
           "</td><td>" +
           proveedorExtrasCellHtml(p) +
           "</td><td style=\"white-space:nowrap\">" +
@@ -23850,13 +23973,21 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var pe = document.getElementById("prov-pid");
     var em = document.getElementById("prov-empresa");
     var tp = document.getElementById("prov-tipo");
-    var tl = document.getElementById("prov-tel");
-    var ml = document.getElementById("prov-email");
+    var wrap = document.getElementById("prov-contactos-wrap");
     if (pe) pe.value = p.id;
     if (em) em.value = p.empresa || "";
     if (tp) tp.value = p.tipoServicio || "";
-    if (tl) tl.value = p.telefono || "";
-    if (ml) ml.value = p.email || "";
+    if (wrap) {
+      proveedorClearContactosWrap(wrap);
+      var cList = proveedorContactosNormalized(p);
+      if (cList.length) {
+        cList.forEach(function (c) {
+          proveedorAddContactoRow(wrap, c);
+        });
+      } else {
+        proveedorAddContactoRow(wrap, {});
+      }
+    }
     if (em) em.focus();
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -23874,14 +24005,36 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   A.bindProveedores = function () {
     var f = document.getElementById("f-prov");
     var bc = document.getElementById("btn-prov-clear");
+    var wrap = document.getElementById("prov-contactos-wrap");
+    var addBtn = document.getElementById("btn-prov-add-contact");
+    if (wrap) {
+      wrap.onclick = function (ev) {
+        var del = ev.target.closest(".cg-prov-contacto-del");
+        if (!del) return;
+        ev.preventDefault();
+        var row = del.closest(".cg-prov-contacto-row");
+        if (!row || !wrap) return;
+        if (wrap.querySelectorAll(".cg-prov-contacto-row").length <= 1) {
+          row.querySelectorAll("input").forEach(function (inp) {
+            inp.value = "";
+          });
+          return;
+        }
+        row.remove();
+      };
+    }
+    if (addBtn) {
+      addBtn.onclick = function () {
+        var w = document.getElementById("prov-contactos-wrap");
+        if (w) proveedorAddContactoRow(w, {});
+      };
+    }
     if (f) {
       f.onsubmit = function (e) {
         e.preventDefault();
         var pid = (document.getElementById("prov-pid") || {}).value || "";
         var ve = G.validate.textBlock(f.empresa.value, { label: "Empresa", min: 2, max: 120 });
         var vt = G.validate.textBlock(f.tipoServicio.value, { label: "Tipo de servicio", min: 2, max: 120 });
-        var vtel = G.validate.textBlock(f.telefono.value, { label: "Teléfono", min: 0, max: 40 });
-        var vm = G.validate.simpleEmailOrEmpty(f.email.value);
         if (!ve.ok) {
           G.toast(ve.message, "error");
           return;
@@ -23890,23 +24043,48 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           G.toast(vt.message, "error");
           return;
         }
-        if (!vtel.ok) {
-          G.toast(vtel.message, "error");
-          return;
+        var w = document.getElementById("prov-contactos-wrap");
+        var contactos = [];
+        if (w) {
+          var rowEls = w.querySelectorAll(".cg-prov-contacto-row");
+          var ri;
+          for (ri = 0; ri < rowEls.length; ri++) {
+            var row = rowEls[ri];
+            var nombre = (row.querySelector(".prov-c-nombre") || {}).value || "";
+            var tel = (row.querySelector(".prov-c-tel") || {}).value || "";
+            var em = (row.querySelector(".prov-c-email") || {}).value || "";
+            var vn = G.validate.textBlock(nombre, { label: "Nombre del contacto", min: 0, max: 100 });
+            var vtel = G.validate.textBlock(tel, { label: "Teléfono del contacto", min: 0, max: 40 });
+            var vm = G.validate.simpleEmailOrEmpty(em);
+            if (!vn.ok) {
+              G.toast(vn.message, "error");
+              return;
+            }
+            if (!vtel.ok) {
+              G.toast(vtel.message, "error");
+              return;
+            }
+            if (!vm.ok) {
+              G.toast(vm.message, "error");
+              return;
+            }
+            if (!String(vn.value).trim() && !String(vtel.value).trim() && !String(vm.value).trim()) continue;
+            contactos.push({ nombre: vn.value, telefono: vtel.value, email: vm.value });
+          }
         }
-        if (!vm.ok) {
-          G.toast(vm.message, "error");
-          return;
-        }
+        var prim = contactos[0] || { telefono: "", email: "" };
         var o = {
           empresa: ve.value,
           tipoServicio: vt.value,
-          telefono: vtel.value,
-          email: vm.value
+          telefono: prim.telefono || "",
+          email: prim.email || "",
+          contactos: contactos
         };
         var list = (Array.isArray(G.state.proveedores) ? G.state.proveedores : []).slice();
         if (pid) {
-          list = list.map(function (x) { return x.id === pid ? Object.assign({}, x, o) : x; });
+          list = list.map(function (x) {
+            return x.id === pid ? Object.assign({}, x, o) : x;
+          });
         } else {
           list.push(Object.assign({ id: G.uid() }, o));
         }
@@ -23916,6 +24094,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         f.reset();
         var hid = document.getElementById("prov-pid");
         if (hid) hid.value = "";
+        var wClear = document.getElementById("prov-contactos-wrap");
+        if (wClear) {
+          proveedorClearContactosWrap(wClear);
+          proveedorAddContactoRow(wClear, {});
+        }
         A.renderProveedores();
       };
     }
@@ -23924,7 +24107,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (f) f.reset();
         var pe = document.getElementById("prov-pid");
         if (pe) pe.value = "";
+        var w2 = document.getElementById("prov-contactos-wrap");
+        if (w2) {
+          proveedorClearContactosWrap(w2);
+          proveedorAddContactoRow(w2, {});
+        }
       };
+    }
+    if (wrap && !wrap.querySelector(".cg-prov-contacto-row")) {
+      proveedorAddContactoRow(wrap, {});
     }
     A.renderProveedores();
   };
@@ -24948,6 +25139,21 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "  🔧  Servicio (registro)\n      " +
         (pvParte.tipoServicio || "—") +
         "\n\n";
+      var cParte = proveedorContactosNormalized(pvParte);
+      if (cParte.length) {
+        provPlain +=
+          "  📇  Contactos\n      " +
+          cParte
+            .map(function (c) {
+              var bits = [];
+              if (c.nombre) bits.push(c.nombre);
+              if (c.telefono) bits.push(c.telefono);
+              if (c.email) bits.push(c.email);
+              return bits.join(" · ");
+            })
+            .join("\n      ") +
+          "\n\n";
+      }
     }
     var thin = "────────────────────────────────────────\n";
     var bar = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
