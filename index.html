@@ -5525,17 +5525,31 @@
       line-height: 1.38;
       margin: 0.35rem 0 0;
     }
+    /* Notas de novedades: fondo amarillo claro */
     .tl-nov-note {
       font-size: 0.78rem;
       line-height: 1.4;
-      color: var(--gray-600);
+      color: #713f12;
       margin: 0.45rem 0 0;
       padding: 0.45rem 0.55rem;
-      background: var(--gray-50, #f9fafb);
+      background: #fefce8;
       border-radius: 6px;
-      border-left: 3px solid var(--gray-300);
+      border-left: 3px solid #eab308;
+      box-shadow: inset 0 0 0 1px rgba(234, 179, 8, 0.28);
     }
-    .tl-nov-note strong { font-weight: 600; color: var(--gray-700); }
+    .tl-nov-note strong { font-weight: 600; color: #854d0e; }
+    .cg-dash-nov-note-chip {
+      display: inline;
+      padding: 0.12rem 0.42rem;
+      margin-left: 0.28rem;
+      border-radius: 5px;
+      background: #fef9c3;
+      color: #713f12;
+      border: 1px solid #fde047;
+      font-size: 0.82em;
+      vertical-align: baseline;
+    }
+    .cg-dash-nov-note-chip strong { color: #854d0e; font-weight: 600; }
     /* Bitácora: conserje sin turno → registros distorsionados / ilegibles hasta abrir turno */
     .cg-nov-tl-shell {
       position: relative;
@@ -7488,22 +7502,32 @@
       return /^fa-[a-z0-9-]+$/i.test(ic) ? ic : "fa-circle";
     }
 
+    /** Zona horaria de la app (Chile continental; DST vía base IANA del navegador). */
+    var CG_APP_TIMEZONE = "America/Santiago";
+
     function fmtDate(iso) {
       if (!iso) return "—";
       const d = new Date(iso);
-      return d.toLocaleString("es-CL", { dateStyle: "short", timeStyle: "short" });
+      if (isNaN(d.getTime())) return "—";
+      return d.toLocaleString("es-CL", {
+        timeZone: CG_APP_TIMEZONE,
+        dateStyle: "short",
+        timeStyle: "short"
+      });
     }
+    /** Mismo día civil en Chile (America/Santiago), coherente con cambios de horario oficial. */
     function isSameDay(iso, day) {
-      const a = new Date(iso);
-      const b = new Date(day);
-      return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+      var p1 = cgChileYmdParts(iso);
+      var p2 = cgChileYmdParts(day != null ? day : new Date());
+      if (!p1 || !p2) return false;
+      return p1.ymd === p2.ymd;
     }
-    /** Mismo año y mes calendario (mes 0–11). */
+    /** Mismo año y mes calendario en Chile (monthIndex 0–11). */
     function isInCalendarMonth(iso, year, monthIndex) {
       if (!iso) return false;
-      const a = new Date(iso);
-      if (isNaN(a.getTime())) return false;
-      return a.getFullYear() === year && a.getMonth() === monthIndex;
+      var p = cgChileYmdParts(iso);
+      if (!p) return false;
+      return p.y === year && p.m - 1 === monthIndex;
     }
     function normalizeActivityName(s) {
       return String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
@@ -8378,11 +8402,12 @@
       ano_nuevo: { label: "Año Nuevo", hint: "Automático: 31 dic – 2 ene", start: "12-31", end: "01-02" }
     };
 
+    /** Fecha civil en Chile (usa CG_APP_TIMEZONE). */
     function cgChileYmdParts(d) {
       var dt = d instanceof Date ? d : new Date(d);
       if (isNaN(dt.getTime())) return null;
       var s = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "America/Santiago",
+        timeZone: CG_APP_TIMEZONE,
         year: "numeric",
         month: "2-digit",
         day: "2-digit"
@@ -8390,6 +8415,64 @@
       var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
       if (!m) return null;
       return { y: +m[1], m: +m[2], day: +m[3], ymd: s, mmdd: s.slice(5) };
+    }
+
+    /** Suma días al calendario civil Y-M-D (sin ambigüedad de huso). */
+    function cgChileShiftCalendarDays(ymd, deltaDays) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ""));
+      if (!m) return "";
+      var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+      d.setUTCDate(d.getUTCDate() + (deltaDays | 0));
+      var y = d.getUTCFullYear();
+      var mo = d.getUTCMonth() + 1;
+      var da = d.getUTCDate();
+      function pad(n) {
+        return n < 10 ? "0" + n : "" + n;
+      }
+      return y + "-" + pad(mo) + "-" + pad(da);
+    }
+
+    function cgChileFormatYmdWeekdayShort(ymd) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ""));
+      if (!m) return "—";
+      var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], 12));
+      return d.toLocaleDateString("es-CL", {
+        timeZone: CG_APP_TIMEZONE,
+        weekday: "short",
+        day: "numeric",
+        month: "short"
+      });
+    }
+
+    function cgChileYesterdayYmd() {
+      var p = cgChileYmdParts(new Date());
+      return p ? cgChileShiftCalendarDays(p.ymd, -1) : "";
+    }
+
+    function isSameChileYmd(iso, ymd) {
+      var p = cgChileYmdParts(iso);
+      return !!(p && ymd && p.ymd === String(ymd));
+    }
+
+    function isoInChileCalendarMonth(iso, year, monthIndex0) {
+      if (!iso) return false;
+      var p = cgChileYmdParts(iso);
+      if (!p) return false;
+      return p.y === year && p.m - 1 === monthIndex0;
+    }
+
+    function shiftSegmentOverlapChileMonth(seg, year, monthIndex0) {
+      if (!seg || seg.role === "admin") return false;
+      var lastD = new Date(Date.UTC(year, monthIndex0 + 1, 0)).getUTCDate();
+      function pad(n) {
+        return n < 10 ? "0" + n : "" + n;
+      }
+      var monthStart = year + "-" + pad(monthIndex0 + 1) + "-01";
+      var monthEnd = year + "-" + pad(monthIndex0 + 1) + "-" + pad(lastD);
+      var ps = cgChileYmdParts(seg.startAt);
+      var pe = cgChileYmdParts(seg.endAt != null && seg.endAt !== "" ? seg.endAt : new Date().toISOString());
+      if (!ps || !pe) return false;
+      return ps.ymd <= monthEnd && pe.ymd >= monthStart;
     }
 
     function cgMmddInRange(mmdd, startMmdd, endMmdd) {
@@ -9044,7 +9127,9 @@
       uid, load, save, LS, persist: P,
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
       getPersonalization, setPersonalization, applyPersonalizationToDom,
-      CG_FESTIVE_PRESET_META, getFestiveAmbienceNormalized, resolveFestiveAmbienceRule, resolveFestiveAmbienceRuleFromParts, applyFestiveAmbienceToDom, cgChileYmdParts, cgFestiveRuleEffectiveRange, cgMmddInRange, defaultFestiveAmbienceObject,
+      CG_FESTIVE_PRESET_META, getFestiveAmbienceNormalized, resolveFestiveAmbienceRule, resolveFestiveAmbienceRuleFromParts, applyFestiveAmbienceToDom,
+      CG_APP_TIMEZONE, cgChileYmdParts, cgChileShiftCalendarDays, cgChileFormatYmdWeekdayShort, cgChileYesterdayYmd, isSameChileYmd, isoInChileCalendarMonth, shiftSegmentOverlapChileMonth,
+      cgFestiveRuleEffectiveRange, cgMmddInRange, defaultFestiveAmbienceObject,
       getFestivePreviewChileYmd, setFestivePreviewChileYmd, getFestiveAmbienceChileYmdParts,
       hexToRgb, snapshotThemeForExport, buildExportThemeRootCss, getExportAccentHex, getEmailShellThemeColors,
       initCloudSync, stopCloudSyncListener, attachStaffChatRemoteSync, detachStaffChatRemoteSync, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPullSingleLsKey, cloudPushAllKeysOnce,
@@ -17038,16 +17123,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
      */
     function cgReadDashboardVisitsEncMetrics(appState, isSameDay) {
       var today = new Date();
-      var yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
       var visits = appState.visits || [];
       var enc = appState.encomiendas || [];
+      var ymdYest = G.cgChileYesterdayYmd();
+      var pNow = G.cgChileYmdParts(today);
       return {
         visitsToday: visits.filter(function (v) { return isSameDay(v.at, today); }).length,
-        visitsYesterday: visits.filter(function (v) { return isSameDay(v.at, yesterday); }).length,
+        visitsYesterday: visits.filter(function (v) { return ymdYest && G.isSameChileYmd(v.at, ymdYest); }).length,
         encToday: enc.filter(function (e) { return e.receivedAt && isSameDay(e.receivedAt, today); }).length,
-        encYesterday: enc.filter(function (e) { return e.receivedAt && isSameDay(e.receivedAt, yesterday); }).length,
-        yLbl: yesterday.toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" }),
-        tLbl: today.toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })
+        encYesterday: enc.filter(function (e) { return e.receivedAt && ymdYest && G.isSameChileYmd(e.receivedAt, ymdYest); }).length,
+        yLbl: ymdYest ? G.cgChileFormatYmdWeekdayShort(ymdYest) : "—",
+        tLbl: pNow ? G.cgChileFormatYmdWeekdayShort(pNow.ymd) : "—"
       };
     }
 
@@ -17173,14 +17259,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function updateDashboardSummaryStatsOnly() {
       if (!document.getElementById("dash-stat-visits-today")) return;
       var today = new Date();
-      var yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+      var ymdYest = G.cgChileYesterdayYmd();
       var visits = G.state.visits || [];
       var reservas = G.state.reservas || [];
       var visitsToday = visits.filter(function (v) {
         return G.isSameDay(v.at, today);
       }).length;
       var visitsYesterday = visits.filter(function (v) {
-        return G.isSameDay(v.at, yesterday);
+        return ymdYest && G.isSameChileYmd(v.at, ymdYest);
       }).length;
       var reservasActivas = reservas.filter(function (r) {
         return r && r.end && new Date(r.end) >= today;
@@ -17193,7 +17279,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         return e.receivedAt && G.isSameDay(e.receivedAt, today);
       }).length;
       var encReceivedYesterday = encList.filter(function (e) {
-        return e.receivedAt && G.isSameDay(e.receivedAt, yesterday);
+        return e.receivedAt && ymdYest && G.isSameChileYmd(e.receivedAt, ymdYest);
       }).length;
       var elV = document.getElementById("dash-stat-visits-today");
       if (elV) elV.textContent = String(visitsToday);
@@ -17229,7 +17315,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 .map(function (n) {
                   var tx = n.text == null ? "" : String(n.text);
                   var nt = String(n.note || "").trim();
-                  var tail = nt ? " · <span style=\"opacity:0.88\">" + G.escapeHtml(nt.slice(0, 40)) + (nt.length > 40 ? "…" : "") + "</span>" : "";
+                  var tail = nt
+                    ? " <span class=\"cg-dash-nov-note-chip\" title=\"Nota\"><strong>Nota:</strong> " +
+                      G.escapeHtml(nt.slice(0, 40)) +
+                      (nt.length > 40 ? "…" : "") +
+                      "</span>"
+                    : "";
                   return (
                     "<li style=\"padding:0.5rem 0;border-bottom:1px solid var(--gray-200)\"><strong>#" +
                     (n.seq || "—") +
@@ -17804,12 +17895,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (window.CG_ACTIONS && typeof CG_ACTIONS.syncDepartamentosModuleFromLocal === "function") CG_ACTIONS.syncDepartamentosModuleFromLocal();
       if (window.CG_ACTIONS && typeof CG_ACTIONS.syncParkingSlotsFromBuilding === "function") CG_ACTIONS.syncParkingSlotsFromBuilding();
       const today = new Date();
-      const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+      const ymdYest = G.cgChileYesterdayYmd();
       const visitsArr = G.state.visits || [];
       const reservasArr = G.state.reservas || [];
       const novedadesArr = G.state.novedades || [];
       const visitsToday = visitsArr.filter(v => G.isSameDay(v.at, today)).length;
-      const visitsYesterday = visitsArr.filter(v => G.isSameDay(v.at, yesterday)).length;
+      const visitsYesterday = visitsArr.filter(v => ymdYest && G.isSameChileYmd(v.at, ymdYest)).length;
       const reservasActivas = reservasArr.filter(function (r) {
         if (!r || !r.end) return false;
         const end = new Date(r.end);
@@ -17818,7 +17909,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       const encList = G.state.encomiendas || [];
       const encPend = encList.filter(function (e) { return !e.entregadoAt; }).length;
       const encReceivedToday = encList.filter(function (e) { return e.receivedAt && G.isSameDay(e.receivedAt, today); }).length;
-      const encReceivedYesterday = encList.filter(function (e) { return e.receivedAt && G.isSameDay(e.receivedAt, yesterday); }).length;
+      const encReceivedYesterday = encList.filter(function (e) { return e.receivedAt && ymdYest && G.isSameChileYmd(e.receivedAt, ymdYest); }).length;
       const visDelta = dashCompareDelta(visitsToday, visitsYesterday);
       const encRecDelta = dashCompareDelta(encReceivedToday, encReceivedYesterday);
       const novRec = novedadesArr.slice().sort(function (a, b) { return new Date(b.at) - new Date(a.at); }).slice(0, 5);
@@ -17873,7 +17964,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         (novRec.length ? "<ul style=\"list-style:none\">" + novRec.map(function (n) {
           var tx = n.text == null ? "" : String(n.text);
           var nt = String(n.note || "").trim();
-          var tail = nt ? " · <span style=\"opacity:0.88\">" + G.escapeHtml(nt.slice(0, 40)) + (nt.length > 40 ? "…" : "") + "</span>" : "";
+          var tail = nt
+            ? " <span class=\"cg-dash-nov-note-chip\" title=\"Nota\"><strong>Nota:</strong> " +
+              G.escapeHtml(nt.slice(0, 40)) +
+              (nt.length > 40 ? "…" : "") +
+              "</span>"
+            : "";
           return "<li style=\"padding:0.5rem 0;border-bottom:1px solid var(--gray-200)\"><strong>#" + (n.seq || "—") + "</strong> · " + G.fmtDate(n.at) +
             " — " + G.escapeHtml(tx.slice(0, 80)) + (tx.length > 80 ? "…" : "") + tail + "</li>";
         }).join("") + "</ul>" : "<p class=\"page-desc\">Sin novedades.</p>") +
@@ -20172,7 +20268,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (r.fechaRegistro) {
           try {
             var d = new Date(r.fechaRegistro);
-            fd = isNaN(d.getTime()) ? "—" : d.toLocaleString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+            fd = isNaN(d.getTime())
+              ? "—"
+              : d.toLocaleString("es-CL", {
+                  timeZone: G.CG_APP_TIMEZONE,
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit"
+                });
           } catch (e1) {
             fd = "—";
           }
@@ -21559,7 +21664,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var conserjeActual = u ? u.name : G.APP_BRAND_NAME;
     var nomRecep = ((e.registradoPor || e.receivedByName || "").trim()) || conserjeActual;
     var nomRetiroConserje = ((e.retiroRegistradoPor || "").trim()) || conserjeActual;
-    var notifTs = new Date().toLocaleString("es-CL", { dateStyle: "short", timeStyle: "medium" });
+    var notifTs = new Date().toLocaleString("es-CL", {
+      timeZone: G.CG_APP_TIMEZONE,
+      dateStyle: "short",
+      timeStyle: "medium"
+    });
     var intro =
       kind === "llegada"
         ? "Le informamos que ha llegado una encomienda a su nombre. Puede retirarla en conserjería en el horario habitual."
@@ -21630,7 +21739,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         ? "Estimado/a " + resName + ", residente del domicilio " + depto + ":"
         : "Estimado/a residente del domicilio " + depto + ":";
     var est = typeof visitVisitorParkingDisplay === "function" ? visitVisitorParkingDisplay(v) : "";
-    var notifTs = new Date().toLocaleString("es-CL", { dateStyle: "short", timeStyle: "medium" });
+    var notifTs = new Date().toLocaleString("es-CL", {
+      timeZone: G.CG_APP_TIMEZONE,
+      dateStyle: "short",
+      timeStyle: "medium"
+    });
     var ingresoTs = G.fmtDate(v.at);
     var plate = v.plate || "—";
     var vis = v.visitor || "—";
@@ -21703,7 +21816,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         ? "Estimado/a " + resName + ", residente del domicilio " + depto + ":"
         : "Estimado/a residente del domicilio " + depto + ":";
     var est = typeof visitVisitorParkingDisplay === "function" ? visitVisitorParkingDisplay(v) : "";
-    var notifTs = new Date().toLocaleString("es-CL", { dateStyle: "short", timeStyle: "medium" });
+    var notifTs = new Date().toLocaleString("es-CL", {
+      timeZone: G.CG_APP_TIMEZONE,
+      dateStyle: "short",
+      timeStyle: "medium"
+    });
     var ff = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif";
     var rowsData = [
       { l: "Unidad", v: depto },
@@ -21824,7 +21941,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       { l: "Estacionamiento (visitas)", v: estacionamientoVisita && estacionamientoVisita !== "—" ? estacionamientoVisita : "—" },
       { l: "Ingreso", v: G.fmtDate(v.at) },
       { l: "Tiempo aprox. en edificio", v: (hours != null ? hours : 0).toFixed(2) + " h" },
-      { l: "Fecha de emisión", v: new Date().toLocaleString("es-CL") }
+      {
+        l: "Fecha de emisión",
+        v: new Date().toLocaleString("es-CL", { timeZone: G.CG_APP_TIMEZONE, dateStyle: "short", timeStyle: "short" })
+      }
     );
     var excede5h = visitVehMultaStayReached(v);
     if (excede5h) {
@@ -21914,7 +22034,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var conserjeActual = u ? u.name : G.APP_BRAND_NAME;
     var nomRecep = ((e.registradoPor || e.receivedByName || "").trim()) || conserjeActual;
     var nomRetiroConserje = ((e.retiroRegistradoPor || "").trim()) || conserjeActual;
-    var notifTs = new Date().toLocaleString("es-CL", { dateStyle: "short", timeStyle: "medium" });
+    var notifTs = new Date().toLocaleString("es-CL", {
+      timeZone: G.CG_APP_TIMEZONE,
+      dateStyle: "short",
+      timeStyle: "medium"
+    });
     var sig = cgEmailSignaturePlain();
     if (kind === "llegada") {
       return (
@@ -24097,7 +24221,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       thin +
       "\n" +
       "  📅  Fecha y hora de emisión\n      " +
-      new Date().toLocaleString("es-CL") +
+      new Date().toLocaleString("es-CL", { timeZone: G.CG_APP_TIMEZONE, dateStyle: "short", timeStyle: "medium" }) +
       "\n\n" +
       bar +
       "  Datos del registro\n" +
@@ -24782,11 +24906,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     syncNovedadEntryFormShiftGate();
   };
 
-  function novedadYmdLocal(d) {
-    var pad = function (n) {
-      return (n < 10 ? "0" : "") + n;
-    };
-    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  /** Fecha calendario Chile para inputs type=date del libro de novedades. */
+  function novedadYmdChile(d) {
+    var p = G.cgChileYmdParts(d != null ? d : new Date());
+    return p ? p.ymd : "";
   }
 
   A.novedadFilterToday = function () {
@@ -24794,7 +24917,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var d2e = document.getElementById("flt-nov-d2");
     if (!d1e || !d2e) return;
     var now = new Date();
-    var k = novedadYmdLocal(now);
+    var k = novedadYmdChile(now);
     d1e.value = k;
     d2e.value = k;
     A.renderNovedades();
@@ -24805,9 +24928,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var d2e = document.getElementById("flt-nov-d2");
     if (!d1e || !d2e) return;
     var now = new Date();
-    var start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
-    d1e.value = novedadYmdLocal(start);
-    d2e.value = novedadYmdLocal(now);
+    var pNow = G.cgChileYmdParts(now);
+    var startYmd = pNow ? G.cgChileShiftCalendarDays(pNow.ymd, -6) : "";
+    d1e.value = startYmd;
+    d2e.value = novedadYmdChile(now);
     A.renderNovedades();
   };
 
@@ -24816,8 +24940,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var d2e = document.getElementById("flt-nov-d2");
     if (!d1e || !d2e) return;
     var now = new Date();
-    d1e.value = novedadYmdLocal(new Date(now.getFullYear(), now.getMonth(), 1));
-    d2e.value = novedadYmdLocal(now);
+    var pNow = G.cgChileYmdParts(now);
+    d1e.value = pNow ? pNow.y + "-" + (pNow.m < 10 ? "0" : "") + pNow.m + "-01" : "";
+    d2e.value = novedadYmdChile(now);
     A.renderNovedades();
   };
 
@@ -24858,9 +24983,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var rows = novSrc.slice().sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
     rows = rows.filter(function (n) {
       if (cat && n.category !== cat) return false;
-      var ta = new Date(n.at).getTime();
-      if (d1 && ta < new Date(d1 + "T00:00:00").getTime()) return false;
-      if (d2 && ta > new Date(d2 + "T23:59:59").getTime()) return false;
+      if (d1 || d2) {
+        var pN = G.cgChileYmdParts(n.at);
+        if (!pN) return false;
+        if (d1 && pN.ymd < d1) return false;
+        if (d2 && pN.ymd > d2) return false;
+      }
       if (q) {
         var blob = (
           String(n.seq != null ? n.seq : "") +
@@ -26982,9 +27110,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             "</td><td style=\"max-width:16rem;font-size:calc(0.908rem * 1.01)\">" +
             G.escapeHtml(n.text || "") +
             (String(n.note || "").trim()
-              ? "<br><span class=\"page-desc\" style=\"margin:0.25rem 0 0;display:block\">Nota: " +
+              ? "<div class=\"tl-nov-note\" style=\"margin-top:0.35rem\"><strong>Nota:</strong> " +
                 G.escapeHtml(String(n.note).trim()) +
-                "</span>"
+                "</div>"
               : "") +
             "</td><td>" +
             vinc +
@@ -27284,29 +27412,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   function inDateRange(iso, d1, d2) {
     if (!d1 && !d2) return true;
-    var t = new Date(iso).setHours(0, 0, 0, 0);
-    if (d1 && t < new Date(d1).setHours(0, 0, 0, 0)) return false;
-    if (d2 && t > new Date(d2).setHours(23, 59, 59, 999)) return false;
+    var p = G.cgChileYmdParts(iso);
+    if (!p) return false;
+    if (d1 && p.ymd < d1) return false;
+    if (d2 && p.ymd > d2) return false;
     return true;
-  }
-
-  function repMonthTimeRange(year, monthIndex0) {
-    var t0 = new Date(year, monthIndex0, 1).getTime();
-    var t1 = new Date(year, monthIndex0 + 1, 0, 23, 59, 59, 999).getTime();
-    return { t0: t0, t1: t1 };
-  }
-
-  function isoInTimeRange(iso, t0, t1) {
-    if (!iso) return false;
-    var t = new Date(iso).getTime();
-    return !isNaN(t) && t >= t0 && t <= t1;
-  }
-
-  function shiftSegmentOverlapMonth(seg, t0, t1) {
-    var rs = new Date(seg.startAt).getTime();
-    var re = seg.endAt ? new Date(seg.endAt).getTime() : Date.now();
-    if (isNaN(rs)) return false;
-    return re >= t0 && rs <= t1;
   }
 
   function repHtmlTable(caption, headers, rows) {
@@ -27356,15 +27466,24 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     var m0 = mSel - 1;
-    var rng = repMonthTimeRange(y, m0);
-    var t0 = rng.t0;
-    var t1 = rng.t1;
-    var mesTitulo = new Date(y, m0, 1).toLocaleDateString("es-CL", { month: "long", year: "numeric" });
+    var mesTitulo = new Date(Date.UTC(y, m0, 1, 12)).toLocaleDateString("es-CL", {
+      timeZone: G.CG_APP_TIMEZONE,
+      month: "long",
+      year: "numeric"
+    });
     if (mesTitulo) mesTitulo = mesTitulo.charAt(0).toUpperCase() + mesTitulo.slice(1);
+    var lastD = new Date(Date.UTC(y, m0 + 1, 0)).getUTCDate();
+    function pad2(n) {
+      return n < 10 ? "0" + n : "" + n;
+    }
+    var monthStartYmd = y + "-" + pad2(mSel) + "-01";
+    var monthEndYmd = y + "-" + pad2(mSel) + "-" + pad2(lastD);
+    var periodoDel = G.cgChileFormatYmdWeekdayShort(monthStartYmd);
+    var periodoAl = G.cgChileFormatYmdWeekdayShort(monthEndYmd);
 
     var visits = (G.state.visits || [])
       .filter(function (v) {
-        return isoInTimeRange(v.at, t0, t1);
+        return G.isoInChileCalendarMonth(v.at, y, m0);
       })
       .sort(function (a, b) {
         return new Date(b.at) - new Date(a.at);
@@ -27390,8 +27509,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var encs = (G.state.encomiendas || [])
       .filter(function (e) {
         return (
-          isoInTimeRange(e.receivedAt, t0, t1) ||
-          (e.entregadoAt && isoInTimeRange(e.entregadoAt, t0, t1))
+          G.isoInChileCalendarMonth(e.receivedAt, y, m0) ||
+          (e.entregadoAt && G.isoInChileCalendarMonth(e.entregadoAt, y, m0))
         );
       })
       .sort(function (a, b) {
@@ -27415,7 +27534,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
     var segs = (G.state.shiftLogs || [])
       .filter(function (s) {
-        return s.role !== "admin" && shiftSegmentOverlapMonth(s, t0, t1);
+        return s.role !== "admin" && G.shiftSegmentOverlapChileMonth(s, y, m0);
       })
       .sort(function (a, b) {
         return new Date(b.startAt) - new Date(a.startAt);
@@ -27452,13 +27571,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.escapeHtml(mesTitulo) +
       "</h1>" +
       "<p class=\"sub\">" +
-      G.escapeHtml(G.APP_BRAND_NAME) +
+        G.escapeHtml(G.APP_BRAND_NAME) +
       " · Generado " +
-      G.escapeHtml(new Date().toLocaleString("es-CL")) +
-      " · Período del " +
-      G.escapeHtml(new Date(t0).toLocaleDateString("es-CL")) +
+      G.escapeHtml(G.fmtDate(new Date().toISOString())) +
+      " (Chile) · Período del " +
+      G.escapeHtml(periodoDel) +
       " al " +
-      G.escapeHtml(new Date(t1).toLocaleDateString("es-CL")) +
+      G.escapeHtml(periodoAl) +
       "</p>" +
       "<section><h2>1. Visitas</h2>" +
       repHtmlTable(null, ["Ingreso", "Depto", "Visitante", "Tipo", "Vehíc.", "Patente", "Salida", "Ingreso por", "Salida por"], visRows) +
@@ -27537,11 +27656,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       data = (G.state.shiftLogs || []).filter(function (s) {
         if (s.role === "admin") return false;
         if (!d1 && !d2) return true;
-        var rs = new Date(s.startAt).getTime();
-        var re = s.endAt ? new Date(s.endAt).getTime() : Date.now();
-        var t0 = d1 ? new Date(d1 + "T00:00:00").getTime() : -Infinity;
-        var t1 = d2 ? new Date(d2 + "T23:59:59.999").getTime() : Infinity;
-        return re >= t0 && rs <= t1;
+        var ps = G.cgChileYmdParts(s.startAt);
+        var pe = G.cgChileYmdParts(s.endAt != null && s.endAt !== "" ? s.endAt : new Date().toISOString());
+        if (!ps || !pe) return false;
+        if (d1 && pe.ymd < d1) return false;
+        if (d2 && ps.ymd > d2) return false;
+        return true;
       });
     } else {
       G.toast("Módulo no reconocido", "error");
