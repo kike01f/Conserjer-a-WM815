@@ -4910,6 +4910,26 @@
       min-width: 0;
     }
     table.data-table td .cg-res-space-cell { vertical-align: middle; }
+    tr.cg-res-row--hoy td {
+      background: rgba(220, 252, 231, 0.92);
+    }
+    tr.cg-res-row--hoy:hover td {
+      background: rgba(187, 247, 208, 0.95);
+    }
+    .cg-dash-res-detail-table tr.cg-res-row--hoy td {
+      background: rgba(220, 252, 231, 0.92);
+    }
+    .cg-dash-res-detail-table tr.cg-res-row--hoy:hover td {
+      background: rgba(187, 247, 208, 0.95);
+    }
+    li.cg-res-li--hoy {
+      background: rgba(220, 252, 231, 0.75);
+      margin-left: -0.35rem;
+      margin-right: -0.35rem;
+      padding-left: 0.35rem;
+      padding-right: 0.35rem;
+      border-radius: 8px;
+    }
     table.data-table tr.cg-row-visit-open td { background: rgba(219, 234, 254, 0.4); }
     table.data-table tr.cg-row-visit-open:hover td { background: rgba(219, 234, 254, 0.58); }
     table.data-table tr.cg-row-visit-warn td { background: rgba(254, 243, 199, 0.55); }
@@ -7679,6 +7699,18 @@
       if (!p1 || !p2) return false;
       return p1.ymd === p2.ymd;
     }
+    /** La reserva intersecta el día civil de `refDay` en Chile (inicio–término vs calendario local). */
+    function reservaOcurreEnDiaChile(r, refDay) {
+      if (!r || r.start == null || r.end == null) return false;
+      var s = new Date(r.start);
+      var e = new Date(r.end);
+      if (isNaN(s.getTime()) || isNaN(e.getTime())) return false;
+      var pS = cgChileYmdParts(s);
+      var pE = cgChileYmdParts(e);
+      var pT = cgChileYmdParts(refDay != null ? refDay : new Date());
+      if (!pS || !pE || !pT) return false;
+      return pS.ymd <= pT.ymd && pE.ymd >= pT.ymd;
+    }
     /** Mismo año y mes calendario en Chile (monthIndex 0–11). */
     function isInCalendarMonth(iso, year, monthIndex) {
       if (!iso) return false;
@@ -9563,7 +9595,7 @@
       conserjeShiftBlockerFor,
       currentUser, setSession, clearSession, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict,
       cleanupStaffDirectoryAndShiftOrphans,
-      canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
+      canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, reservaOcurreEnDiaChile, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
       proveedorSelectOptionsHtml,
       uid, load, save, LS, persist: P,
@@ -17855,8 +17887,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var note = String(r.note || "").trim();
         var noteShow = note ? (note.length > 140 ? G.escapeHtml(note.slice(0, 140)) + "…" : G.escapeHtml(note)) : "—";
         var regP = (r.registradoPor && String(r.registradoPor).trim()) || "—";
-        html +=
-          "<tr><td><span class=\"cg-res-space-cell\">" +
+        var trCls =
+          typeof G.reservaOcurreEnDiaChile === "function" && G.reservaOcurreEnDiaChile(r, today) ? "cg-res-row--hoy" : "";
+        html += "<tr" + (trCls ? " class=\"" + trCls + "\"" : "") + "><td><span class=\"cg-res-space-cell\">" +
           (typeof G.reservaEspacioIconHtml === "function" ? G.reservaEspacioIconHtml(r.space) : "") +
           "<strong>" +
           G.escapeHtml(r.space || "—") +
@@ -17874,6 +17907,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       });
       html += "</tbody></table></div>";
       html +=
+        "<p class=\"page-desc\" style=\"margin:0.5rem 0 0;font-size:0.78rem;opacity:0.9\">" +
+        "<strong>Fondo verde claro:</strong> reserva con vigencia en el día de hoy (calendario Chile).</p>" +
         "<p class=\"page-desc\" style=\"margin:0.65rem 0 0;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;justify-content:space-between\">" +
         "<span>" +
         (vig.length > limit
@@ -18807,7 +18842,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"cg-page-compact\">" +
         "<h1 class=\"page-title\">Reservas (espacios comunes)</h1>" +
         "<div class=\"cg-module-intro\">" +
-        "<p class=\"page-desc\">Gestión de salones, quincho, multicancha u otros espacios. Los nombres se definen en <strong>Administración → Configuración</strong>. Las reservas con término en el futuro (o hoy) cuentan como <em>vigentes</em>.</p></div>" +
+        "<p class=\"page-desc\">Gestión de salones, quincho, multicancha u otros espacios. Los nombres se definen en <strong>Administración → Configuración</strong>. Las reservas con término en el futuro (o hoy) cuentan como <em>vigentes</em>. En el listado y en el panel de control, el <strong>fondo verde claro</strong> marca las que tienen vigencia <strong>en el día de hoy</strong> (calendario Chile).</p></div>" +
         "<div class=\"card cg-card-accent--res\"><div class=\"card-h\"><h3>Resumen</h3>" +
         "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"reservaOpen\" data-cg-empty=\"1\"><i class=\"fa-solid fa-plus\"></i> Nueva reserva</button></div>" +
         "<div class=\"card-b\"><div id=\"res-module-summary\" class=\"cg-reserva-summary\" aria-live=\"polite\"></div></div></div>" +
@@ -25081,8 +25116,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             .map(function (r) {
               var dep = G.deptById(r.deptId);
               var regP = (r.registradoPor && String(r.registradoPor).trim()) || "";
+              var liCls =
+                typeof G.reservaOcurreEnDiaChile === "function" && G.reservaOcurreEnDiaChile(r, new Date())
+                  ? "cg-res-li--hoy"
+                  : "";
               return (
-                "<li><span class=\"cg-res-next-space cg-res-space-cell\">" +
+                "<li" +
+                (liCls ? " class=\"" + liCls + "\"" : "") +
+                "><span class=\"cg-res-next-space cg-res-space-cell\">" +
                 (typeof G.reservaEspacioIconHtml === "function" ? G.reservaEspacioIconHtml(r.space) : "") +
                 G.escapeHtml(r.space || "—") +
                 "</span><span class=\"cg-res-next-meta\">Depto " +
@@ -25115,8 +25156,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     rows.forEach(function (r) {
       var dep = G.deptById(r.deptId);
       var regR = (r.registradoPor && String(r.registradoPor).trim()) || "—";
+      var trHoy =
+        typeof G.reservaOcurreEnDiaChile === "function" && G.reservaOcurreEnDiaChile(r, new Date()) ? "cg-res-row--hoy" : "";
+      html += "<tr" + (trHoy ? " class=\"" + trHoy + "\"" : "") + "><td><span class=\"cg-res-space-cell\">";
       html +=
-        "<tr><td><span class=\"cg-res-space-cell\">" +
         (typeof G.reservaEspacioIconHtml === "function" ? G.reservaEspacioIconHtml(r.space) : "") +
         G.escapeHtml(r.space || "—") +
         "</span></td><td>" +
