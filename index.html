@@ -264,6 +264,8 @@
       window.cgAuth = null;
       window.CG_CLOUD_SYNC_ENABLED = false;
       window.__cgFsMem = Object.create(null);
+      /** Contador de escrituras Firestore en curso por clave corta (evita race: snapshot viejo pisa memoria local). */
+      window.__cgFsPushInFlightCount = Object.create(null);
       window.__cgFsUseLocalCache = true;
       window.__cgFsRemoteReady = false;
       window.__cgFsLastError = null;
@@ -377,6 +379,12 @@
           if (typeof jsonString !== "string") {
             return Promise.resolve({ ok: false, reason: "bad_payload" });
           }
+          var infl = window.__cgFsPushInFlightCount;
+          infl[shortKey] = (infl[shortKey] || 0) + 1;
+          var decInflight = function () {
+            infl[shortKey] = (infl[shortKey] || 1) - 1;
+            if (infl[shortKey] <= 0) delete infl[shortKey];
+          };
           var ref = kvCol().doc(shortKey);
           return ref
             .set(
@@ -388,9 +396,11 @@
               { merge: true }
             )
             .then(function () {
+              decInflight();
               return { ok: true, shortKey: shortKey };
             })
             .catch(function (err) {
+              decInflight();
               window.__cgFsLastError = err;
               console.warn("[CG][Firestore] escritura", shortKey, err);
               return { ok: false, err: err, shortKey: shortKey };
@@ -417,6 +427,13 @@
           var next = String(jsonString);
           if (window.__cgFsMem[shortKey] === next) {
             return;
+          }
+          var inflC = window.__cgFsPushInFlightCount && window.__cgFsPushInFlightCount[shortKey];
+          if (inflC > 0) {
+            var curMem = window.__cgFsMem[shortKey];
+            if (typeof curMem === "string" && curMem !== next) {
+              return;
+            }
           }
           window.__cgFsMem[shortKey] = next;
           if (window.__cgFsUseLocalCache) tryLocalStorageSet(full, next);
@@ -10637,7 +10654,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             var str = window.CG_PERSIST.stringifyForStorage(units);
             if (!str || !window.CG_PERSIST.localSetRaw(__deptUnitsStorageKey(), str)) {
               console.warn("[Dept] writeUnitsToStorage: no se pudo guardar en local");
-              return;
+              return false;
             }
             if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
               window.CG.cloudSyncAfterDirectLocalStorageWrite("wm815_units");
@@ -10645,6 +10662,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             if (window.CG_ACTIONS && typeof window.CG_ACTIONS.syncDepartamentosModuleFromLocal === "function") {
               try { window.CG_ACTIONS.syncDepartamentosModuleFromLocal(); } catch (eSync) {}
             }
+            return true;
         }
 
         window.saveUnitsToCloud = async function() {
@@ -10666,7 +10684,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                     return;
                 }
                 console.log(`💾 Guardando ${appState.units.length} unidad(es) en almacenamiento local...`);
-                writeUnitsToStorage(appState.units);
+                if (!writeUnitsToStorage(appState.units)) {
+                  isSaving = false;
+                  throw new Error("No se pudo escribir el registro de unidades (almacenamiento o serialización).");
+                }
                 console.log('✅ Unidades guardadas en este dispositivo');
                 setTimeout(() => { isSaving = false; }, 500);
             } catch (error) {
@@ -10716,7 +10737,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 if (!raw) return;
                 const parsed = window.CG_PERSIST.parseJson(raw, []);
                 const units = Array.isArray(parsed) ? parsed.filter(u => u.id !== unitId) : [];
-                writeUnitsToStorage(units);
+                if (!writeUnitsToStorage(units)) {
+                  showNotification('error', '❌ No se pudo guardar tras eliminar la unidad');
+                  return;
+                }
                 console.log('✅ Unidad eliminada del almacenamiento local');
             } catch (error) {
                 console.error('Error eliminando unidad local:', error);
@@ -10852,7 +10876,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 if (!appState || !appState.units) {
                     throw new Error('Estado de la aplicación no disponible');
                 }
-                writeUnitsToStorage(appState.units);
+                if (!writeUnitsToStorage(appState.units)) {
+                  throw new Error('No se pudo escribir el registro de unidades');
+                }
                 console.log('✅ Nota guardada localmente para unidad:', unit.unitNumber);
             } catch (error) {
                 console.error('Error guardando nota local:', error);
