@@ -7854,6 +7854,256 @@
       save("migrated_visit_plates_upper_v1", true);
     }
 
+    /**
+     * Una vez: alinea prefijos E- (estacionamiento), B- (bodega) y BC- (bicicletero) en datos ya guardados.
+     * B-/BC- no se añaden a texto sin prefijo que contenga espacios (evita "B-nota libre").
+     */
+    function migrateDeptRegistroPrefijosEbbBc() {
+      if (load("migrated_wm815_prefix_e_b_bc_v1", false)) return;
+
+      function parkingCanonMigrate(v) {
+        if (v == null) return "";
+        var s = String(v).trim().replace(/\s+/g, "");
+        if (!s) return "";
+        var m = s.match(/^E-?(\d+)$/i);
+        if (m) return "E-" + m[1];
+        if (/^E-/i.test(s)) return "E-" + s.replace(/^E-/i, "").replace(/\D.*/, "");
+        return s;
+      }
+      function migrateParkingToken(t) {
+        if (t == null || String(t).trim() === "") return t;
+        var raw = String(t).trim();
+        var c = parkingCanonMigrate(raw);
+        return c !== raw ? c : t;
+      }
+      function migrateParkingMultiline(raw) {
+        if (raw == null || String(raw).trim() === "") return raw;
+        var out = [];
+        var seen = {};
+        var changed = false;
+        String(raw).split(/[\n,;]+/).forEach(function (piece) {
+          var t = piece.trim();
+          if (!t) return;
+          var c = parkingCanonMigrate(t);
+          if (!c) return;
+          if (c !== t) changed = true;
+          if (!seen[c]) {
+            seen[c] = true;
+            out.push(c);
+          }
+        });
+        if (!out.length) return raw;
+        if (changed) return out.join("\n");
+        return raw;
+      }
+      function migrateBodegaCode(raw) {
+        if (raw == null) return raw;
+        var s = String(raw).trim();
+        if (!s) return raw;
+        var had = /^b-/i.test(s);
+        var body = s;
+        while (body.length >= 2 && body.slice(0, 2).toLowerCase() === "b-") {
+          body = body.slice(2).trim();
+        }
+        body = body.replace(/\s+/g, " ").trim();
+        if (!body) return raw;
+        if (!had && /\s/.test(body)) return s;
+        var next = "B-" + body;
+        return next !== s ? next : raw;
+      }
+      function migrateBikeCode(raw) {
+        if (raw == null) return raw;
+        var s = String(raw).trim();
+        if (!s) return raw;
+        var had = /^bc-/i.test(s);
+        var body = s;
+        while (body.length >= 3 && body.slice(0, 3).toLowerCase() === "bc-") {
+          body = body.slice(3).trim();
+        }
+        body = body.replace(/\s+/g, " ").trim();
+        if (!body) return raw;
+        if (!had && /\s/.test(body)) return s;
+        var next = "BC-" + body;
+        return next !== s ? next : raw;
+      }
+      function migrateBodegaMultiline(raw) {
+        if (raw == null || String(raw).trim() === "") return raw;
+        var out = [];
+        var seen = {};
+        var changed = false;
+        String(raw).split(/[\n,;]+/).forEach(function (piece) {
+          var t = String(piece || "").trim();
+          if (!t) return;
+          var m = migrateBodegaCode(t);
+          if (m !== t) changed = true;
+          var k = normalizeBodegaCodeKey(m);
+          if (!k) return;
+          if (seen[k]) {
+            changed = true;
+            return;
+          }
+          seen[k] = true;
+          out.push(m);
+        });
+        if (!out.length) return raw;
+        if (changed) return out.join("\n");
+        return raw;
+      }
+
+      var wmKey = LS + "wm815_units";
+      var rawU = P.localGetRaw(wmKey);
+      var wmChanged = false;
+      if (rawU != null && rawU !== "") {
+        var units = P.parseJson(rawU, null);
+        if (Array.isArray(units)) {
+          units.forEach(function (u) {
+            if (!u) return;
+            function mapArr(arr, fn) {
+              if (!Array.isArray(arr)) return;
+              var i;
+              for (i = 0; i < arr.length; i++) {
+                var nv = fn(arr[i]);
+                if (nv !== arr[i]) {
+                  arr[i] = nv;
+                  wmChanged = true;
+                }
+              }
+            }
+            mapArr(u.parkingNumbers, migrateParkingToken);
+            if (u.parkingNumber != null && u.parkingNumber !== "") {
+              var np = migrateParkingMultiline(u.parkingNumber);
+              if (np !== u.parkingNumber) {
+                u.parkingNumber = np;
+                wmChanged = true;
+              }
+            }
+            mapArr(u.storageNumbers, migrateBodegaCode);
+            if (u.storageNumber != null && u.storageNumber !== "") {
+              var ns = migrateBodegaMultiline(u.storageNumber);
+              if (ns !== u.storageNumber) {
+                u.storageNumber = ns;
+                wmChanged = true;
+              }
+            }
+            mapArr(u.bikeStorageNumbers, migrateBikeCode);
+            if (u.bikeStorageNumber != null && u.bikeStorageNumber !== "") {
+              var nb = migrateBikeCode(u.bikeStorageNumber);
+              if (nb !== u.bikeStorageNumber) {
+                u.bikeStorageNumber = nb;
+                wmChanged = true;
+              }
+            }
+            if (u.rentalParkingNumber != null && String(u.rentalParkingNumber).trim() !== "") {
+              var nr = migrateParkingToken(u.rentalParkingNumber);
+              if (nr !== u.rentalParkingNumber) {
+                u.rentalParkingNumber = nr;
+                wmChanged = true;
+              }
+            }
+          });
+          if (wmChanged) {
+            var str = P.stringifyForStorage(units);
+            if (str && P.localSetRaw(wmKey, str) && window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
+              window.CG.cloudSyncAfterDirectLocalStorageWrite("wm815_units");
+            }
+          }
+        }
+      }
+
+      if (rawU != null && rawU !== "" && window.CG_ACTIONS && typeof window.CG_ACTIONS.syncDepartamentosModuleFromLocal === "function") {
+        try {
+          window.CG_ACTIONS.syncDepartamentosModuleFromLocal();
+        } catch (eSync) {}
+      }
+
+      var bp = load("buildingParking", []);
+      var bpCh = false;
+      if (Array.isArray(bp)) {
+        bp = bp.map(function (s) {
+          if (!s) return s;
+          var n = migrateParkingToken(s.numero);
+          if (n !== s.numero) {
+            bpCh = true;
+            return Object.assign({}, s, { numero: n });
+          }
+          return s;
+        });
+        if (bpCh) save("buildingParking", bp);
+      }
+
+      var ps = load("parkingSlots", []);
+      var psCh = false;
+      if (Array.isArray(ps)) {
+        ps = ps.map(function (s) {
+          if (!s) return s;
+          var n = migrateParkingToken(s.number);
+          if (n !== s.number) {
+            psCh = true;
+            return Object.assign({}, s, { number: n });
+          }
+          return s;
+        });
+        if (psCh) save("parkingSlots", ps);
+      }
+
+      var bu = load("buildingUnits", []);
+      var buCh = false;
+      if (Array.isArray(bu)) {
+        bu = bu.map(function (u) {
+          if (!u) return u;
+          var ch = false;
+          var bc = (u.bodegaCodes || []).slice();
+          var i;
+          for (i = 0; i < bc.length; i++) {
+            var mb = migrateBodegaCode(bc[i]);
+            if (mb !== bc[i]) {
+              bc[i] = mb;
+              ch = true;
+            }
+          }
+          var bikes = (u.bicicleteros || []).slice();
+          for (i = 0; i < bikes.length; i++) {
+            var b0 = bikes[i];
+            if (!b0) continue;
+            var mn = migrateBikeCode(b0.numero);
+            if (mn !== b0.numero) {
+              bikes[i] = Object.assign({}, b0, { numero: mn });
+              ch = true;
+            }
+          }
+          var rp = u.rentalParkingNumber;
+          if (rp != null && String(rp).trim() !== "") {
+            var mr = migrateParkingToken(rp);
+            if (mr !== rp) {
+              ch = true;
+              rp = mr;
+            }
+          }
+          if (!ch) return u;
+          buCh = true;
+          return Object.assign({}, u, { bodegaCodes: bc, bicicleteros: bikes, rentalParkingNumber: rp });
+        });
+        if (buCh) save("buildingUnits", bu);
+      }
+
+      var bod = load("bodegas", []);
+      var bodCh = false;
+      if (Array.isArray(bod)) {
+        bod = bod.map(function (b) {
+          if (!b) return b;
+          var mc = migrateBodegaCode(b.code);
+          if (mc !== b.code) {
+            bodCh = true;
+            return Object.assign({}, b, { code: mc });
+          }
+          return b;
+        });
+        if (bodCh) save("bodegas", bod);
+      }
+
+      save("migrated_wm815_prefix_e_b_bc_v1", true);
+    }
+
     /** Orden fijo de migraciones locales (mismo que el arranque en PART 4). Cada paso aislado: un fallo no aborta el resto. */
     function runStartupLocalMigrations() {
       var steps = [
@@ -7867,6 +8117,7 @@
         ["provVisitAdmin", migrateProveedorVisitAdminDept],
         ["visitVehAlert", migrateVisitVehAlertLog],
         ["visitPlatesUpper", migrateVisitPlatesUppercase],
+        ["deptPrefijosEbbBc", migrateDeptRegistroPrefijosEbbBc],
         ["conserjeActivity", migrateConserjeActivityLog],
         ["manualUsuario", migrateManualUsuarioModule],
         ["staffBirthdays", migrateStaffBirthdays],
@@ -8739,7 +8990,7 @@
     /* ┌─ 11. API pública (único objeto global del core) ─────────────────────────────── */
     window.CG = {
       APP_BRAND_NAME, MANUFACTURER_LOGO_URL,
-      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureCloudInstallBaseline, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateManualUsuarioModule, migrateProveedoresModule, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateVisitPlatesUppercase, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
+      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureCloudInstallBaseline, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateManualUsuarioModule, migrateProveedoresModule, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateVisitPlatesUppercase, migrateDeptRegistroPrefijosEbbBc, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
       attachVirtualAdminDepartment,
       authEnsureReady, authValidateDeptGateNewPassword, authVerifyLoginPassword, authCreatePasswordVerifier, authDeptGateExists, authVerifyDeptGate, authSetDeptGateFromPasswords, authSetDeptGateInitial,
       shiftLogTramoIsOpen,
