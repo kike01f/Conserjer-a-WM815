@@ -10736,7 +10736,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 const raw = window.CG_PERSIST.localGetRaw(__deptUnitsStorageKey());
                 if (!raw) return;
                 const parsed = window.CG_PERSIST.parseJson(raw, []);
-                const units = Array.isArray(parsed) ? parsed.filter(u => u.id !== unitId) : [];
+                const units = Array.isArray(parsed) ? parsed.filter(u => !__deptSameUnitId(u.id, unitId)) : [];
                 if (!writeUnitsToStorage(units)) {
                   showNotification('error', '❌ No se pudo guardar tras eliminar la unidad');
                   return;
@@ -11892,13 +11892,19 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             updateBuildingMap();
         }
 
+        /** Misma unidad aunque el id venga como string (DOM) o número (JSON / Date.now). */
+        function __deptSameUnitId(a, b) {
+            if (a == null || b == null) return false;
+            return String(a) === String(b);
+        }
+
         // ===== GESTIÓN DE ESTACIONAMIENTOS =====
         function checkParkingAvailability(parkingNumber) {
             if (!parkingNumber || parkingNumber.trim() === '') return true; // Permitir vacío
             
             // Verificar si el estacionamiento ya está asignado a otra unidad
             const isAssigned = appState.units
-                .filter(u => u.id !== appState.editingUnitId) // Excluir la unidad que se está editando
+                .filter(u => !__deptSameUnitId(u.id, appState.editingUnitId)) // Excluir la unidad que se está editando
                 .some(u => {
                     // Verificar en array de estacionamientos
                     if (u.parkingNumbers && Array.isArray(u.parkingNumbers)) {
@@ -11917,7 +11923,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             e.preventDefault();
             try {
                 // Preservar la nota existente si estamos editando
-                const existingUnit = appState.editingUnitId ? appState.units.find(u => u.id === appState.editingUnitId) : null;
+                const existingUnit = appState.editingUnitId ? appState.units.find(u => __deptSameUnitId(u.id, appState.editingUnitId)) : null;
+                if (appState.editingUnitId && !existingUnit) {
+                    throw new Error('La unidad no está en el listado actual. Use «Guardar en este dispositivo» o recargue y vuelva a abrirla con ✏️.');
+                }
                 console.log('Editando unidad:', appState.editingUnitId);
                 console.log('Unidad existente:', existingUnit);
                 console.log('Nota existente:', existingUnit ? existingUnit.unitNote : 'N/A');
@@ -11971,7 +11980,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                     };
                 
                 // Actualizar campos del formulario (sobrescribir solo los que vienen del formulario)
-                formData.id = appState.editingUnitId || formData.id || Date.now().toString();
+                if (existingUnit) {
+                    formData.id = existingUnit.id;
+                } else if (!formData.id) {
+                    formData.id = Date.now().toString();
+                }
                 formData.unitNumber = document.getElementById('unitNumber').value.trim();
                 formData.unitUse = formatText(document.getElementById('unitUse').value);
                 formData.parkingNumber = parkingNumbers.length > 0 ? parkingNumbers[0] : ''; // Mantener compatibilidad con código existente
@@ -12096,16 +12109,26 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 if (!validateUnitNumber(formData.unitNumber)) {
                     throw new Error('Número de unidad no válido');
                 }
-                if (!appState.editingUnitId && appState.units.find(u => u.unitNumber === formData.unitNumber)) {
-                    throw new Error('Esta unidad ya está registrada');
+                var dupUnidadNumero = appState.units.some(function (u) {
+                    return (
+                        String(u.unitNumber || "").trim() === String(formData.unitNumber || "").trim() &&
+                        !__deptSameUnitId(u.id, appState.editingUnitId)
+                    );
+                });
+                if (dupUnidadNumero) {
+                    throw new Error('Ya existe otra unidad con ese número');
                 }
                 // Persistir en localStorage antes de actualizar la UI
                 try {
                     // Actualizar el estado local temporalmente para el guardado
                     if (appState.editingUnitId) {
-                        const idx = appState.units.findIndex(u => u.id === appState.editingUnitId);
+                        const idx = appState.units.findIndex(u => __deptSameUnitId(u.id, appState.editingUnitId));
                         if (idx !== -1) {
                             appState.units[idx] = formData;
+                        } else {
+                            throw new Error(
+                                "No se encontró la unidad en memoria (desincronización). Cierre el formulario, pulse Actualizar o recargue y vuelva a abrir la unidad con ✏️."
+                            );
                         }
                     } else {
                         appState.units.push(formData);
@@ -12127,9 +12150,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                     // Revertir cambios locales si falla el guardado
                     if (appState.editingUnitId) {
                         // Restaurar unidad original si estaba editando
-                        const originalUnit = appState.units.find(u => u.id === appState.editingUnitId);
+                        const originalUnit = appState.units.find(u => __deptSameUnitId(u.id, appState.editingUnitId));
                         if (originalUnit) {
-                            const idx = appState.units.findIndex(u => u.id === appState.editingUnitId);
+                            const idx = appState.units.findIndex(u => __deptSameUnitId(u.id, appState.editingUnitId));
                             if (idx !== -1) {
                                 // Recargar desde almacenamiento local
                                 try {
@@ -12141,7 +12164,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                         }
                     } else {
                         // Si era una unidad nueva, removerla del array
-                        appState.units = appState.units.filter(u => u.id !== formData.id);
+                        appState.units = appState.units.filter(u => !__deptSameUnitId(u.id, formData.id));
                     }
                     updateAllUI();
                     showNotification('error', `❌ Error al guardar: ${error.message || 'Error desconocido'}. Los cambios no se guardaron.`);
@@ -12167,7 +12190,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         }
 
         function deleteUnit(unitId) {
-            const unit = appState.units.find(u => u.id === unitId);
+            const unit = appState.units.find(u => __deptSameUnitId(u.id, unitId));
             const unitNumber = unit ? unit.unitNumber : 'desconocida';
             
             showAuthModal(
@@ -12179,7 +12202,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                             try {
                                 await deleteUnitFromCloud(unitId);
                                 
-                                appState.units = appState.units.filter(u => u.id !== unitId);
+                                appState.units = appState.units.filter(u => !__deptSameUnitId(u.id, unitId));
                                 updateAllUI();
                                 showNotification('success', '✅ Unidad eliminada correctamente');
                                 const residentCount = unit && unit.residents ? unit.residents.length : 0;
@@ -12229,7 +12252,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 return;
             }
             
-            const unit = appState.units.find(u => u.id === unitId);
+            const unit = appState.units.find(u => __deptSameUnitId(u.id, unitId));
             if (!unit || !unit.residents || residentIndex >= unit.residents.length) {
                 showNotification('error', '❌ No se encontró el residente');
                 return;
@@ -12320,7 +12343,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                         
                         try {
                             // Buscar la unidad actualizada por si hubo cambios
-                            const currentUnit = appState.units.find(u => u.id === unitData.id);
+                            const currentUnit = appState.units.find(u => __deptSameUnitId(u.id, unitData.id));
                             if (!currentUnit) {
                                 loadingIndicator.remove();
                                 confirmBtn.disabled = false;
@@ -12403,7 +12426,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                             currentUnit.residents.splice(currentResidentIndex, 1);
                             
                             // Actualizar en appState
-                            const unitIndex = appState.units.findIndex(u => u.id === unitData.id);
+                            const unitIndex = appState.units.findIndex(u => __deptSameUnitId(u.id, unitData.id));
                             if (unitIndex !== -1) {
                                 appState.units[unitIndex] = currentUnit;
                             }
@@ -12711,7 +12734,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             }
             
             // Verificar que la unidad original existe
-            const unit = appState.units.find(u => u.id === formerResident.unitId);
+            const unit = appState.units.find(u => __deptSameUnitId(u.id, formerResident.unitId));
             if (!unit) {
                 showNotification('error', `❌ No se encontró la unidad ${formerResident.unitNumber}. El residente no puede ser restaurado.`);
                 return;
@@ -12768,7 +12791,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                         
                         try {
                             // Verificar nuevamente que la unidad existe
-                            const currentUnit = appState.units.find(u => u.id === formerResident.unitId);
+                            const currentUnit = appState.units.find(u => __deptSameUnitId(u.id, formerResident.unitId));
                             if (!currentUnit) {
                                 loadingIndicator.remove();
                                 restoreBtn.disabled = false;
@@ -12825,7 +12848,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                             currentUnit.residents.push(restoredResident);
                             
                             // Actualizar en appState
-                            const unitIndex = appState.units.findIndex(u => u.id === formerResident.unitId);
+                            const unitIndex = appState.units.findIndex(u => __deptSameUnitId(u.id, formerResident.unitId));
                             if (unitIndex !== -1) {
                                 appState.units[unitIndex] = currentUnit;
                             }
@@ -13254,9 +13277,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         }
 
         function editUnit(unitId) {
-            const unit = appState.units.find(u => u.id === unitId);
-            if (!unit) return;
-            appState.editingUnitId = unitId;
+            const unit = appState.units.find(u => __deptSameUnitId(u.id, unitId));
+            if (!unit) {
+                showNotification('error', '❌ No se encontró la unidad. Actualice el listado o recargue la página.');
+                return;
+            }
+            appState.editingUnitId = unit.id;
             document.getElementById('unitNumber').value = unit.unitNumber;
             document.getElementById('unitUse').value = unit.unitUse;
             
@@ -13607,7 +13633,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
         // ===== DESCARGAR FICHA COMPLETA DEL MÓDULO (unidad + todos los residentes, como en pantalla) =====
         function downloadUnitModuleFichaHtml(unitId) {
-            const unit = appState.units.find(u => u.id === unitId);
+            const unit = appState.units.find(u => __deptSameUnitId(u.id, unitId));
             if (!unit) return;
             const escapeHtml = (t) => {
                 if (!t) return '';
@@ -13713,7 +13739,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
         // ===== DESCARGAR FICHA COMO HTML (desde el modal del mapa) =====
         function downloadResidentFichaHtml(unitId, residentIndex) {
-            const unit = appState.units.find(u => u.id === unitId);
+            const unit = appState.units.find(u => __deptSameUnitId(u.id, unitId));
             if (!unit || !unit.residents || !unit.residents[residentIndex]) return;
             const residentData = unit.residents[residentIndex];
             const cardHTML = buildResidentFichaHtml(unit, residentData);
@@ -14061,7 +14087,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                                     unit.rentalParkingNumber = existingRentalParking;
                                     
                                     // Actualizar también en appState para mantener consistencia
-                                    const unitIndex = appState.units.findIndex(u => u.id === unit.id);
+                                    const unitIndex = appState.units.findIndex(u => __deptSameUnitId(u.id, unit.id));
                                     if (unitIndex !== -1) {
                                         appState.units[unitIndex].unitNote = '';
                                         appState.units[unitIndex].unitNoteUpdatedAt = '';
@@ -15258,7 +15284,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 unit.hasRentalContract = hasRentalContract;
                 
                 // Actualizar también en appState para mantener consistencia
-                const unitIndex = appState.units.findIndex(u => u.id === unit.id);
+                const unitIndex = appState.units.findIndex(u => __deptSameUnitId(u.id, unit.id));
                 if (unitIndex !== -1) {
                     appState.units[unitIndex].unitNote = newNote;
                     appState.units[unitIndex].unitNoteUpdatedAt = noteUpdatedAt;
