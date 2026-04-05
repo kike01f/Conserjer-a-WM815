@@ -6566,8 +6566,8 @@
       { id: "novedades", label: "Libro de novedades", icon: "fa-book" },
       { id: "visitas", label: "Visitas", icon: "fa-user-clock" },
       { id: "encomiendas", label: "Encomiendas", icon: "fa-box-open" },
-      { id: "departamentos", label: "Departamentos", icon: "fa-door-open" },
-      { id: "mapaEdificio", label: "Mapa del edificio", icon: "fa-map-location-dot" },
+      { id: "departamentos", label: "Residentes", icon: "fa-users" },
+      { id: "mapaEdificio", label: "Departamentos", icon: "fa-door-open" },
       { id: "estacionamientos", label: "Estacionamientos", icon: "fa-square-parking" },
       { id: "bodegas", label: "Bodegas", icon: "fa-box" },
       { id: "proveedores", label: "Proveedores", icon: "fa-truck" },
@@ -8190,7 +8190,7 @@
       save("migrated_proveedores_contactos_v1", true);
     }
 
-    /** Añade el módulo Mapa del edificio a roles que ya tenían Departamentos (misma sincronización wm815_*). */
+    /** Añade el módulo mapa (menú «Departamentos», id mapaEdificio) a roles que ya tenían Residentes (id departamentos). */
     function migrateMapaEdificioModule() {
       if (load("migrated_mapa_edificio_module_v1", false)) return;
       var mid = "mapaEdificio";
@@ -12892,7 +12892,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                     const wasEdit = !!appState.editingUnitId;
                     const uNumber = formData.unitNumber;
                     if (!wasEdit && window.CG && typeof window.CG.logConserjeActivity === "function") {
-                        window.CG.logConserjeActivity("dept_unidad", "Registró unidad en Departamentos — " + uNumber);
+                        window.CG.logConserjeActivity("dept_unidad", "Registró unidad en Residentes — " + uNumber);
                     }
                     updateAllUI();
                     resetForm();
@@ -15048,7 +15048,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
         // ===== INICIALIZACIÓN (index: tras inyectar HTML en #dept-module-host) =====
         async function __cgDeptRunAfterInject() {
-            console.log("🚀 Inicializando módulo Departamentos (datos en este navegador)");
+            console.log("🚀 Inicializando módulo incrustado wm815 (Residentes / Departamentos — mismos datos en este navegador)");
 
             try {
                 console.log('💾 Cargando datos desde almacenamiento local del navegador...');
@@ -15144,7 +15144,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 });
             }
 
-            // #building: el mapa vive en el módulo «Mapa del edificio» (mismos datos wm815_*)
+            // #building: vista en el menú «Departamentos» (mismos datos wm815_*)
             const hash = (window.location.hash || '').replace(/^#/, '');
             if (hash === 'building') {
                 setTimeout(function () {
@@ -18269,7 +18269,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "\" />" +
         "<span class=\"page-desc\" style=\"margin:0\">Conteo en <strong>" +
         G.escapeHtml(monthTitle) +
-        "</strong>: unidades nuevas en Departamentos (fecha de creación y usuario que registró), visitas (ingreso), encomiendas (recepción) y novedades.</span>" +
+        "</strong>: unidades nuevas en Residentes (fecha de creación y usuario que registró), visitas (ingreso), encomiendas (recepción) y novedades.</span>" +
         "</div>" +
         "<div class=\"cg-dash-act-table-wrap cg-dash-act-lead-table\">" +
         "<table class=\"cg-dash-act-table\"><thead><tr>" +
@@ -18301,7 +18301,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
               })
               .join("") +
             "</tbody></table></div></details>"
-          : "<p class=\"page-desc\" style=\"margin:0.65rem 0 0\">Bitácora: sin entradas aún (se llena al usar visitas, encomiendas, novedades, turno o al registrar una unidad nueva en Departamentos).</p>";
+          : "<p class=\"page-desc\" style=\"margin:0.65rem 0 0\">Bitácora: sin entradas aún (se llena al usar visitas, encomiendas, novedades, turno o al registrar una unidad nueva en Residentes).</p>";
 
       return leaderTable + logSection;
     }
@@ -18430,7 +18430,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           lead:
             "Cada ingreso debe quedar registrado con datos fiables: quién entra, a qué unidad va, y salida cuando corresponda. El historial permite auditar lo ocurrido y avisar a la unidad por correo dejando constancia en el sistema.",
           cards: [
-            { ic: "fa-pen-to-square", title: "Registrar ingreso", txt: "Visitante o proveedor, RUT si aplica, departamento, y si viene en auto: patente y código de estacionamiento de visitas." },
+            { ic: "fa-pen-to-square", title: "Registrar ingreso", txt: "Visitante o proveedor, RUT obligatorio, departamento, y si viene en auto: patente y código de estacionamiento de visitas." },
             { ic: "fa-door-open", title: "Registrar salida", txt: "Cierre la visita al irse; en peatones, según configuración del edificio puede ser automático o manual." },
             { ic: "fa-list", title: "Historial", txt: "Filtros por abiertas, hoy o todas; busque por nombre, RUT o número de unidad." },
             { ic: "fa-envelope", title: "Aviso por correo", txt: "Use Abrir correo para que quede el check de constancia; si solo copia el texto, pulse Marcar correo enviado." }
@@ -18460,11 +18460,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           icon: "fa-layer-group",
           tocIcon: "fa-calendar-days",
           lead:
-            "Según permisos del edificio: reservar espacios comunes (salón, quincho, etc.), mantener la lista de proveedores habituales y consultar o actualizar datos maestros (departamentos, estacionamientos, bodegas).",
+            "Según permisos del edificio: reservar espacios comunes (salón, quincho, etc.), mantener la lista de proveedores habituales y consultar o actualizar datos maestros (Residentes, mapa Departamentos, estacionamientos, bodegas).",
           cards: [
             { ic: "fa-calendar-check", title: "Reservas", txt: "Rango de fecha y hora, unidad que reserva y notas del evento." },
             { ic: "fa-truck", title: "Proveedores", txt: "Empresa y rubro para registrar más rápido las visitas de proveedor." },
-            { ic: "fa-building", title: "Maestros", txt: "Unidades, residentes en panel, estacionamientos y bodegas: base para visitas y encomiendas." }
+            { ic: "fa-building", title: "Maestros", txt: "Residentes (unidades y fichas), Departamentos (mapa), estacionamientos y bodegas: base para visitas y encomiendas." }
           ],
           flow:
             "<div class=\"cg-manual-flow\"><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-gear\" aria-hidden=\"true\"></i> Administración configura</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-id-badge\" aria-hidden=\"true\"></i> Conserje usa en el día a día</span><span class=\"cg-manual-flow__arrow\"><i class=\"fa-solid fa-arrow-right\"></i></span><span class=\"cg-manual-flow__node\"><i class=\"fa-solid fa-database\" aria-hidden=\"true\"></i> Un solo registro coherente</span></div>"
@@ -18946,13 +18946,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function pageMapaEdificio() {
       return (
         "<div class=\"cg-page-compact\">" +
-        "<h1 class=\"page-title\">Mapa del edificio</h1>" +
+        "<h1 class=\"page-title\">Departamentos</h1>" +
         "<div class=\"cg-module-intro\">" +
-        "<p class=\"page-desc\" style=\"margin:0\">Misma información que en <strong>Departamentos</strong> (unidades, ocupación y residentes en <code>wm815_*</code>). Los cambios en un módulo se reflejan en el otro al instante.</p>" +
+        "<p class=\"page-desc\" style=\"margin:0\">Mapa por piso y ocupación (mismos datos que <strong>Residentes</strong> en <code>wm815_*</code>). Los cambios en un módulo se reflejan en el otro al instante.</p>" +
         "<p class=\"page-desc\" style=\"margin:0.5rem 0 0\">" +
-        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"departamentos\"><i class=\"fa-solid fa-door-open\" aria-hidden=\"true\"></i> Ir a Departamentos</button> " +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"departamentos\"><i class=\"fa-solid fa-users\" aria-hidden=\"true\"></i> Ir a Residentes</button> " +
         "<span class=\"page-desc\" style=\"margin:0;font-size:0.78rem\">para registrar o editar unidades y residentes.</span></p></div>" +
-        "<section class=\"cg-dept-module-embed\" aria-label=\"Mapa del edificio (vista incrustada)\">" +
+        "<section class=\"cg-dept-module-embed\" aria-label=\"Departamentos — mapa del edificio\">" +
         "<div class=\"cg-dept-module-frame-wrap\">" +
         "<div id=\"mapa-edificio-module-host\"></div></div></section></div>"
       );
@@ -18970,10 +18970,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             "<button type=\"button\" class=\"btn btn-primary btn-sm\" id=\"btn-import-dept-xlsx\"><i class=\"fa-solid fa-file-import\"></i> Importar Excel</button></div></div></div>"
           : "";
       return (
-        "<h1 class=\"page-title\">Departamentos</h1>" +
-        "<p class=\"page-desc\" style=\"margin:0 0 0.65rem\">El mapa interactivo por piso está en <button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"mapaEdificio\"><i class=\"fa-solid fa-map-location-dot\" aria-hidden=\"true\"></i> Mapa del edificio</button> (mismos datos, sincronizado).</p>" +
+        "<h1 class=\"page-title\">Residentes</h1>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.65rem\">El mapa interactivo por piso está en <button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"mapaEdificio\"><i class=\"fa-solid fa-door-open\" aria-hidden=\"true\"></i> Departamentos</button> (mismos datos, sincronizado).</p>" +
         xlsxImportCard +
-        "<section class=\"cg-dept-module-embed\" aria-label=\"Registro de unidades y residentes (módulo Departamentos)\">" +
+        "<section class=\"cg-dept-module-embed\" aria-label=\"Residentes — registro de unidades y fichas\">" +
         "<div class=\"cg-dept-module-frame-wrap\">" +
         "<div id=\"dept-module-host\"></div></div></section>"
       );
@@ -18998,7 +18998,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function pageBodegas() {
       return (
         "<h1 class=\"page-title\">Bodegas</h1>" +
-        "<p class=\"page-desc\">Listado de <strong>solo consulta</strong>, sincronizado con el <strong>módulo Departamentos</strong>. Para dar de alta, editar o quitar bodegas use <strong>Departamentos</strong> (registro de unidades).</p>" +
+        "<p class=\"page-desc\">Listado de <strong>solo consulta</strong>, sincronizado con <strong>Residentes</strong>. Para dar de alta, editar o quitar bodegas use el módulo <strong>Residentes</strong> (registro de unidades).</p>" +
         "<div class=\"card\"><div class=\"card-h\"><h3>Listado</h3>" +
         "<div class=\"toolbar\" style=\"flex-wrap:wrap;gap:0.5rem;align-items:center\">" +
         "<input type=\"search\" id=\"flt-bod-q\" placeholder=\"Buscar código, depto o nota…\" />" +
@@ -20841,7 +20841,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"form-group\"><label>Estado</label><select name=\"estado\">" + stOpts + "</select></div>" +
       "<div class=\"form-group\"><label>Unidad</label><select name=\"unidadId\">" + unOpts + "</select></div>" +
       "<div class=\"form-group\"><label>Nota</label><textarea name=\"nota\" rows=\"2\" placeholder=\"Observaciones, ubicación, etc.\">" + G.escapeHtml(s.nota || "") + "</textarea></div>" +
-      "</form><p class=\"page-desc\" style=\"color:#94a3b8;font-size:0.8rem\">Para cambios masivos de unidades y E-, use el módulo <strong>Departamentos</strong> (registro de unidades).</p></div>" +
+      "</form><p class=\"page-desc\" style=\"color:#94a3b8;font-size:0.8rem\">Para cambios masivos de unidades y E-, use el módulo <strong>Residentes</strong> (registro de unidades).</p></div>" +
       "<div class=\"modal-f\" style=\"display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:space-between;width:100%\">" +
       "<button type=\"button\" class=\"btn btn-danger btn-sm\" data-cg-act=\"buildingDeleteParking\" data-cg-id=\"" +
       G.escapeHtml(s.id) +
@@ -21095,7 +21095,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       A.buildingEditParking(bpId);
       return;
     }
-    G.toast("Este E- no tiene ficha en el edificio ni unidad enlazada. Use Administración o Departamentos.", "warn");
+    G.toast("Este E- no tiene ficha en el edificio ni unidad enlazada. Use Administración o el mapa en Departamentos.", "warn");
   };
 
   /** Modal de consulta de unidad (datos sincronizados desde registro de unidades / building*). */
@@ -21181,7 +21181,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     UI.openModal(
       "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>Unidad " + G.escapeHtml(String(unit.number || "")) + "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
       "<div class=\"modal-b\" style=\"max-height:min(70vh,520px)\">" +
-      "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Vista de consulta (mismos datos que en <strong>Departamentos</strong>). Para modificar residentes, notas o usos, abra ese módulo.</p>" +
+      "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Vista de consulta (mismos datos que en <strong>Residentes</strong>). Para modificar residentes, notas o usos, abra ese módulo.</p>" +
       "<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.5rem;margin-bottom:0.75rem\">" +
       "<div style=\"padding:0.5rem 0.65rem;background:var(--gray-50);border-radius:8px;border:1px solid var(--gray-200)\"><div style=\"font-size:0.7rem;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.03em\">Uso</div><strong style=\"color:#0f172a\">" + G.escapeHtml(tipoUsoUnidadDisplay(unit.tipoUso)) + "</strong></div>" +
       "<div style=\"padding:0.5rem 0.65rem;background:var(--gray-50);border-radius:8px;border:1px solid var(--gray-200)\"><div style=\"font-size:0.7rem;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.03em\">Residentes</div><strong style=\"color:#0f172a\">" + String(residents.length) + "</strong></div></div>" +
@@ -21195,7 +21195,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"modal-f\" style=\"justify-content:flex-start;flex-wrap:wrap;gap:0.5rem\">" +
       editPkBtn +
       "<span style=\"flex:1;min-width:8px\"></span>" +
-      "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-nav=\"departamentos\" data-cg-close-modal=\"1\">Ir a Departamentos</button>" +
+      "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-nav=\"departamentos\" data-cg-close-modal=\"1\">Ir a Residentes</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-close-modal>Cerrar</button></div></div>"
     );
   };
@@ -21536,7 +21536,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"form-group\"><label>Estado</label><select name=\"status\">" + stOpts + "</select></div>" +
       "<div class=\"form-group\"><label>Asignar a departamento</label><select name=\"assignedTo\">" + deptOpts + "</select></div>" +
       "<div class=\"form-group\"><label>Nota</label><textarea name=\"note\" rows=\"2\" placeholder=\"Observaciones…\">" + G.escapeHtml(s.note || "") + "</textarea>" +
-      "<p class=\"page-desc\" style=\"margin:0.35rem 0 0\">Si escribe <strong>Arriendo</strong> en la nota y el estado es ocupado, se sincroniza como arriendo en Departamentos.</p></div>" +
+      "<p class=\"page-desc\" style=\"margin:0.35rem 0 0\">Si escribe <strong>Arriendo</strong> en la nota y el estado es ocupado, se sincroniza como arriendo en el mapa (módulo Departamentos).</p></div>" +
       "<input type=\"hidden\" name=\"pid\" value=\"" + G.escapeAttr(s.id) + "\" /></form></div>" +
       "<div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
       "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"parkingSave\">Guardar</button></div></div>"
@@ -21618,16 +21618,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   };
 
   A.bodegaOpen = function () {
-    G.toast("Las bodegas se gestionan solo en el módulo Departamentos (registro de unidades). Aquí el listado es solo de consulta.", "warn");
+    G.toast("Las bodegas se gestionan solo en Residentes (registro de unidades). Aquí el listado es solo de consulta.", "warn");
   };
 
   A.bodegaSave = function () {
-    G.toast("Las bodegas se gestionan solo en el módulo Departamentos.", "warn");
+    G.toast("Las bodegas se gestionan solo en Residentes.", "warn");
     UI.closeModal();
   };
 
   A.bodegaDel = function () {
-    G.toast("Las bodegas se gestionan solo en el módulo Departamentos.", "warn");
+    G.toast("Las bodegas se gestionan solo en Residentes.", "warn");
   };
 
   function localDatetimeValue(d) {
@@ -24477,14 +24477,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"cg-vis-row-persona form-group\">" +
       "<div class=\"cg-form-grid-2\">" +
       "<div class=\"form-group\" style=\"margin-bottom:0\"><label>Nombre visitante<input name=\"visitor\" autocomplete=\"name\" placeholder=\"Ej: Ana Pérez\" spellcheck=\"true\" /></label></div>" +
-      "<div class=\"form-group\" style=\"margin-bottom:0\"><label>RUT (opcional)<input name=\"visitorRut\" class=\"cg-vis-rut\" type=\"text\" inputmode=\"text\" autocomplete=\"off\" placeholder=\"12.345.678-9\" maxlength=\"14\" title=\"Formato chileno: 12.345.678-9\" /></label></div></div></div>" +
+      "<div class=\"form-group\" style=\"margin-bottom:0\"><label>RUT (obligatorio)<input name=\"visitorRut\" class=\"cg-vis-rut\" type=\"text\" inputmode=\"text\" autocomplete=\"off\" placeholder=\"12.345.678-9\" maxlength=\"14\" title=\"Formato chileno: 12.345.678-9\" /></label></div></div></div>" +
       "<div class=\"cg-vis-row-proveedor form-group\" style=\"display:none\">" +
       "<div class=\"cg-form-grid-2\">" +
       "<div class=\"form-group\"><label>Empresa (registrada)<select name=\"proveedorId\" class=\"cg-vis-proveedor-select\">" +
       G.proveedorSelectOptionsHtml() +
       "</select></label></div>" +
       "<div class=\"form-group\"><label>Persona que ingresa (opcional)<input name=\"visitContact\" placeholder=\"Técnico, motorista…\" autocomplete=\"name\" spellcheck=\"true\" /></label></div>" +
-      "<div class=\"form-group cg-span-2\"><label>RUT de quien ingresa (opcional)<input name=\"visitContactRut\" class=\"cg-vis-rut\" type=\"text\" inputmode=\"text\" autocomplete=\"off\" placeholder=\"12.345.678-9\" maxlength=\"14\" title=\"Formato chileno: 12.345.678-9\" /></label>" +
+      "<div class=\"form-group cg-span-2\"><label>RUT de quien ingresa (obligatorio)<input name=\"visitContactRut\" class=\"cg-vis-rut\" type=\"text\" inputmode=\"text\" autocomplete=\"off\" placeholder=\"12.345.678-9\" maxlength=\"14\" title=\"Formato chileno: 12.345.678-9\" /></label>" +
       "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;font-size:0.74rem;line-height:1.35\">Al salir del RUT, si hay una visita de proveedor previa con ese documento, se sugiere empresa, persona de contacto y datos del vehículo.</p></div></div></div>" +
       "<div class=\"cg-form-block cg-vis-unidad-block\">" +
       "<p class=\"cg-form-block-title\">Unidad destino</p>" +
@@ -24536,8 +24536,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       vi.required = isPers;
       if (!isPers) vi.value = "";
     }
-    if (rutP && !isPers) rutP.value = "";
-    if (rutC && isPers) rutC.value = "";
+    if (rutP) {
+      rutP.required = !!isPers;
+      if (!isPers) rutP.value = "";
+    }
+    if (rutC) {
+      rutC.required = !isPers;
+      if (isPers) rutC.value = "";
+    }
     if (ps) ps.required = !isPers;
     if (deptBlock && deptProv && fdept) {
       if (isPers) {
@@ -24650,12 +24656,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           G.toast(vRc.message, "error");
           return;
         }
+        if (!String(vRc.value || "").trim()) {
+          G.toast("Indique el RUT de quien ingresa (obligatorio).", "error");
+          return;
+        }
         visitorRutStr = vRc.value || "";
         visitor = contact ? pr.empresa + " — " + contact : pr.empresa;
         var adm = G.deptForVisitProveedorTarget();
         deptId = adm ? adm.id : "";
         if (!deptId) {
-          G.toast("No existe la unidad «Admin» en departamentos. Agréguela en el módulo Departamentos.", "error");
+          G.toast("No existe la unidad «Admin» en departamentos. Agréguela en Residentes.", "error");
           return;
         }
       } else {
@@ -24668,6 +24678,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var vRu = G.validate.chileRutFormattedOrEmpty((fd.get("visitorRut") || "").toString());
         if (!vRu.ok) {
           G.toast(vRu.message, "error");
+          return;
+        }
+        if (!String(vRu.value || "").trim()) {
+          G.toast("Indique el RUT del visitante (obligatorio).", "error");
           return;
         }
         visitorRutStr = vRu.value || "";
@@ -28235,7 +28249,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   /** Grupos para import selectiva (orden de la UI). */
   A.backupImportGroupMeta = [
     { id: "users_auth", label: "Usuarios y permisos", hint: "users, roleModules, clave módulo Estadística" },
-    { id: "departamentos", label: "Departamentos", hint: "lista, sync edificio, wm815_* y copias legacy vinculacion_wm815_*" },
+    { id: "departamentos", label: "Residentes (wm815_*)", hint: "unidades, residentes, sync edificio y copias legacy vinculacion_wm815_*" },
     { id: "visitas", label: "Visitas", hint: "registros y alertas vehiculares" },
     { id: "encomiendas", label: "Encomiendas", hint: "" },
     { id: "novedades", label: "Libro de novedades", hint: "" },
@@ -28519,7 +28533,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
       p.innerHTML =
         "<div class=\"card\"><div class=\"card-h\"><h3>Reporte del mes (HTML)</h3></div><div class=\"card-b\">" +
-        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Documento único con los módulos operativos actuales. No incluye <strong>Departamentos</strong>, <strong>Estacionamientos</strong> ni <strong>Bodegas</strong>.</p>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Documento único con los módulos operativos actuales. No incluye <strong>Residentes</strong> (ni mapa Departamentos), <strong>Estacionamientos</strong> ni <strong>Bodegas</strong>.</p>" +
         "<div class=\"toolbar\" style=\"gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:0.75rem\">" +
         "<div class=\"form-group\" style=\"margin:0\"><label>Mes</label><select id=\"rep-month-m\">" +
         optsM +
@@ -28530,7 +28544,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"repMonthlyHtml\"><i class=\"fa-solid fa-file-code\"></i> Descargar reporte HTML</button></div>" +
         "<p class=\"page-desc\" style=\"margin:0;font-size:0.82rem\">Secciones del HTML: <strong>Visitas</strong>, <strong>Encomiendas</strong>, <strong>Control de turno</strong> (tramos conserje).</p></div></div>" +
         "<div class=\"card\" style=\"margin-top:1rem\"><div class=\"card-h\"><h3>Exportar JSON por módulo</h3></div><div class=\"card-b\">" +
-        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Misma área funcional que el reporte HTML (sin departamentos / estacionamientos / bodegas).</p>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Misma área funcional que el reporte HTML (sin Residentes, mapa Departamentos, estacionamientos ni bodegas).</p>" +
         "<div class=\"form-group\"><label>Módulo</label><select id=\"rep-mod\">" +
         "<option value=\"novedades\">Libro de novedades</option>" +
         "<option value=\"visits\">Visitas</option>" +
@@ -28716,7 +28730,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }).join("");
       p.innerHTML =
         "<div class=\"card\"><div class=\"card-h\"><h3>Personalización</h3></div><div class=\"card-b\">" +
-        "<p class=\"page-desc\" style=\"margin:0 0 1rem\"><strong>Lima</strong> (verde institucional <code>#74BD20</code>) es la paleta oficial. Las demás son alternativas secundarias. Afecta a la pantalla de acceso, conserjería, módulo Departamentos, reportes HTML y fichas.</p>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 1rem\"><strong>Lima</strong> (verde institucional <code>#74BD20</code>) es la paleta oficial. Las demás son alternativas secundarias. Afecta a la pantalla de acceso, conserjería, Residentes, Departamentos (mapa), reportes HTML y fichas.</p>" +
         "<div style=\"max-width:28rem\">" +
         palCards +
         "</div></div></div>";
@@ -28744,7 +28758,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
       var backupCard =
         "<div class=\"card\" style=\"margin-top:1rem\"><div class=\"card-h\"><h3>Respaldo completo del sistema</h3></div><div class=\"card-b\">" +
-        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Incluye los datos guardados en <strong>este origen</strong> (protocolo, dominio y puerto): usuarios (con verificadores de contraseña), permisos por rol, departamentos y unidades (<code>wm815_*</code>), visitas, encomiendas, novedades, reservas, proveedores, estacionamientos, bodegas, turnos, chat de personal, bitácora, alertas, personalización, configuración de espacios y estacionamientos de visita, etc. " +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Incluye los datos guardados en <strong>este origen</strong> (protocolo, dominio y puerto): usuarios (con verificadores de contraseña), permisos por rol, unidades y residentes (<code>wm815_*</code>), visitas, encomiendas, novedades, reservas, proveedores, estacionamientos, bodegas, turnos, chat de personal, bitácora, alertas, personalización, configuración de espacios y estacionamientos de visita, etc. " +
         "No incluye la <strong>sesión abierta</strong>. Programe recordatorios y descargue el archivo JSON con la periodicidad que defina su política interna.</p>" +
         "<p class=\"page-desc\" style=\"margin:0 0 0.65rem;opacity:.92\">Último respaldo registrado en este equipo: <strong>" +
         G.escapeHtml(brLast) +
