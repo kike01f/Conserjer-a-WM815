@@ -22177,6 +22177,147 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (prev && all.some(function (d) { return d.id === prev; })) sel.value = prev;
   }
 
+  function visitComparableRutKey(rut) {
+    return String(rut || "")
+      .replace(/[^0-9kK]/g, "")
+      .toUpperCase();
+  }
+
+  /** Última visita por RUT (más reciente por fecha de ingreso). */
+  function visitFindLastByRut(rutFormatted, predicate) {
+    var key = visitComparableRutKey(rutFormatted);
+    if (!key) return null;
+    var list = Array.isArray(G.state.visits) ? G.state.visits : [];
+    var best = null;
+    var bestT = -1;
+    var i;
+    for (i = 0; i < list.length; i++) {
+      var v = list[i];
+      if (!v || !v.visitorRut) continue;
+      if (visitComparableRutKey(v.visitorRut) !== key) continue;
+      if (predicate && !predicate(v)) continue;
+      var t = new Date(v.at || 0).getTime();
+      if (!isFinite(t)) continue;
+      if (t > bestT) {
+        best = v;
+        bestT = t;
+      }
+    }
+    return best;
+  }
+
+  function visitFormApplyVehicularFromLast(form, last) {
+    if (!last || !last.vehicular) return false;
+    var filled = false;
+    var vehCb = form.querySelector(".cg-vis-veh");
+    var vex = form.querySelector(".cg-vis-veh-extra");
+    if (vehCb && vex) {
+      if (!vehCb.checked) filled = true;
+      vehCb.checked = true;
+      vex.style.display = "block";
+    }
+    var plateIn = form.querySelector('input[name="plate"]');
+    if (plateIn && last.plate && !String(plateIn.value || "").trim()) {
+      plateIn.value =
+        typeof G.normalizeVisitPlateString === "function"
+          ? G.normalizeVisitPlateString(last.plate)
+          : String(last.plate || "")
+              .trim()
+              .toUpperCase()
+              .replace(/\s+/g, "");
+      filled = true;
+    }
+    var parkIn = form.querySelector('input[name="visitorParkingCode"]');
+    if (parkIn && !String(parkIn.value || "").trim()) {
+      var pk = String(last.visitorParkingCode || "").trim();
+      parkIn.value = pk || "V-";
+      filled = true;
+    }
+    return filled;
+  }
+
+  function visitFormApplyLastVisitPersonaCore(form, last) {
+    var filled = false;
+    var nm = form.querySelector('input[name="visitor"]');
+    if (nm && !String(nm.value || "").trim() && last.visitor) {
+      nm.value = last.visitor;
+      filled = true;
+    }
+    var sel = form.querySelector(".cg-vis-dept-select");
+    if (sel && last.deptId && !String(sel.value || "").trim()) {
+      fillVisitDeptSelectEl(sel, last.deptId);
+      if (sel.value === last.deptId) {
+        filled = true;
+        var d = G.deptById(last.deptId);
+        var numInp = form.querySelector(".cg-vis-dept-num");
+        var msg = form.querySelector(".cg-vis-dept-msg");
+        if (d && numInp) numInp.value = d.number;
+        if (msg && d) msg.textContent = "Unidad encontrada: depto " + d.number + ".";
+      }
+    }
+    return filled;
+  }
+
+  function visitFormApplyLastVisitProveedorCore(form, last) {
+    var filled = false;
+    var ps = form.querySelector(".cg-vis-proveedor-select");
+    if (ps && last.proveedorId && !String(ps.value || "").trim()) {
+      ps.value = last.proveedorId;
+      if (ps.value === last.proveedorId) filled = true;
+    }
+    var contactInp = form.querySelector('input[name="visitContact"]');
+    if (contactInp && !String(contactInp.value || "").trim() && last.visitor) {
+      var vis = String(last.visitor);
+      var sep = " — ";
+      var idx = vis.indexOf(sep);
+      if (idx >= 0) {
+        var tail = vis.slice(idx + sep.length).trim();
+        if (tail) {
+          contactInp.value = tail;
+          filled = true;
+        }
+      }
+    }
+    return filled;
+  }
+
+  function visitFormBindLastVisitPreload(form) {
+    if (!form || form.getAttribute("data-cg-vis-preload-rut") === "1") return;
+    form.setAttribute("data-cg-vis-preload-rut", "1");
+    var rutP = form.querySelector('input[name="visitorRut"]');
+    if (rutP) {
+      rutP.addEventListener("blur", function () {
+        var pers = form.querySelector('input[name="visitIngreso"][value="persona"]');
+        if (!pers || !pers.checked) return;
+        var vr = G.validate.chileRutFormattedOrEmpty(rutP.value);
+        if (!vr.ok || !vr.value) return;
+        var last = visitFindLastByRut(vr.value, function (v) {
+          return !v.proveedorId && v.visitKind !== "proveedor";
+        });
+        if (!last) return;
+        var a = visitFormApplyLastVisitPersonaCore(form, last);
+        var b = visitFormApplyVehicularFromLast(form, last);
+        if (a || b) G.toast("Datos cargados desde la última visita particular con este RUT.", "success");
+      });
+    }
+    var rutC = form.querySelector('input[name="visitContactRut"]');
+    if (rutC) {
+      rutC.addEventListener("blur", function () {
+        var prov = form.querySelector('input[name="visitIngreso"][value="proveedor"]');
+        if (!prov || !prov.checked) return;
+        var vr = G.validate.chileRutFormattedOrEmpty(rutC.value);
+        if (!vr.ok || !vr.value) return;
+        var last = visitFindLastByRut(vr.value, function (v) {
+          return !!(v.proveedorId || v.visitKind === "proveedor");
+        });
+        if (!last) return;
+        var a = visitFormApplyLastVisitProveedorCore(form, last);
+        var b = visitFormApplyVehicularFromLast(form, last);
+        if (a || b) G.toast("Datos cargados desde la última visita de proveedor con este RUT.", "success");
+      });
+    }
+  }
+
   function bindVisitDeptBuscar(form) {
     var numInp = form.querySelector(".cg-vis-dept-num");
     var btn = form.querySelector(".cg-vis-dept-buscar");
@@ -22244,14 +22385,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"cg-form-grid-2\">" +
       "<div class=\"form-group\" style=\"margin-bottom:0\"><label>Nombre visitante<input name=\"visitor\" autocomplete=\"name\" placeholder=\"Ej: Ana Pérez\" spellcheck=\"true\" /></label></div>" +
       "<div class=\"form-group\" style=\"margin-bottom:0\"><label>RUT (opcional)<input name=\"visitorRut\" class=\"cg-vis-rut\" type=\"text\" inputmode=\"text\" autocomplete=\"off\" placeholder=\"12.345.678-9\" maxlength=\"14\" title=\"Formato chileno: 12.345.678-9\" /></label></div></div>" +
-      "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.74rem;line-height:1.35\">Al registrar, el nombre se ajusta a mayúscula inicial en cada palabra (español). El RUT se formatea al escribir.</p></div>" +
+      "<p class=\"page-desc\" style=\"margin:0.2rem 0 0;font-size:0.74rem;line-height:1.35\">Al registrar, el nombre se ajusta a mayúscula inicial en cada palabra (español). El RUT se formatea al escribir. <strong>Al salir del campo RUT</strong>, si ya hubo una visita particular con ese documento, se completan automáticamente los datos de la <strong>última</strong> visita (nombre, unidad y vehículo si aplica).</p></div>" +
       "<div class=\"cg-vis-row-proveedor form-group\" style=\"display:none\">" +
       "<div class=\"cg-form-grid-2\">" +
       "<div class=\"form-group\"><label>Empresa (registrada)<select name=\"proveedorId\" class=\"cg-vis-proveedor-select\">" +
       G.proveedorSelectOptionsHtml() +
       "</select></label></div>" +
       "<div class=\"form-group\"><label>Persona que ingresa (opcional)<input name=\"visitContact\" placeholder=\"Técnico, motorista…\" autocomplete=\"name\" spellcheck=\"true\" /></label></div>" +
-      "<div class=\"form-group cg-span-2\"><label>RUT de quien ingresa (opcional)<input name=\"visitContactRut\" class=\"cg-vis-rut\" type=\"text\" inputmode=\"text\" autocomplete=\"off\" placeholder=\"12.345.678-9\" maxlength=\"14\" title=\"Formato chileno: 12.345.678-9\" /></label></div></div></div>" +
+      "<div class=\"form-group cg-span-2\"><label>RUT de quien ingresa (opcional)<input name=\"visitContactRut\" class=\"cg-vis-rut\" type=\"text\" inputmode=\"text\" autocomplete=\"off\" placeholder=\"12.345.678-9\" maxlength=\"14\" title=\"Formato chileno: 12.345.678-9\" /></label>" +
+      "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;font-size:0.74rem;line-height:1.35\">Al salir del RUT, si hay una visita de proveedor previa con ese documento, se sugiere empresa, persona de contacto y datos del vehículo.</p></div></div></div>" +
       "<div class=\"cg-form-block cg-vis-unidad-block\">" +
       "<p class=\"cg-form-block-title\">Unidad destino</p>" +
       "<div class=\"form-group\"><label>Número de departamento</label>" +
@@ -22346,6 +22488,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (atEl && !atEl.value) atEl.value = localDatetimeValue(new Date());
     A.visitFormToggleTipoIngresoForm(form);
     visitFormBindRutInputs(form);
+    visitFormBindLastVisitPreload(form);
     var plateInp = form.querySelector('input[name="plate"]');
     if (plateInp) {
       function normPlateStr(s) {
