@@ -4924,6 +4924,61 @@
     .cg-dash-res-detail-table tr.cg-res-row--hoy:hover td {
       background: rgba(187, 247, 208, 0.95);
     }
+    .cg-dash-res-detail-table tr.cg-res-row--en-curso td {
+      background: rgba(220, 252, 231, 0.92);
+    }
+    .cg-dash-res-detail-table tr.cg-res-row--en-curso:hover td {
+      background: rgba(187, 247, 208, 0.95);
+    }
+    .cg-dash-res-detail-table tr.cg-res-row--futura td {
+      background: rgba(219, 234, 254, 0.55);
+    }
+    .cg-dash-res-detail-table tr.cg-res-row--futura:hover td {
+      background: rgba(191, 219, 254, 0.72);
+    }
+    .cg-dash-res-kpi-split {
+      display: flex;
+      flex-direction: column;
+      gap: 0.28rem;
+    }
+    .cg-dash-res-kpi-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.4rem;
+      padding: 0.24rem 0.34rem;
+      border-radius: 6px;
+      border-left: 3px solid #059669;
+      background: rgba(220, 252, 231, 0.4);
+    }
+    .cg-dash-res-kpi-row--prox {
+      border-left-color: var(--blue-500);
+      background: rgba(219, 234, 254, 0.45);
+    }
+    .cg-dash-res-kpi-val {
+      font-size: 1.05rem;
+      font-weight: 800;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .cg-dash-res-kpi-row--ahora .cg-dash-res-kpi-val { color: #047857; }
+    .cg-dash-res-kpi-row--prox .cg-dash-res-kpi-val { color: #1d40af; }
+    .cg-dash-res-kpi-lbl {
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: var(--gray-600, #475569);
+      text-transform: uppercase;
+      letter-spacing: 0.035em;
+      text-align: right;
+      flex: 1;
+      line-height: 1.25;
+    }
+    .cg-dash-res-kpi-total {
+      margin: 0.12rem 0 0;
+      font-size: 0.64rem;
+      line-height: 1.3;
+      color: var(--gray-600, #475569);
+    }
     tr.cg-res-row--futura td {
       background: rgba(219, 234, 254, 0.55);
     }
@@ -17830,11 +17885,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var visitsYesterday = visits.filter(function (v) {
         return ymdYest && G.isSameChileYmd(v.at, ymdYest);
       }).length;
-      var reservasActivas = reservas.filter(function (r) {
-        if (!r || !r.end) return false;
-        var end = new Date(r.end);
-        return !isNaN(end.getTime()) && end >= today;
-      }).length;
+      var resM = cgReservasDashboardMetrics(reservas, today);
       var encList = G.state.encomiendas || [];
       var encPend = encList.filter(function (e) {
         return !e.entregadoAt;
@@ -17849,8 +17900,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (elV) elV.textContent = String(visitsToday);
       var elDeltaV = document.getElementById("dash-stat-visits-delta");
       if (elDeltaV) elDeltaV.innerHTML = dashCompareDelta(visitsToday, visitsYesterday);
+      var elRcur = document.getElementById("dash-stat-reservas-en-curso");
+      if (elRcur) elRcur.textContent = String(resM.enCursoN);
+      var elRprox = document.getElementById("dash-stat-reservas-proximas");
+      if (elRprox) elRprox.textContent = String(resM.proximasN);
       var elR = document.getElementById("dash-stat-reservas-activas");
-      if (elR) elR.textContent = String(reservasActivas);
+      if (elR) elR.textContent = String(resM.totalVigentes);
       var elEp = document.getElementById("dash-stat-enc-pend");
       if (elEp) elEp.textContent = String(encPend);
       var elEt = document.getElementById("dash-stat-enc-today");
@@ -17910,25 +17965,50 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
     }
 
-    /** Detalle del panel: solo reservas en curso ahora (inicio ≤ ahora ≤ término). Oculta futuras del día y ya terminadas. */
+    /** KPI y orden del panel: vigentes (fin ≥ ahora), separando en curso / próximas (misma lógica que el módulo Reservas). */
+    function cgReservasDashboardMetrics(reservas, now) {
+      var t = now != null ? new Date(now) : new Date();
+      var list = Array.isArray(reservas) ? reservas : [];
+      var vigentes = list.filter(function (r) {
+        if (!r || r.end == null) return false;
+        var end = new Date(r.end);
+        return !isNaN(end.getTime()) && end >= t;
+      });
+      var enCurso = [];
+      var proximas = [];
+      var otros = [];
+      vigentes.forEach(function (r) {
+        if (typeof G.reservaEnCursoAhora === "function" && G.reservaEnCursoAhora(r, t)) enCurso.push(r);
+        else {
+          var s = r.start != null ? new Date(r.start) : null;
+          if (s && !isNaN(s.getTime()) && s > t) proximas.push(r);
+          else otros.push(r);
+        }
+      });
+      enCurso.sort(function (a, b) {
+        return new Date(a.start) - new Date(b.start);
+      });
+      proximas.sort(function (a, b) {
+        return new Date(a.start) - new Date(b.start);
+      });
+      return {
+        totalVigentes: vigentes.length,
+        enCursoN: enCurso.length,
+        proximasN: proximas.length,
+        orderedVigentes: enCurso.concat(proximas, otros)
+      };
+    }
+
+    /** Detalle del panel: vigentes ordenadas; fila verde = en curso, azul = próxima (sin iniciar). */
     function buildDashboardReservasVigentesDetailHtml() {
       var now = new Date();
       var allR = Array.isArray(G.state.reservas) ? G.state.reservas : [];
-      var vig =
-        typeof G.reservaEnCursoAhora === "function"
-          ? allR.filter(function (r) {
-              return G.reservaEnCursoAhora(r, now);
-            })
-          : [];
-      vig.sort(function (a, b) {
-        return new Date(a.start) - new Date(b.start);
-      });
+      var m = cgReservasDashboardMetrics(allR, now);
+      var vig = m.orderedVigentes;
       var limit = 15;
       var rows = vig.slice(0, limit);
       if (!rows.length) {
-        return (
-          "<p class=\"page-desc\" style=\"margin:0\">No hay reservas <strong>en curso</strong> en este momento (ni las que empiezan más tarde ni las que ya terminaron).</p>"
-        );
+        return "<p class=\"page-desc\" style=\"margin:0\">No hay reservas <strong>vigentes</strong> (término hoy o futuro).</p>";
       }
       var html =
         "<div class=\"data-table-wrap\" style=\"overflow:auto;max-height:min(420px,50vh)\"><table class=\"data-table cg-dash-res-detail-table\"><thead><tr>" +
@@ -17938,7 +18018,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var note = String(r.note || "").trim();
         var noteShow = note ? (note.length > 140 ? G.escapeHtml(note.slice(0, 140)) + "…" : G.escapeHtml(note)) : "—";
         var regP = (r.registradoPor && String(r.registradoPor).trim()) || "—";
-        html += "<tr class=\"cg-res-row--hoy\"><td><span class=\"cg-res-space-cell\">" +
+        var trCls = "";
+        if (typeof G.reservaEnCursoAhora === "function" && G.reservaEnCursoAhora(r, now)) trCls = "cg-res-row--en-curso";
+        else {
+          var s0 = r.start != null ? new Date(r.start) : null;
+          if (s0 && !isNaN(s0.getTime()) && s0 > now) trCls = "cg-res-row--futura";
+        }
+        html +=
+          "<tr" +
+          (trCls ? " class=\"" + trCls + "\"" : "") +
+          "><td><span class=\"cg-res-space-cell\">" +
           (typeof G.reservaEspacioIconHtml === "function" ? G.reservaEspacioIconHtml(r.space) : "") +
           "<strong>" +
           G.escapeHtml(r.space || "—") +
@@ -17958,9 +18047,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       html +=
         "<p class=\"page-desc\" style=\"margin:0.65rem 0 0;font-size:0.78rem\">" +
         (vig.length > limit
-          ? "Mostrando <strong>" + limit + "</strong> de <strong>" + vig.length + "</strong> en curso a la vez."
-          : "<strong>" + vig.length + "</strong> reserva(s) en curso ahora.") +
-        "</p>";
+          ? "Mostrando <strong>" + limit + "</strong> de <strong>" + vig.length + "</strong> vigentes."
+          : "<strong>" + vig.length + "</strong> reserva(s) vigente(s).") +
+        " <span style=\"opacity:0.92\">Verde = en curso · Azul = próxima.</span></p>";
       return html;
     }
 
@@ -18525,11 +18614,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       const novedadesArr = G.state.novedades || [];
       const visitsToday = visitsArr.filter(v => G.isSameDay(v.at, today)).length;
       const visitsYesterday = visitsArr.filter(v => ymdYest && G.isSameChileYmd(v.at, ymdYest)).length;
-      const reservasActivas = reservasArr.filter(function (r) {
-        if (!r || !r.end) return false;
-        const end = new Date(r.end);
-        return !isNaN(end.getTime()) && end >= today;
-      }).length;
+      const resDashM = cgReservasDashboardMetrics(reservasArr, today);
       const encList = G.state.encomiendas || [];
       const encPend = encList.filter(function (e) { return !e.entregadoAt; }).length;
       const encReceivedToday = encList.filter(function (e) { return e.receivedAt && G.isSameDay(e.receivedAt, today); }).length;
@@ -18569,11 +18654,20 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"card-b\" id=\"dash-veh-alerts\" aria-live=\"polite\"></div></div>" +
         "<div class=\"cg-dash-stat-grid\">" +
         "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-user-group\" aria-hidden=\"true\"></i> Visitas hoy</h3></div><div class=\"card-b\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-visits-today\">" + visitsToday + "</p><p class=\"page-desc\">Entradas registradas con fecha de hoy</p><span id=\"dash-stat-visits-delta\">" + visDelta + "</span></div></div>" +
-        "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-calendar-check\" aria-hidden=\"true\"></i> Reservas activas</h3></div><div class=\"card-b\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-reservas-activas\">" + reservasActivas + "</p><p class=\"page-desc\">Espacios comunes con vigencia hoy o futura</p></div></div>" +
+        "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-calendar-check\" aria-hidden=\"true\"></i> Reservas</h3></div><div class=\"card-b cg-dash-res-kpi-split\">" +
+        "<div class=\"cg-dash-res-kpi-row cg-dash-res-kpi-row--ahora\"><span class=\"cg-dash-res-kpi-val\" id=\"dash-stat-reservas-en-curso\">" +
+        resDashM.enCursoN +
+        "</span><span class=\"cg-dash-res-kpi-lbl\">En curso ahora</span></div>" +
+        "<div class=\"cg-dash-res-kpi-row cg-dash-res-kpi-row--prox\"><span class=\"cg-dash-res-kpi-val\" id=\"dash-stat-reservas-proximas\">" +
+        resDashM.proximasN +
+        "</span><span class=\"cg-dash-res-kpi-lbl\">Próximas (sin iniciar)</span></div>" +
+        "<p class=\"cg-dash-res-kpi-total page-desc\">Total vigentes: <strong id=\"dash-stat-reservas-activas\">" +
+        resDashM.totalVigentes +
+        "</strong></p></div></div>" +
         "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact cg-dash-stat-card--with-footer-btn\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-box\" aria-hidden=\"true\"></i> Encomiendas</h3></div><div class=\"card-b cg-dash-stat-card-b--stack\"><div class=\"cg-dash-stat-card-b__top\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-enc-pend\">" + encPend + "</p><p class=\"page-desc\">Pendientes de retiro en conserjería</p><p class=\"page-desc\">Recibidas hoy: <strong id=\"dash-stat-enc-today\">" + encReceivedToday + "</strong></p><span id=\"dash-stat-enc-delta\">" + encRecDelta + "</span></div>" +
         (encPend ? "<div class=\"cg-dash-stat-card-b__footer\"><button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"encomiendas\">Ver módulo</button></div>" : "") + "</div></div>" +
         "</div>" +
-        "<div class=\"card cg-dash-nov-card cg-dash-res-detail-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-calendar-check\" aria-hidden=\"true\"></i> Reservas en curso ahora</h3><span class=\"page-desc\" style=\"margin:0;font-size:0.78rem;flex:1;text-align:right\">Solo las activas en este instante; no lista las de más tarde ni las ya cerradas</span></div><div class=\"card-b\" id=\"cg-dash-res-detail-body\" aria-live=\"polite\">" +
+        "<div class=\"card cg-dash-nov-card cg-dash-res-detail-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-calendar-check\" aria-hidden=\"true\"></i> Reservas vigentes</h3><span class=\"page-desc\" style=\"margin:0;font-size:0.78rem;flex:1;text-align:right\">Verde = en curso · Azul = próxima · Sin color = dato incompleto</span></div><div class=\"card-b\" id=\"cg-dash-res-detail-body\" aria-live=\"polite\">" +
         buildDashboardReservasVigentesDetailHtml() +
         "</div></div>" +
         "<div class=\"cg-dash-charts-row\">" +
@@ -18887,7 +18981,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"cg-page-compact\">" +
         "<h1 class=\"page-title\">Reservas (espacios comunes)</h1>" +
         "<div class=\"cg-module-intro\">" +
-        "<p class=\"page-desc\">Gestión de salones, quincho, multicancha u otros espacios. Los nombres se definen en <strong>Administración → Configuración</strong>. En la ficha y la tabla: <strong>fondo verde</strong> = reserva <strong>en curso ahora</strong> (entre inicio y término); <strong>fondo azul claro</strong> = <strong>próxima</strong> (vigente pero aún no inicia); <strong>fondo gris</strong> = ya <strong>finalizada</strong>. En el panel de control, «Reservas en curso ahora» lista solo las del primer caso.</p></div>" +
+        "<p class=\"page-desc\">Gestión de salones, quincho, multicancha u otros espacios. Los nombres se definen en <strong>Administración → Configuración</strong>. En la ficha y la tabla: <strong>fondo verde</strong> = reserva <strong>en curso ahora</strong> (entre inicio y término); <strong>fondo azul claro</strong> = <strong>próxima</strong> (vigente pero aún no inicia); <strong>fondo gris</strong> = ya <strong>finalizada</strong>. En el panel de control, la tarjeta <strong>Reservas</strong> y la tabla <strong>Reservas vigentes</strong> usan la misma lógica (verde / azul); las finalizadas no cuentan como vigentes.</p></div>" +
         "<div class=\"card cg-card-accent--res\"><div class=\"card-h\"><h3>Resumen</h3>" +
         "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"reservaOpen\" data-cg-empty=\"1\"><i class=\"fa-solid fa-plus\"></i> Nueva reserva</button></div>" +
         "<div class=\"card-b\"><div id=\"res-module-summary\" class=\"cg-reserva-summary\" aria-live=\"polite\"></div></div></div>" +
