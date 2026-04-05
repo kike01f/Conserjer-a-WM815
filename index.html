@@ -18753,39 +18753,27 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     } else list = list.concat([dept]);
     G.state.departments = list;
   }
+  /**
+   * Espejo de bodegas a partir del registro de unidades (wm815 → buildingUnits).
+   * No escribe en buildingUnits: la fuente de verdad es el módulo Departamentos.
+   * Una clave normalizada = una fila; primera unidad que lista el código gana si hubiera conflicto en datos viejos.
+   */
   function syncBodegasFromBuilding() {
     var list = (G.state.bodegas || []).slice();
-    var units = (G.state.buildingUnits || []).map(function (u) {
-      return Object.assign({}, u, { bodegaCodes: (u.bodegaCodes || []).slice() });
-    });
-    var ui;
-    var unitsTouched = false;
-    list.forEach(function (b) {
-      if (!b.deptId) return;
-      var k = G.normalizeBodegaCodeKey(b.code);
-      if (!k) return;
-      ui = units.findIndex(function (x) { return x.id === b.deptId; });
-      if (ui < 0) return;
-      var u = units[ui];
-      var cod = u.bodegaCodes || [];
-      if (cod.some(function (c) { return G.normalizeBodegaCodeKey(c) === k; })) return;
-      units[ui] = Object.assign({}, u, { bodegaCodes: cod.concat([String(b.code).trim()]) });
-      unitsTouched = true;
-    });
-    if (unitsTouched) G.state.buildingUnits = units;
-
-    list = (G.state.bodegas || []).slice();
-    units = G.state.buildingUnits || [];
+    var units = G.state.buildingUnits || [];
     var fromBuildingMap = {};
     units.forEach(function (u) {
+      if (!u || !u.id) return;
       (u.bodegaCodes || []).forEach(function (c) {
         var k = G.normalizeBodegaCodeKey(c);
         if (!k) return;
-        fromBuildingMap[k] = { code: String(c).trim(), unitId: u.id };
+        var code = String(c).trim();
+        if (!fromBuildingMap[k]) {
+          fromBuildingMap[k] = { code: code, unitId: u.id };
+        }
       });
     });
     var out = [];
-    var usedKeys = {};
     Object.keys(fromBuildingMap).forEach(function (k) {
       var fb = fromBuildingMap[k];
       var idx = list.findIndex(function (b) { return G.normalizeBodegaCodeKey(b.code) === k; });
@@ -18796,12 +18784,6 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         row = { id: G.uid(), code: fb.code, deptId: fb.unitId, status: "ocupado", note: "" };
       }
       out.push(row);
-      usedKeys[k] = true;
-    });
-    list.forEach(function (b) {
-      var k = G.normalizeBodegaCodeKey(b.code);
-      if (!k || usedKeys[k]) return;
-      if (!b.deptId) out.push(b);
     });
     G.state.bodegas = out;
   }
@@ -19704,13 +19686,19 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         });
       });
       var bodegaCodes = [];
+      var seenBodegaKey = {};
+      function pushBodegaCodeDeduped(t) {
+        if (t == null || String(t).trim() === "") return;
+        var s = String(t).trim();
+        var bk = G.normalizeBodegaCodeKey(s);
+        if (!bk || seenBodegaKey[bk]) return;
+        seenBodegaKey[bk] = true;
+        bodegaCodes.push(s);
+      }
       if (vu.storageNumbers && Array.isArray(vu.storageNumbers)) {
-        vu.storageNumbers.forEach(function (c) {
-          var t = String(c || "").trim();
-          if (t) bodegaCodes.push(t);
-        });
+        vu.storageNumbers.forEach(pushBodegaCodeDeduped);
       } else if (vu.storageNumber) {
-        bodegaCodes = parseCodesField(vu.storageNumber);
+        parseCodesField(vu.storageNumber).forEach(pushBodegaCodeDeduped);
       }
       var bicicleteros = [];
       if (vu.bikeStorageNumbers && Array.isArray(vu.bikeStorageNumbers)) {
