@@ -9248,6 +9248,136 @@
       }
     };
 
+    /**
+     * Libro de novedades: minúsculas por defecto, mayúscula tras fin de oración / salto de párrafo,
+     * lista de nombres propios (Chile, ciudades, marcas frecuentes) y restauración de siglas detectadas.
+     * Sin backend aparte: se aplica en el cliente antes de persistir en localStorage/Firestore.
+     */
+    function normalizeNovedadUsuarioTexto(raw) {
+      if (raw == null) return "";
+      var s = String(raw).replace(/\r\n/g, "\n");
+      if (!String.prototype.normalize) {
+        return s.trim();
+      }
+      s = s.normalize("NFC").trim();
+      if (!s) return "";
+
+      var orig = s;
+      var PH = "\uE000";
+      var chunks = [];
+      var chunkIx = 0;
+      s = orig.replace(/\b(?:[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9.-]*[A-ZÁÉÍÓÚÑ0-9]|[A-ZÁÉÍÓÚÑ]{3,})\b/g, function (m) {
+        if (/^\d+$/.test(m)) return m;
+        chunks.push(m);
+        return PH + String(chunkIx++) + PH;
+      });
+
+      var lower = s.toLocaleLowerCase("es");
+
+      var phrases = [
+        ["viña del mar", "Viña del Mar"],
+        ["puerto montt", "Puerto Montt"],
+        ["la serena", "La Serena"],
+        ["las condes", "Las Condes"],
+        ["lo barnechea", "Lo Barnechea"],
+        ["san pedro de la paz", "San Pedro de la Paz"],
+        ["región metropolitana", "Región Metropolitana"],
+        ["gran santiago", "Gran Santiago"]
+      ];
+      var pi;
+      for (pi = 0; pi < phrases.length; pi++) {
+        var pk = phrases[pi][0];
+        var pv = phrases[pi][1];
+        lower = lower.split(pk).join(pv);
+      }
+
+      var proper = {
+        chile: "Chile",
+        santiago: "Santiago",
+        valparaíso: "Valparaíso",
+        concepción: "Concepción",
+        antofagasta: "Antofagasta",
+        temuco: "Temuco",
+        rancagua: "Rancagua",
+        talca: "Talca",
+        arica: "Arica",
+        iquique: "Iquique",
+        copiapó: "Copiapó",
+        chillán: "Chillán",
+        osorno: "Osorno",
+        valdivia: "Valdivia",
+        punta: "Punta",
+        arenas: "Arenas",
+        reñaca: "Reñaca",
+        maipú: "Maipú",
+        providencia: "Providencia",
+        ñuñoa: "Ñuñoa",
+        peñalolén: "Peñalolén",
+        juan: "Juan",
+        josé: "José",
+        maría: "María",
+        carlos: "Carlos",
+        luis: "Luis",
+        francisco: "Francisco",
+        pablo: "Pablo",
+        diego: "Diego",
+        andrés: "Andrés",
+        fernanda: "Fernanda",
+        camila: "Camila",
+        google: "Google",
+        microsoft: "Microsoft",
+        apple: "Apple",
+        samsung: "Samsung",
+        lg: "LG",
+        bosch: "Bosch",
+        siemens: "Siemens",
+        schneider: "Schneider",
+        conserjería: "Conserjería",
+        conserjeria: "Conserjería",
+        edificio: "Edificio"
+      };
+
+      lower = lower.replace(/\b[a-záéíóúñü]+(?:['’][a-záéíóúñü]+)?\b/gi, function (w) {
+        var plain = w.replace(/['’]/g, "");
+        var k = plain.toLowerCase();
+        if (proper[k]) return proper[k];
+        return w.toLowerCase();
+      });
+
+      var ci;
+      for (ci = 0; ci < chunks.length; ci++) {
+        lower = lower.split(PH + String(ci) + PH).join(chunks[ci]);
+      }
+
+      var out = "";
+      var cap = true;
+      var i;
+      for (i = 0; i < lower.length; i++) {
+        var c = lower.charAt(i);
+        if (cap) {
+          if (/[a-záéíóúñü]/.test(c)) {
+            out += c.toLocaleUpperCase("es");
+            cap = false;
+          } else if (/[A-ZÁÉÍÓÚÑ]/.test(c)) {
+            var j = i;
+            while (j < lower.length && /[A-ZÁÉÍÓÚÑ0-9.-]/.test(lower.charAt(j))) j++;
+            out += lower.slice(i, j);
+            i = j - 1;
+            cap = false;
+          } else {
+            out += c;
+            if (c === "¿" || c === "¡") cap = true;
+          }
+        } else {
+          out += c;
+          if (/[.!?]/.test(c)) cap = true;
+          if (c === "\n") cap = true;
+          if (c === "¿" || c === "¡") cap = true;
+        }
+      }
+      return out;
+    }
+
     /* ┌─ 11. API pública (único objeto global del core) ─────────────────────────────── */
     window.CG = {
       APP_BRAND_NAME, MANUFACTURER_LOGO_URL,
@@ -9258,7 +9388,7 @@
       conserjeShiftBlockerFor,
       currentUser, setSession, clearSession, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict,
       cleanupStaffDirectoryAndShiftOrphans,
-      canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, normalizeActivityName, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
+      canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, normalizeActivityName, normalizeNovedadUsuarioTexto, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
       proveedorSelectOptionsHtml,
       uid, load, save, LS, persist: P,
@@ -25319,8 +25449,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           userId: u.id,
           userName: u.name,
           category: f.category.value,
-          text: vt.value,
-          note: vn.value || ""
+          text: typeof G.normalizeNovedadUsuarioTexto === "function" ? G.normalizeNovedadUsuarioTexto(vt.value) : vt.value,
+          note:
+            typeof G.normalizeNovedadUsuarioTexto === "function"
+              ? G.normalizeNovedadUsuarioTexto(vn.value || "")
+              : vn.value || ""
         };
         G.state.novedades = (Array.isArray(G.state.novedades) ? G.state.novedades : []).concat([rec]);
         if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("novedades");
@@ -25435,7 +25568,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.toast(vt.message, "error");
       return;
     }
-    var text = vt.value;
+    var text =
+      typeof G.normalizeNovedadUsuarioTexto === "function" ? G.normalizeNovedadUsuarioTexto(vt.value) : vt.value;
     var vnote = G.validate.textBlock((f.note && f.note.value) || "", { label: "Nota", min: 0, max: 4000 });
     if (!vnote.ok) {
       G.toast(vnote.message, "error");
@@ -25453,7 +25587,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       category: "Turno",
       at: at,
       text: text,
-      note: vnote.value || "",
+      note:
+        typeof G.normalizeNovedadUsuarioTexto === "function"
+          ? G.normalizeNovedadUsuarioTexto(vnote.value || "")
+          : vnote.value || "",
       userId: usr.id,
       userName: usr.name,
       shiftSegmentId: seg || ""
@@ -25618,7 +25755,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.toast(vnx.message, "error");
       return;
     }
-    var patch = { category: f.category.value, text: vtx.value, note: vnx.value || "" };
+    var patch = {
+      category: f.category.value,
+      text: typeof G.normalizeNovedadUsuarioTexto === "function" ? G.normalizeNovedadUsuarioTexto(vtx.value) : vtx.value,
+      note:
+        typeof G.normalizeNovedadUsuarioTexto === "function"
+          ? G.normalizeNovedadUsuarioTexto(vnx.value || "")
+          : vnx.value || ""
+    };
     if (uSave && uSave.role === "admin" && f.at && f.userId) {
       var vAtN = G.validate.datetimeLocal(f.at.value, "Fecha y hora del registro");
       if (!vAtN.ok) {
