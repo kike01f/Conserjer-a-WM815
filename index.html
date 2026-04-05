@@ -22206,6 +22206,41 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return best;
   }
 
+  /** Última visita vehicular con esa patente (normalizada), por fecha de ingreso `at`. */
+  function visitLastVehicularByPlateNorm(plateNorm) {
+    var key =
+      typeof G.normalizeVisitPlateString === "function"
+        ? G.normalizeVisitPlateString(plateNorm)
+        : String(plateNorm || "")
+            .trim()
+            .toUpperCase()
+            .replace(/\s+/g, "");
+    if (!key) return null;
+    var list = Array.isArray(G.state.visits) ? G.state.visits : [];
+    var best = null;
+    var bestT = -1;
+    var i;
+    for (i = 0; i < list.length; i++) {
+      var v = list[i];
+      if (!v || !v.vehicular || !v.plate) continue;
+      var p =
+        typeof G.normalizeVisitPlateString === "function"
+          ? G.normalizeVisitPlateString(v.plate)
+          : String(v.plate || "")
+              .trim()
+              .toUpperCase()
+              .replace(/\s+/g, "");
+      if (p !== key) continue;
+      var t = new Date(v.at || 0).getTime();
+      if (!isFinite(t)) continue;
+      if (t > bestT) {
+        best = v;
+        bestT = t;
+      }
+    }
+    return best;
+  }
+
   function visitFormApplyVehicularFromLast(form, last) {
     if (!last || !last.vehicular) return false;
     var filled = false;
@@ -22616,6 +22651,27 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           return;
         }
         vpc = vpk.value;
+        var MS_24H = 24 * 60 * 60 * 1000;
+        var prevVeh = visitLastVehicularByPlateNorm(plateNorm);
+        if (prevVeh) {
+          var prevAtMs = new Date(prevVeh.at || 0).getTime();
+          var newAtMs = vAt.date.getTime();
+          if (isFinite(prevAtMs) && isFinite(newAtMs) && newAtMs >= prevAtMs && newAtMs - prevAtMs < MS_24H) {
+            var prevTxt =
+              typeof G.fmtDate === "function" ? G.fmtDate(prevVeh.at) : String(prevVeh.at || "").slice(0, 16);
+            if (
+              !confirm(
+                "⚠️ Alerta: la patente " +
+                  plateNorm +
+                  " ya registró una visita vehicular con ingreso el " +
+                  prevTxt +
+                  ". Respecto de la fecha y hora de ingreso que indicó, aún no transcurren 24 horas desde ese registro.\n\n" +
+                  "¿Desea registrar este ingreso de todos modos?"
+              )
+            )
+              return;
+          }
+        }
       }
       var outAtPeatonal = null;
       if (visitKind === "persona" && !veh) {
