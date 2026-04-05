@@ -8913,13 +8913,13 @@
                             <label>Estacionamientos</label>
                             <div id="parkingList" style="margin-bottom: 8px;"></div>
                             <button type="button" class="btn btn-sm btn-secondary" data-cg-win="addParkingField" style="font-size: 0.85rem;">+ Agregar Estacionamiento</button>
-                            <small style="color: var(--secondary-text); font-size: 0.8rem; display: block; margin-top: 4px;">Formato: E-XXX (31-58 o 65-201). Puedes agregar múltiples estacionamientos.</small>
+                            <small style="color: var(--secondary-text); font-size: 0.8rem; display: block; margin-top: 4px;">Prefijo <strong>E-</strong> fijo. Escriba solo el número (31–58 o 65–201). Puede agregar varios estacionamientos.</small>
                         </div>
                         <div class="form-group" style="flex: 1;">
                             <label>Bodegas</label>
                             <div id="storageList" style="margin-bottom: 8px;"></div>
                             <button type="button" class="btn btn-sm btn-secondary" data-cg-win="addStorageField" style="font-size: 0.85rem;">+ Agregar Bodega</button>
-                            <small style="color: var(--secondary-text); font-size: 0.8rem; display: block; margin-top: 4px;">Puedes agregar múltiples bodegas.</small>
+                            <small style="color: var(--secondary-text); font-size: 0.8rem; display: block; margin-top: 4px;">Prefijo <strong>B-</strong> fijo. Escriba el resto del código (ej. 15). Puede agregar varias bodegas.</small>
                         </div>
                     </div>
 
@@ -10814,6 +10814,37 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             return value;
         }
 
+        /** Sufijo numérico para campo con prefijo E- fijo (módulo Departamentos). */
+        function deptWm815ParkingSuffixFromStored(full) {
+            var s = String(full || "").trim();
+            while (s.length >= 2 && s.slice(0, 2).toLowerCase() === "e-") {
+                s = s.slice(2).trim();
+            }
+            return s.replace(/\D/g, "").slice(0, 3);
+        }
+        function deptWm815ParkingFullFromSuffix(suffixRaw) {
+            var d = String(suffixRaw || "").replace(/\D/g, "");
+            if (!d) return "";
+            return "E-" + d;
+        }
+        /** Sufijo para campo con prefijo B- fijo. */
+        function deptWm815BodegaSuffixFromStored(full) {
+            var s = String(full || "").trim();
+            while (s.length >= 2 && s.slice(0, 2).toLowerCase() === "b-") {
+                s = s.slice(2).trim();
+            }
+            return s.trim();
+        }
+        function deptWm815BodegaFullFromSuffix(suffixRaw) {
+            var s = String(suffixRaw || "").trim();
+            while (s.length >= 2 && s.slice(0, 2).toLowerCase() === "b-") {
+                s = s.slice(2).trim();
+            }
+            s = s.replace(/\s+/g, " ").trim();
+            if (!s) return "";
+            return "B-" + s;
+        }
+
         // ===== Cambio de clave Estadística (PBKDF2 en localStorage + sync opcional; sin variable global ni texto plano) =====
         // Límite: sin backend propio, quien modifique almacenamiento local o remoto puede alterar el verifier.
         var __cgDeptGateChange = (function () {
@@ -11360,46 +11391,53 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             const parkingItem = document.createElement('div');
             parkingItem.className = 'parking-item';
             parkingItem.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-bottom: 8px;';
+            const combo = document.createElement('div');
+            combo.style.cssText =
+                'display:flex;flex:1;min-width:0;align-items:stretch;border:1px solid var(--border-color);border-radius:8px;overflow:hidden;background:var(--surface-color, #fff)';
+            const prefix = document.createElement('span');
+            prefix.textContent = 'E-';
+            prefix.setAttribute('aria-hidden', 'true');
+            prefix.style.cssText =
+                'display:flex;align-items:center;padding:0 10px;font-weight:700;font-size:0.95rem;color:#475569;background:#f1f5f9;flex-shrink:0;border-right:1px solid var(--border-color)';
             const parkingInput = document.createElement('input');
             parkingInput.type = 'text';
-            parkingInput.className = 'form-input parking-input';
-            parkingInput.placeholder = 'Ej: E-31';
-            parkingInput.maxLength = 8;
-            parkingInput.style.flex = '1';
-            parkingInput.value = value != null ? String(value) : '';
+            parkingInput.className = 'form-input parking-suffix-input';
+            parkingInput.setAttribute('inputmode', 'numeric');
+            parkingInput.setAttribute('autocomplete', 'off');
+            parkingInput.placeholder = 'Ej: 31';
+            parkingInput.maxLength = 3;
+            parkingInput.style.cssText = 'flex:1;min-width:0;border:0;outline:0;padding:8px 10px;font:inherit;box-shadow:none';
+            parkingInput.value = deptWm815ParkingSuffixFromStored(value != null ? String(value) : '');
+            combo.appendChild(prefix);
+            combo.appendChild(parkingInput);
             const pkRm = document.createElement('button');
             pkRm.type = 'button';
             pkRm.className = 'remove-btn';
             pkRm.textContent = '×';
-            parkingItem.appendChild(parkingInput);
+            parkingItem.appendChild(combo);
             parkingItem.appendChild(pkRm);
-            
-            // Formateo automático del estacionamiento
-            parkingInput.addEventListener('input', (e) => {
-                const cursor = e.target.selectionStart;
-                e.target.value = formatParkingInput(e.target.value);
-                e.target.setSelectionRange(cursor, cursor);
+
+            parkingInput.addEventListener('input', function (e) {
+                e.target.value = String(e.target.value || "").replace(/\D/g, "").slice(0, 3);
             });
-            
-            // Validación al perder el foco
-            parkingInput.addEventListener('blur', (e) => {
-                const value = e.target.value.trim();
+
+            parkingInput.addEventListener('blur', function (e) {
+                const full = deptWm815ParkingFullFromSuffix(e.target.value);
                 e.target.classList.remove('error');
-                
-                if (value && !validateParkingNumber(value)) {
+                if (full && !validateParkingNumber(full)) {
                     e.target.classList.add('error');
                     var pkMsg =
                         window.CG && window.CG.validate
-                            ? (window.CG.validate.parkingECodeWm815OrEmpty(value).message ||
+                            ? (window.CG.validate.parkingECodeWm815OrEmpty(full).message ||
                                 'Estacionamiento no válido para este edificio.')
-                            : 'Formato de estacionamiento inválido. Use E-XXX donde XXX es un número entre 31-58 o 65-201';
+                            : 'Número inválido. Use rango 31-58 o 65-201.';
                     showNotification('error', pkMsg);
-                } else if (value && !checkParkingAvailability(value)) {
+                } else if (full && !checkParkingAvailability(full)) {
                     e.target.classList.add('error');
-                    showNotification('error', `El estacionamiento ${value} ya está asignado`);
+                    showNotification('error', 'El estacionamiento ' + full + ' ya está asignado');
                 }
             });
-            
+
             parkingList.appendChild(parkingItem);
         }
 
@@ -11409,19 +11447,38 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             const storageItem = document.createElement('div');
             storageItem.className = 'storage-item';
             storageItem.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-bottom: 8px;';
+            const combo = document.createElement('div');
+            combo.style.cssText =
+                'display:flex;flex:1;min-width:0;align-items:stretch;border:1px solid var(--border-color);border-radius:8px;overflow:hidden;background:var(--surface-color, #fff)';
+            const prefixB = document.createElement('span');
+            prefixB.textContent = 'B-';
+            prefixB.setAttribute('aria-hidden', 'true');
+            prefixB.style.cssText =
+                'display:flex;align-items:center;padding:0 10px;font-weight:700;font-size:0.95rem;color:#475569;background:#f1f5f9;flex-shrink:0;border-right:1px solid var(--border-color)';
             const stInp = document.createElement('input');
             stInp.type = 'text';
-            stInp.className = 'form-input storage-input';
-            stInp.placeholder = 'Ej: B-15';
-            stInp.style.flex = '1';
-            stInp.value = value != null ? String(value) : '';
+            stInp.className = 'form-input storage-suffix-input';
+            stInp.setAttribute('autocomplete', 'off');
+            stInp.placeholder = 'Ej: 15';
+            stInp.style.cssText = 'flex:1;min-width:0;border:0;outline:0;padding:8px 10px;font:inherit;box-shadow:none';
+            stInp.value = deptWm815BodegaSuffixFromStored(value != null ? String(value) : '');
+            combo.appendChild(prefixB);
+            combo.appendChild(stInp);
             const stRm = document.createElement('button');
             stRm.type = 'button';
             stRm.className = 'remove-btn';
             stRm.textContent = '×';
-            storageItem.appendChild(stInp);
+            storageItem.appendChild(combo);
             storageItem.appendChild(stRm);
-            
+
+            stInp.addEventListener('input', function (e) {
+                var v = String(e.target.value || '');
+                while (v.length >= 2 && v.slice(0, 2).toLowerCase() === 'b-') {
+                    v = v.slice(2);
+                }
+                e.target.value = v.replace(/^\s+/, '');
+            });
+
             storageList.appendChild(storageItem);
         }
 
@@ -11543,11 +11600,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 console.log('Unidad existente:', existingUnit);
                 console.log('Nota existente:', existingUnit ? existingUnit.unitNote : 'N/A');
                 
-                // Obtener y validar estacionamientos (array)
-                const parkingInputs = document.querySelectorAll('.parking-input');
-                const parkingNumbers = Array.from(parkingInputs)
-                    .map(input => input.value.trim())
-                    .filter(p => p && p.trim() !== '');
+                // Obtener y validar estacionamientos (array); prefijo E- fijo en UI
+                const parkingItems = document.querySelectorAll('#parkingList .parking-item');
+                const parkingNumbers = Array.from(parkingItems)
+                    .map(function (item) {
+                        const suf = item.querySelector('.parking-suffix-input');
+                        return deptWm815ParkingFullFromSuffix(suf ? suf.value : '');
+                    })
+                    .filter(function (p) {
+                        return p && String(p).trim() !== '';
+                    });
                 
                 // Validar formato de cada estacionamiento
                 for (const parkingNumber of parkingNumbers) {
@@ -11566,11 +11628,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                     }
                 }
                 
-                // Obtener bodegas (array)
-                const storageInputs = document.querySelectorAll('.storage-input');
-                const storageNumbers = Array.from(storageInputs)
-                    .map(input => formatText(input.value.trim()))
-                    .filter(s => s && s.trim() !== '');
+                // Obtener bodegas (array); prefijo B- fijo en UI
+                const storageItems = document.querySelectorAll('#storageList .storage-item');
+                const storageNumbers = Array.from(storageItems)
+                    .map(function (item) {
+                        const suf = item.querySelector('.storage-suffix-input');
+                        return deptWm815BodegaFullFromSuffix(suf ? suf.value : '');
+                    })
+                    .filter(function (s) {
+                        return s && String(s).trim() !== '';
+                    });
                 
                 // Si estamos editando, empezar con la unidad existente para preservar TODOS los campos
                 // Si es nueva, crear objeto desde cero
