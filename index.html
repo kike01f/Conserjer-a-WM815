@@ -8928,7 +8928,7 @@
                         <label>Bicicleteros</label>
                         <div id="bikeList" style="margin-bottom: 8px;"></div>
                         <button type="button" class="btn btn-sm btn-secondary" id="addBikeBtn" data-cg-win="addBikeField" style="font-size: 0.85rem;">+ Agregar Bicicletero</button>
-                        <small style="color: var(--secondary-text); font-size: 0.8rem; display: block; margin-top: 4px;">Máximo 3 por unidad. N° y detalle (ej. marca, aro, color).</small>
+                        <small style="color: var(--secondary-text); font-size: 0.8rem; display: block; margin-top: 4px;">Máximo 3 por unidad. Prefijo <strong>BC-</strong> fijo en el número; detalle opcional (marca, aro, color).</small>
                     </div>
 
                     <div class="form-group">
@@ -10845,6 +10845,24 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             return "B-" + s;
         }
 
+        /** Prefijo BC- fijo para número de bicicletero (módulo Departamentos). */
+        function deptWm815BikeSuffixFromStored(full) {
+            var s = String(full || "").trim();
+            while (s.length >= 3 && s.slice(0, 3).toLowerCase() === "bc-") {
+                s = s.slice(3).trim();
+            }
+            return s.trim();
+        }
+        function deptWm815BikeFullFromSuffix(suffixRaw) {
+            var s = String(suffixRaw || "").trim();
+            while (s.length >= 3 && s.slice(0, 3).toLowerCase() === "bc-") {
+                s = s.slice(3).trim();
+            }
+            s = s.replace(/\s+/g, " ").trim();
+            if (!s) return "";
+            return "BC-" + s;
+        }
+
         // ===== Cambio de clave Estadística (PBKDF2 en localStorage + sync opcional; sin variable global ni texto plano) =====
         // Límite: sin backend propio, quien modifique almacenamiento local o remoto puede alterar el verifier.
         var __cgDeptGateChange = (function () {
@@ -11492,12 +11510,30 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             bikeItem.className = 'bike-item';
             bikeItem.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;';
             const isThird = bikeList.children.length === 2;
+            const numCombo = document.createElement('div');
+            numCombo.style.cssText =
+                'display:flex;align-items:stretch;border:1px solid var(--border-color);border-radius:8px;overflow:hidden;background:var(--surface-color, #fff);flex:0 1 155px;min-width:108px';
+            const prefixBk = document.createElement('span');
+            prefixBk.textContent = 'BC-';
+            prefixBk.setAttribute('aria-hidden', 'true');
+            prefixBk.style.cssText =
+                'display:flex;align-items:center;padding:0 8px;font-weight:700;font-size:0.88rem;color:#475569;background:#f1f5f9;flex-shrink:0;border-right:1px solid var(--border-color)';
             const bn = document.createElement('input');
             bn.type = 'text';
             bn.className = 'form-input bike-number-input';
-            bn.placeholder = 'N° (ej: 228)';
-            bn.style.flex = '0 0 100px';
-            bn.value = numberValue != null ? String(numberValue) : '';
+            bn.setAttribute('autocomplete', 'off');
+            bn.placeholder = '228';
+            bn.style.cssText = 'flex:1;min-width:0;border:0;outline:0;padding:8px 8px;font:inherit;box-shadow:none';
+            bn.value = deptWm815BikeSuffixFromStored(numberValue != null ? String(numberValue) : '');
+            numCombo.appendChild(prefixBk);
+            numCombo.appendChild(bn);
+            bn.addEventListener('input', function (e) {
+                var v = String(e.target.value || '');
+                while (v.length >= 3 && v.slice(0, 3).toLowerCase() === 'bc-') {
+                    v = v.slice(3);
+                }
+                e.target.value = v.replace(/^\s+/, '');
+            });
             const bd = document.createElement('input');
             bd.type = 'text';
             bd.className = 'form-input bike-detail-input';
@@ -11509,7 +11545,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             bkRm.type = 'button';
             bkRm.className = 'remove-btn';
             bkRm.textContent = '×';
-            bikeItem.appendChild(bn);
+            bikeItem.appendChild(numCombo);
             bikeItem.appendChild(bd);
             bikeItem.appendChild(bkRm);
             if (isThird) {
@@ -11662,7 +11698,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 const bikeStorageNumbers = [];
                 const bikeStorageDetails = [];
                 bikeNumberInputs.forEach((numInput, i) => {
-                    const num = numInput.value.trim();
+                    const num = deptWm815BikeFullFromSuffix(numInput.value);
                     const det = (bikeDetailInputs[i] && bikeDetailInputs[i].value.trim()) || '';
                     if (num || det) {
                         bikeStorageNumbers.push(num || '');
