@@ -6100,7 +6100,8 @@
       height: auto;
       background: linear-gradient(180deg, var(--gray-50) 0%, var(--white) 40%);
     }
-    #dept-module-host {
+    #dept-module-host,
+    #mapa-edificio-module-host {
       display: block;
       width: 100%;
       min-height: 100%;
@@ -6566,6 +6567,7 @@
       { id: "visitas", label: "Visitas", icon: "fa-user-clock" },
       { id: "encomiendas", label: "Encomiendas", icon: "fa-box-open" },
       { id: "departamentos", label: "Departamentos", icon: "fa-door-open" },
+      { id: "mapaEdificio", label: "Mapa del edificio", icon: "fa-map-location-dot" },
       { id: "estacionamientos", label: "Estacionamientos", icon: "fa-square-parking" },
       { id: "bodegas", label: "Bodegas", icon: "fa-box" },
       { id: "proveedores", label: "Proveedores", icon: "fa-truck" },
@@ -8188,6 +8190,28 @@
       save("migrated_proveedores_contactos_v1", true);
     }
 
+    /** Añade el módulo Mapa del edificio a roles que ya tenían Departamentos (misma sincronización wm815_*). */
+    function migrateMapaEdificioModule() {
+      if (load("migrated_mapa_edificio_module_v1", false)) return;
+      var mid = "mapaEdificio";
+      if (!MODULES.some(function (m) { return m.id === mid; })) {
+        save("migrated_mapa_edificio_module_v1", true);
+        return;
+      }
+      var rm = load("roleModules", { admin: [], conserje: [] });
+      var ch = false;
+      ["admin", "conserje"].forEach(function (role) {
+        var arr = (rm[role] || []).slice();
+        if (arr.indexOf(mid) >= 0) return;
+        if (arr.indexOf("departamentos") >= 0) {
+          rm[role] = arr.concat([mid]);
+          ch = true;
+        }
+      });
+      if (ch) save("roleModules", rm);
+      save("migrated_mapa_edificio_module_v1", true);
+    }
+
     /** Una vez: si config no tenía visitorParkingCodes, inicializar vacío (sin códigos de ejemplo). */
     function migrateVisitorParkingCodes() {
       if (load("migrated_visitor_parking_v1", false)) return;
@@ -8508,6 +8532,7 @@
         ["encomiendas", migrateEncomiendasModule],
         ["proveedores", migrateProveedoresModule],
         ["proveedoresContactos", migrateProveedoresContactosV1],
+        ["mapaEdificio", migrateMapaEdificioModule],
         ["visitorParking", migrateVisitorParkingCodes],
         ["shiftLogs", migrateShiftLogs],
         ["staffChat", migrateStaffChat],
@@ -9731,7 +9756,7 @@
     /* ┌─ 11. API pública (único objeto global del core) ─────────────────────────────── */
     window.CG = {
       APP_BRAND_NAME, MANUFACTURER_LOGO_URL,
-      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureCloudInstallBaseline, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateManualUsuarioModule, migrateProveedoresModule, migrateProveedoresContactosV1, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateVisitPlatesUppercase, migrateDeptRegistroPrefijosEbbBc, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
+      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureCloudInstallBaseline, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateManualUsuarioModule, migrateProveedoresModule, migrateProveedoresContactosV1, migrateMapaEdificioModule, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateVisitPlatesUppercase, migrateDeptRegistroPrefijosEbbBc, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
       attachVirtualAdminDepartment,
       authEnsureReady, authValidateDeptGateNewPassword, authVerifyLoginPassword, authCreatePasswordVerifier, authDeptGateExists, authVerifyDeptGate, authSetDeptGateFromPasswords, authSetDeptGateInitial,
       shiftLogTramoIsOpen,
@@ -9847,7 +9872,6 @@
             <button class="nav-tab active" data-tab="units">📋 Unidades</button>
             <button class="nav-tab" data-tab="residents">👥 Residentes</button>
             <button class="nav-tab" data-tab="owners">🏠 Propietarios</button>
-            <button class="nav-tab" data-tab="building">🏢 Edificio</button>
             <button class="nav-tab" data-tab="stats">📈 Estadística</button>
             <button class="nav-tab" data-tab="formerResidents">📦 Residentes Anteriores</button>
         </nav>
@@ -12181,9 +12205,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 tab.classList.remove('active');
             });
 
-            // Mostrar pestaña seleccionada
-            document.getElementById(tabName).classList.add('active');
-            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+            const tabEl = document.getElementById(tabName);
+            if (!tabEl) return;
+            tabEl.classList.add('active');
+            const navBtn = document.querySelector('[data-tab="' + tabName + '"]');
+            if (navBtn) navBtn.classList.add('active');
 
             // Actualizar contenido según la pestaña
             if (tabName === 'residents') updateResidentsTable();
@@ -15118,9 +15144,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 });
             }
 
-            // Abrir pestaña Edificio si se accede con #building (ej. desde gestion-wm módulo Ocupación)
+            // #building: el mapa vive en el módulo «Mapa del edificio» (mismos datos wm815_*)
             const hash = (window.location.hash || '').replace(/^#/, '');
-            if (hash === 'building') showTab('building');
+            if (hash === 'building') {
+                setTimeout(function () {
+                    try {
+                        if (window.CG_UI && typeof window.CG_UI.navigate === 'function') {
+                            window.CG_UI.navigate('mapaEdificio');
+                        }
+                    } catch (eNavB) {}
+                }, 0);
+            }
         }
         window.editUnit = editUnit;
         window.deleteUnit = deleteUnit;
@@ -16118,13 +16152,18 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   function cgDeptSyncImportExportVisibility() {
     var isAdmin = !!(window.CG && window.CG.currentUser && window.CG.currentUser() && window.CG.currentUser().role === "admin");
-    var host = document.getElementById("dept-module-host");
-    if (!host) return;
-    host.querySelectorAll(".cg-dept-admin-only").forEach(function (el) {
-      el.classList.toggle("hidden", !isAdmin);
+    ["dept-module-host", "mapa-edificio-module-host"].forEach(function (hid) {
+      var host = document.getElementById(hid);
+      if (!host) return;
+      host.querySelectorAll(".cg-dept-admin-only").forEach(function (el) {
+        el.classList.toggle("hidden", !isAdmin);
+      });
     });
   }
-  window.CG.mountDepartamentosModule = async function () {
+  window.CG.mountDepartamentosModule = async function (opts) {
+    opts = opts || {};
+    var hostId = opts.hostId || "dept-module-host";
+    var mapaSolo = !!opts.mapaSolo;
     if (!window.CG || !window.CG.LS) {
       console.warn("CG no listo");
       return;
@@ -16132,11 +16171,21 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     __migrateLegacyDeptStorageOnce();
     __injectDeptStylesOnce();
     if (window.CG && typeof window.CG.applyPersonalizationToDom === "function") window.CG.applyPersonalizationToDom();
-    var host = document.getElementById("dept-module-host");
+    var host = document.getElementById(hostId);
     if (!host) return;
     host.innerHTML = CG_DEPT_INNER_HTML;
     if (typeof __cgDeptRunAfterInject === "function") {
       await __cgDeptRunAfterInject();
+    }
+    if (mapaSolo) {
+      var nav = host.querySelector(".nav-tabs");
+      if (nav) nav.style.display = "none";
+      host.querySelectorAll(".tab-content").forEach(function (t) {
+        t.classList.remove("active");
+      });
+      var bEl = host.querySelector("#building");
+      if (bEl) bEl.classList.add("active");
+      if (typeof updateBuildingMap === "function") updateBuildingMap();
     }
     cgDeptSyncImportExportVisibility();
     setTimeout(function () {
@@ -17718,6 +17767,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function cgMainContentHtmlForView(view) {
       if (view === "dashboard") return pageDashboard();
       if (view === "departamentos") return pageDepartamentos();
+      if (view === "mapaEdificio") return pageMapaEdificio();
       if (view === "estacionamientos") return pageEstacionamientos();
       if (view === "bodegas") return pageBodegas();
       if (view === "proveedores") return pageProveedores();
@@ -18893,6 +18943,21 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       );
     }
 
+    function pageMapaEdificio() {
+      return (
+        "<div class=\"cg-page-compact\">" +
+        "<h1 class=\"page-title\">Mapa del edificio</h1>" +
+        "<div class=\"cg-module-intro\">" +
+        "<p class=\"page-desc\" style=\"margin:0\">Misma información que en <strong>Departamentos</strong> (unidades, ocupación y residentes en <code>wm815_*</code>). Los cambios en un módulo se reflejan en el otro al instante.</p>" +
+        "<p class=\"page-desc\" style=\"margin:0.5rem 0 0\">" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"departamentos\"><i class=\"fa-solid fa-door-open\" aria-hidden=\"true\"></i> Ir a Departamentos</button> " +
+        "<span class=\"page-desc\" style=\"margin:0;font-size:0.78rem\">para registrar o editar unidades y residentes.</span></p></div>" +
+        "<section class=\"cg-dept-module-embed\" aria-label=\"Mapa del edificio (vista incrustada)\">" +
+        "<div class=\"cg-dept-module-frame-wrap\">" +
+        "<div id=\"mapa-edificio-module-host\"></div></div></section></div>"
+      );
+    }
+
     function pageDepartamentos() {
       var xlsxImportCard =
         G.currentUser().role === "admin"
@@ -18906,6 +18971,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           : "";
       return (
         "<h1 class=\"page-title\">Departamentos</h1>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.65rem\">El mapa interactivo por piso está en <button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"mapaEdificio\"><i class=\"fa-solid fa-map-location-dot\" aria-hidden=\"true\"></i> Mapa del edificio</button> (mismos datos, sincronizado).</p>" +
         xlsxImportCard +
         "<section class=\"cg-dept-module-embed\" aria-label=\"Registro de unidades y residentes (módulo Departamentos)\">" +
         "<div class=\"cg-dept-module-frame-wrap\">" +
@@ -19113,6 +19179,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (!window.CG_ACTIONS || !CG_ACTIONS.syncDepartamentosModuleFromLocal) return;
       if (
         view === "departamentos" ||
+        view === "mapaEdificio" ||
         view === "visitas" ||
         view === "estacionamientos" ||
         view === "bodegas" ||
@@ -19141,10 +19208,18 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (window.CG && window.CG.mountDepartamentosModule) window.CG.mountDepartamentosModule();
     }
 
+    function cgBindMapaEdificioViewEvents() {
+      if (window.CG && window.CG.migrateDeptStorageKeysOnce) window.CG.migrateDeptStorageKeysOnce();
+      if (window.CG && window.CG.mountDepartamentosModule) {
+        window.CG.mountDepartamentosModule({ hostId: "mapa-edificio-module-host", mapaSolo: true });
+      }
+    }
+
     function bindPageEvents(view) {
       cgBindSyncDepartamentosForView(view);
       if (view === "dashboard") cgBindDashboardViewEvents();
       if (view === "departamentos") cgBindDepartamentosViewEvents();
+      if (view === "mapaEdificio") cgBindMapaEdificioViewEvents();
       if (view === "estacionamientos" && window.CG_ACTIONS && CG_ACTIONS.renderParkingGrid) {
         CG_ACTIONS.renderParkingGrid();
       }
@@ -19251,7 +19326,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             A.refreshVisitDeptSelect();
           } catch (eVisDept) {}
         }
-        if (view === "departamentos") {
+        if (view === "departamentos" || view === "mapaEdificio") {
           if (typeof window.loadUnitsFromCloud === "function") {
             window.loadUnitsFromCloud(true).catch(function () {});
           }
@@ -19510,7 +19585,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
     window.CG_UI = {
       showLogin, showApp, navigate, renderNav, openModal, closeModal, getCurrentView, openUserManualOverlay,
-      pageDepartamentos, pageEstacionamientos, pageBodegas, pageProveedores, pageVisitas, pageEncomiendas, pageReservas, pageNovedades, pageAdmin, pageManual,
+      pageDepartamentos, pageMapaEdificio, pageEstacionamientos, pageBodegas, pageProveedores, pageVisitas, pageEncomiendas, pageReservas, pageNovedades, pageAdmin, pageManual,
       bindPageEvents, checkVehicularVisitWarnings, renderDashboardCharts,
       refreshAfterRemoteLsKey
     };
@@ -20347,7 +20422,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     A.syncDepartamentosModuleFromLocal();
     if (window.CG && typeof window.CG.mountDepartamentosModule === "function") {
-      window.CG.mountDepartamentosModule();
+      var cvImp = UI.getCurrentView ? UI.getCurrentView() : null;
+      if (cvImp === "mapaEdificio") {
+        window.CG.mountDepartamentosModule({ hostId: "mapa-edificio-module-host", mapaSolo: true });
+      } else {
+        window.CG.mountDepartamentosModule();
+      }
     }
     var s = stats || {};
     G.toast(
@@ -20713,7 +20793,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     A.syncDepartamentosModuleFromLocal();
     if (A.__deptModuleSyncPoll) clearInterval(A.__deptModuleSyncPoll);
     A.__deptModuleSyncPoll = setInterval(function () {
-      if (!UI.getCurrentView || UI.getCurrentView() !== "departamentos") {
+      var cv = UI.getCurrentView ? UI.getCurrentView() : null;
+      if (cv !== "departamentos" && cv !== "mapaEdificio") {
         clearInterval(A.__deptModuleSyncPoll);
         A.__deptModuleSyncPoll = null;
         return;
