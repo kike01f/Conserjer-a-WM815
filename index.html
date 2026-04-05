@@ -1126,6 +1126,29 @@
     .cg-chat-bubble--me button.cg-chat-msg-reply-btn:hover {
       background: rgba(15, 23, 42, 0.08);
     }
+    .cg-chat-bubble-tools {
+      display: flex;
+      flex-shrink: 0;
+      align-items: flex-start;
+      gap: 1px;
+    }
+    button.cg-chat-msg-delete-btn {
+      flex-shrink: 0;
+      margin: 0;
+      padding: 0.2rem 0.35rem;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: #94a3b8;
+      font-size: 0.72rem;
+      cursor: pointer;
+      line-height: 1;
+      transition: background 0.12s, color 0.12s;
+    }
+    button.cg-chat-msg-delete-btn:hover {
+      background: rgba(220, 38, 38, 0.12);
+      color: #dc2626;
+    }
     button.cg-chat-bubble-reply,
     div.cg-chat-bubble-reply {
       display: block;
@@ -15659,7 +15682,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (!el || !u) return;
       if (u.role === "admin") {
         el.textContent =
-          "Vista completa del canal (sincronizado entre equipos). " + staffPresenceConserjesSummaryForAdmin();
+          "Vista completa del canal (sincronizado entre equipos). Puede eliminar un mensaje con el icono de papelera. " +
+          staffPresenceConserjesSummaryForAdmin();
       } else {
         el.textContent =
           "Canal directo con administración: solo ve sus mensajes y los del admin; no ve mensajes de otros conserjes.";
@@ -15694,6 +15718,67 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       staffChatRenderThread();
       staffChatUpdateBadge();
       G.toast("Conversación vaciada");
+    }
+    function staffChatDeleteMessageById(msgId) {
+      var cu = G.currentUser();
+      if (!cu || cu.role !== "admin") {
+        G.toast("Solo el administrador puede eliminar mensajes del chat.", "warn");
+        return;
+      }
+      if (!msgId) return;
+      var all = Array.isArray(G.state.staffChatMessages) ? G.state.staffChatMessages.slice() : [];
+      var target = null;
+      var i;
+      for (i = 0; i < all.length; i++) {
+        if (all[i] && String(all[i].id) === String(msgId)) {
+          target = all[i];
+          break;
+        }
+      }
+      if (!target) {
+        G.toast("No se encontró el mensaje.", "warn");
+        return;
+      }
+      var preview =
+        target.kind === "buzz"
+          ? "Zumbido"
+          : String(target.text || "")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 100);
+      if (preview.length === 100) preview = preview.slice(0, 97) + "…";
+      if (
+        !confirm(
+          "¿Eliminar este mensaje en todos los equipos?\n\n«" +
+            (preview || "(sin texto)") +
+            "»\n\nEsta acción no se puede deshacer."
+        )
+      )
+        return;
+      if (typeof G.cloudSyncAbortInFlight === "function") G.cloudSyncAbortInFlight();
+      var dedupe = G.staffChatDedupeKeyForSync;
+      if (typeof G.registerPendingDeletedLsKey === "function") {
+        var dk = typeof dedupe === "function" ? dedupe(target) : "";
+        if (dk) G.registerPendingDeletedLsKey("staffChatMessages", dk);
+      }
+      var next = all.filter(function (m) {
+        return !m || String(m.id) !== String(msgId);
+      });
+      G.state.staffChatMessages = next;
+      staffChatLastMsgs = JSON.stringify(next);
+      if (staffChatReplyDraft && String(staffChatReplyDraft.id) === String(msgId)) staffChatClearReplyDraft();
+      var pushDelP =
+        typeof G.cloudPushKeyImmediate === "function" ? G.cloudPushKeyImmediate("staffChatMessages") : null;
+      if (pushDelP && typeof pushDelP.finally === "function") {
+        pushDelP.finally(function () {
+          if (typeof G.flushPendingCloudWritesNow === "function") G.flushPendingCloudWritesNow();
+        });
+      } else if (typeof G.flushPendingCloudWritesNow === "function") {
+        G.flushPendingCloudWritesNow();
+      }
+      staffChatRenderThread();
+      staffChatUpdateBadge();
+      G.toast("Mensaje eliminado");
     }
     function staffChatUpdateBadge() {
       var b = document.getElementById("cg-chat-badge");
@@ -15742,6 +15827,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           meta.appendChild(document.createTextNode(" · " + roleLbl + " · " + G.fmtDate(m.at)));
           head.appendChild(meta);
           if (m.id) {
+            var tools = document.createElement("span");
+            tools.className = "cg-chat-bubble-tools";
             var repBtn = document.createElement("button");
             repBtn.type = "button";
             repBtn.className = "cg-chat-msg-reply-btn";
@@ -15749,7 +15836,18 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             repBtn.setAttribute("title", "Responder");
             repBtn.setAttribute("aria-label", "Responder a este mensaje");
             repBtn.innerHTML = "<i class=\"fa-solid fa-reply\" aria-hidden=\"true\"></i>";
-            head.appendChild(repBtn);
+            tools.appendChild(repBtn);
+            if (cu && cu.role === "admin") {
+              var delBtn = document.createElement("button");
+              delBtn.type = "button";
+              delBtn.className = "cg-chat-msg-delete-btn";
+              delBtn.setAttribute("data-cg-delete-msg-id", String(m.id));
+              delBtn.setAttribute("title", "Eliminar mensaje");
+              delBtn.setAttribute("aria-label", "Eliminar este mensaje");
+              delBtn.innerHTML = "<i class=\"fa-solid fa-trash\" aria-hidden=\"true\"></i>";
+              tools.appendChild(delBtn);
+            }
+            head.appendChild(tools);
           }
           div.appendChild(head);
           var rt = m.replyTo;
@@ -15978,6 +16076,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           if (jumpT && threadEl.contains(jumpT)) {
             e.preventDefault();
             staffChatJumpToQuotedMessage(jumpT.getAttribute("data-cg-jump-to"));
+            return;
+          }
+          var delB = e.target && e.target.closest && e.target.closest(".cg-chat-msg-delete-btn");
+          if (delB && threadEl.contains(delB)) {
+            e.preventDefault();
+            staffChatDeleteMessageById(delB.getAttribute("data-cg-delete-msg-id"));
             return;
           }
           var repB = e.target && e.target.closest && e.target.closest(".cg-chat-msg-reply-btn");
