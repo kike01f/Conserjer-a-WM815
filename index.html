@@ -10063,7 +10063,6 @@
         <div id="building" class="tab-content">
             <div style="margin-bottom: 1.5rem;">
                 <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700;">🏢 Mapa del Edificio</h3>
-                <p style="color: var(--secondary-text); font-size: 0.875rem; margin: 0.5rem 0 0 0;">Unidades, residentes y estado de ocupación. Clic en una unidad para ver detalle.</p>
             </div>
             <!-- Resumen ocupación -->
             <div id="resumenEdificio" class="resumen-edificio-map" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
@@ -18135,7 +18134,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         (vig.length > limit
           ? "Mostrando <strong>" + limit + "</strong> de <strong>" + vig.length + "</strong> vigentes."
           : "<strong>" + vig.length + "</strong> reserva(s) vigente(s).") +
-        " <span style=\"opacity:0.92\">Verde = en curso · Azul = próxima.</span></p>";
+        "</p>";
       return html;
     }
 
@@ -18753,7 +18752,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact cg-dash-stat-card--with-footer-btn\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-box\" aria-hidden=\"true\"></i> Encomiendas</h3></div><div class=\"card-b cg-dash-stat-card-b--stack\"><div class=\"cg-dash-stat-card-b__top\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-enc-pend\">" + encPend + "</p><p class=\"page-desc\">Pendientes de retiro en conserjería</p><p class=\"page-desc\">Recibidas hoy: <strong id=\"dash-stat-enc-today\">" + encReceivedToday + "</strong></p><span id=\"dash-stat-enc-delta\">" + encRecDelta + "</span></div>" +
         (encPend ? "<div class=\"cg-dash-stat-card-b__footer\"><button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"encomiendas\">Ver módulo</button></div>" : "") + "</div></div>" +
         "</div>" +
-        "<div class=\"card cg-dash-nov-card cg-dash-res-detail-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-calendar-check\" aria-hidden=\"true\"></i> Reservas vigentes</h3><span class=\"page-desc\" style=\"margin:0;font-size:0.78rem;flex:1;text-align:right\">Verde = en curso · Azul = próxima · Sin color = dato incompleto</span></div><div class=\"card-b\" id=\"cg-dash-res-detail-body\" aria-live=\"polite\">" +
+        "<div class=\"card cg-dash-nov-card cg-dash-res-detail-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-calendar-check\" aria-hidden=\"true\"></i> Reservas vigentes</h3></div><div class=\"card-b\" id=\"cg-dash-res-detail-body\" aria-live=\"polite\">" +
         buildDashboardReservasVigentesDetailHtml() +
         "</div></div>" +
         "<div class=\"cg-dash-charts-row\">" +
@@ -18948,8 +18947,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"cg-page-compact\">" +
         "<h1 class=\"page-title\">Departamentos</h1>" +
         "<div class=\"cg-module-intro\">" +
-        "<p class=\"page-desc\" style=\"margin:0\">Mapa por piso y ocupación (mismos datos que <strong>Residentes</strong> en <code>wm815_*</code>). Los cambios en un módulo se reflejan en el otro al instante.</p>" +
-        "<p class=\"page-desc\" style=\"margin:0.5rem 0 0\">" +
+        "<p class=\"page-desc\" style=\"margin:0\">" +
         "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"departamentos\"><i class=\"fa-solid fa-users\" aria-hidden=\"true\"></i> Ir a Residentes</button> " +
         "<span class=\"page-desc\" style=\"margin:0;font-size:0.78rem\">para registrar o editar unidades y residentes.</span></p></div>" +
         "<section class=\"cg-dept-module-embed\" aria-label=\"Departamentos — mapa del edificio\">" +
@@ -18964,14 +18962,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           ? "<div class=\"card cg-dept-toolbar\">" +
             "<div class=\"card-h\" style=\"align-items:center;flex-wrap:wrap;gap:0.5rem\">" +
             "<h3 style=\"margin:0\">Importación masiva (Excel)</h3>" +
-            "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;width:100%;font-size:0.82rem\">Archivo <strong>.xlsx</strong>: se detectan columnas por nombre (Unidad, Depto, Nombre, Tipo, Email…). Prioriza la hoja «Residentes» si existe; vista previa antes de guardar.</p>" +
             "<div class=\"toolbar\" style=\"margin-left:auto\">" +
             "<input type=\"file\" id=\"input-dept-xlsx\" class=\"hidden\" accept=\".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\" />" +
             "<button type=\"button\" class=\"btn btn-primary btn-sm\" id=\"btn-import-dept-xlsx\"><i class=\"fa-solid fa-file-import\"></i> Importar Excel</button></div></div></div>"
           : "";
       return (
         "<h1 class=\"page-title\">Residentes</h1>" +
-        "<p class=\"page-desc\" style=\"margin:0 0 0.65rem\">El mapa interactivo por piso está en <button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"mapaEdificio\"><i class=\"fa-solid fa-door-open\" aria-hidden=\"true\"></i> Departamentos</button> (mismos datos, sincronizado).</p>" +
         xlsxImportCard +
         "<section class=\"cg-dept-module-embed\" aria-label=\"Residentes — registro de unidades y fichas\">" +
         "<div class=\"cg-dept-module-frame-wrap\">" +
