@@ -15844,6 +15844,38 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function staffChatGetRead(userId) {
       return staffChatLastReadMap()[userId] || "";
     }
+    function staffChatIsoToMs(iso) {
+      if (iso == null || iso === "") return NaN;
+      var t = Date.parse(String(iso));
+      return isFinite(t) ? t : NaN;
+    }
+    function staffChatMessageAtMs(m) {
+      if (!m || m.at == null) return NaN;
+      return staffChatIsoToMs(m.at);
+    }
+    /**
+     * Tras cambiar de sesión: si este usuario no tenía cursor de «última lectura», todo el historial
+     * contaba como no leído. Se inicializa al último mensaje visible (o ahora) para que el badge no
+     * muestre falsos pendientes hasta que lleguen mensajes nuevos.
+     */
+    function staffChatEnsureReadCursorForCurrentUser() {
+      var u = G.currentUser();
+      if (!u) return;
+      if (staffChatGetRead(u.id)) return;
+      var list = staffChatMessagesForViewer();
+      var bestMs = 0;
+      var bestIso = "";
+      var i;
+      for (i = 0; i < list.length; i++) {
+        var m = list[i];
+        var ms = staffChatMessageAtMs(m);
+        if (isFinite(ms) && ms >= bestMs) {
+          bestMs = ms;
+          bestIso = m.at != null ? String(m.at) : "";
+        }
+      }
+      staffChatSetRead(u.id, bestIso || new Date().toISOString());
+    }
     function staffChatSetRead(userId, iso) {
       var m = Object.assign({}, staffChatLastReadMap());
       m[userId] = iso;
@@ -15970,10 +16002,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     function staffChatUnreadCount() {
       var u = G.currentUser();
       if (!u) return 0;
-      var after = staffChatGetRead(u.id);
+      var afterMs = staffChatIsoToMs(staffChatGetRead(u.id));
       return staffChatMessagesSafe().filter(function (m) {
         if (!m || typeof m !== "object") return false;
-        if (after && !(m.at > after)) return false;
+        if (isFinite(afterMs)) {
+          var mMs = staffChatMessageAtMs(m);
+          if (!isFinite(mMs) || mMs <= afterMs) return false;
+        }
         if (u.role === "admin") {
           if (m.userId === u.id) return false;
           if (m.role === "conserje") return true;
@@ -16945,6 +16980,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         staffChatBind();
         if (typeof G.attachStaffChatRemoteSync === "function") G.attachStaffChatRemoteSync();
         staffChatStartPoll();
+        staffChatEnsureReadCursorForCurrentUser();
         staffChatLastMsgs = "";
         staffChatSoundInited = false;
         staffChatSyncPanelSub();
