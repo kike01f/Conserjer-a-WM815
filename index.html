@@ -18588,6 +18588,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             if (vk && typeof vk === "string" && /^\d{4}-\d{2}$/.test(vk)) dm.value = vk;
           } catch (eDm) {}
         }
+        if (dash) {
+          try {
+            updateDashboardActivityAndNovBodiesOnly();
+          } catch (eDashMo) {}
+        }
       }
 
       if (k === "shiftLogs") {
@@ -18669,6 +18674,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             var tabCfg = document.querySelector(".admin-tab[data-adm=\"cfg\"].active");
             if (tabCfg) A.renderAdmin("cfg");
           } catch (eCfg) {}
+        }
+        if (view === "visitas") {
+          var dlp = document.getElementById("visitor-parking-suffix-suggest");
+          if (dlp) {
+            try {
+              dlp.innerHTML = visitorParkingSuffixDatalistOptionsHtml();
+            } catch (eVpDl) {}
+          }
         }
       }
 
