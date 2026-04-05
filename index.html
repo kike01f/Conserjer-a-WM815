@@ -15680,9 +15680,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var u = G.currentUser();
       if (!el || !u) return;
       if (u.role === "admin") {
-        el.textContent =
-          "Vista completa del canal (sincronizado entre equipos). Puede eliminar un mensaje con el icono de papelera. " +
-          staffPresenceConserjesSummaryForAdmin();
+        el.textContent = staffPresenceConserjesSummaryForAdmin();
       } else {
         el.textContent =
           "Canal directo con administración: solo ve sus mensajes y los del admin; no ve mensajes de otros conserjes.";
