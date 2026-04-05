@@ -7711,6 +7711,15 @@
       if (!pS || !pE || !pT) return false;
       return pS.ymd <= pT.ymd && pE.ymd >= pT.ymd;
     }
+    /** Inicio ≤ instante ≤ término (reserva en curso ahora). `refNow` por defecto: Date(). */
+    function reservaEnCursoAhora(r, refNow) {
+      if (!r || r.start == null || r.end == null) return false;
+      var now = refNow != null ? new Date(refNow) : new Date();
+      var s = new Date(r.start);
+      var e = new Date(r.end);
+      if (isNaN(now.getTime()) || isNaN(s.getTime()) || isNaN(e.getTime())) return false;
+      return s <= now && e >= now;
+    }
     /** Mismo año y mes calendario en Chile (monthIndex 0–11). */
     function isInCalendarMonth(iso, year, monthIndex) {
       if (!iso) return false;
@@ -9595,7 +9604,7 @@
       conserjeShiftBlockerFor,
       currentUser, setSession, clearSession, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict,
       cleanupStaffDirectoryAndShiftOrphans,
-      canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, reservaOcurreEnDiaChile, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
+      canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, reservaOcurreEnDiaChile, reservaEnCursoAhora, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
       proveedorSelectOptionsHtml,
       uid, load, save, LS, persist: P,
@@ -17858,15 +17867,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
     }
 
-    /** Listado detallado de reservas con término hoy o futuro (misma regla que el KPI del panel). */
+    /** Detalle del panel: solo reservas en curso ahora (inicio ≤ ahora ≤ término). Oculta futuras del día y ya terminadas. */
     function buildDashboardReservasVigentesDetailHtml() {
-      var today = new Date();
+      var now = new Date();
       var allR = Array.isArray(G.state.reservas) ? G.state.reservas : [];
-      var vig = allR.filter(function (r) {
-        if (!r || !r.end) return false;
-        var end = new Date(r.end);
-        return !isNaN(end.getTime()) && end >= today;
-      });
+      var vig =
+        typeof G.reservaEnCursoAhora === "function"
+          ? allR.filter(function (r) {
+              return G.reservaEnCursoAhora(r, now);
+            })
+          : [];
       vig.sort(function (a, b) {
         return new Date(a.start) - new Date(b.start);
       });
@@ -17874,7 +17884,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var rows = vig.slice(0, limit);
       if (!rows.length) {
         return (
-          "<p class=\"page-desc\" style=\"margin:0\">No hay reservas con término hoy o a futuro.</p>" +
+          "<p class=\"page-desc\" style=\"margin:0\">No hay reservas <strong>en curso</strong> en este momento (ni las que empiezan más tarde ni las que ya terminaron).</p>" +
           "<p class=\"page-desc\" style=\"margin:0.5rem 0 0\">" +
           "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"reservas\">Ir a Reservas</button></p>"
         );
@@ -17887,9 +17897,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var note = String(r.note || "").trim();
         var noteShow = note ? (note.length > 140 ? G.escapeHtml(note.slice(0, 140)) + "…" : G.escapeHtml(note)) : "—";
         var regP = (r.registradoPor && String(r.registradoPor).trim()) || "—";
-        var trCls =
-          typeof G.reservaOcurreEnDiaChile === "function" && G.reservaOcurreEnDiaChile(r, today) ? "cg-res-row--hoy" : "";
-        html += "<tr" + (trCls ? " class=\"" + trCls + "\"" : "") + "><td><span class=\"cg-res-space-cell\">" +
+        html += "<tr class=\"cg-res-row--hoy\"><td><span class=\"cg-res-space-cell\">" +
           (typeof G.reservaEspacioIconHtml === "function" ? G.reservaEspacioIconHtml(r.space) : "") +
           "<strong>" +
           G.escapeHtml(r.space || "—") +
@@ -17908,12 +17916,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       html += "</tbody></table></div>";
       html +=
         "<p class=\"page-desc\" style=\"margin:0.5rem 0 0;font-size:0.78rem;opacity:0.9\">" +
-        "<strong>Fondo verde claro:</strong> reserva con vigencia en el día de hoy (calendario Chile).</p>" +
+        "Solo eventos <strong>en curso</strong> (inicio ≤ hora actual ≤ término). El contador superior «Reservas activas» sigue incluyendo todas las vigentes hasta su fecha de fin.</p>" +
         "<p class=\"page-desc\" style=\"margin:0.65rem 0 0;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;justify-content:space-between\">" +
         "<span>" +
         (vig.length > limit
-          ? "Mostrando las <strong>" + limit + "</strong> más próximas por fecha de inicio (de <strong>" + vig.length + "</strong> vigentes)."
-          : "<strong>" + vig.length + "</strong> reserva(s) vigente(s).") +
+          ? "Mostrando <strong>" + limit + "</strong> de <strong>" + vig.length + "</strong> en curso a la vez."
+          : "<strong>" + vig.length + "</strong> reserva(s) en curso ahora.") +
         "</span>" +
         "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"reservas\">Módulo Reservas</button></p>";
       return html;
@@ -18528,7 +18536,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact cg-dash-stat-card--with-footer-btn\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-box\" aria-hidden=\"true\"></i> Encomiendas</h3></div><div class=\"card-b cg-dash-stat-card-b--stack\"><div class=\"cg-dash-stat-card-b__top\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-enc-pend\">" + encPend + "</p><p class=\"page-desc\">Pendientes de retiro en conserjería</p><p class=\"page-desc\">Recibidas hoy: <strong id=\"dash-stat-enc-today\">" + encReceivedToday + "</strong></p><span id=\"dash-stat-enc-delta\">" + encRecDelta + "</span></div>" +
         (encPend ? "<div class=\"cg-dash-stat-card-b__footer\"><button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"encomiendas\">Ver módulo</button></div>" : "") + "</div></div>" +
         "</div>" +
-        "<div class=\"card cg-dash-nov-card cg-dash-res-detail-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-calendar-check\" aria-hidden=\"true\"></i> Detalle de reservas vigentes</h3><span class=\"page-desc\" style=\"margin:0;font-size:0.78rem;flex:1;text-align:right\">Misma regla que la tarjeta superior: vigencia hasta hoy o futura</span></div><div class=\"card-b\" id=\"cg-dash-res-detail-body\" aria-live=\"polite\">" +
+        "<div class=\"card cg-dash-nov-card cg-dash-res-detail-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-calendar-check\" aria-hidden=\"true\"></i> Reservas en curso ahora</h3><span class=\"page-desc\" style=\"margin:0;font-size:0.78rem;flex:1;text-align:right\">Solo las activas en este instante; no lista las de más tarde ni las ya cerradas</span></div><div class=\"card-b\" id=\"cg-dash-res-detail-body\" aria-live=\"polite\">" +
         buildDashboardReservasVigentesDetailHtml() +
         "</div></div>" +
         "<div class=\"cg-dash-charts-row\">" +
@@ -18842,7 +18850,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"cg-page-compact\">" +
         "<h1 class=\"page-title\">Reservas (espacios comunes)</h1>" +
         "<div class=\"cg-module-intro\">" +
-        "<p class=\"page-desc\">Gestión de salones, quincho, multicancha u otros espacios. Los nombres se definen en <strong>Administración → Configuración</strong>. Las reservas con término en el futuro (o hoy) cuentan como <em>vigentes</em>. En el listado y en el panel de control, el <strong>fondo verde claro</strong> marca las que tienen vigencia <strong>en el día de hoy</strong> (calendario Chile).</p></div>" +
+        "<p class=\"page-desc\">Gestión de salones, quincho, multicancha u otros espacios. Los nombres se definen en <strong>Administración → Configuración</strong>. Las reservas con término en el futuro (o hoy) cuentan como <em>vigentes</em>. En este listado, el <strong>fondo verde claro</strong> marca las que tienen vigencia <strong>en el día de hoy</strong> (calendario Chile). En el <strong>panel de control</strong>, la tabla «Reservas en curso ahora» solo muestra las que están <strong>activas en este momento</strong> (entre inicio y término).</p></div>" +
         "<div class=\"card cg-card-accent--res\"><div class=\"card-h\"><h3>Resumen</h3>" +
         "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"reservaOpen\" data-cg-empty=\"1\"><i class=\"fa-solid fa-plus\"></i> Nueva reserva</button></div>" +
         "<div class=\"card-b\"><div id=\"res-module-summary\" class=\"cg-reserva-summary\" aria-live=\"polite\"></div></div></div>" +
