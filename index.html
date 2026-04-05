@@ -17072,14 +17072,18 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return (end - new Date(v.at)) / 3600000;
     }
 
-    /** Opciones para &lt;datalist&gt;: sugerencias; el usuario puede escribir cualquier texto. */
-    function visitorParkingDatalistOptionsHtml() {
+    /** Sugerencias solo con la parte tras V- (el prefijo es fijo en el formulario). */
+    function visitorParkingSuffixDatalistOptionsHtml() {
       var cfg = G.state.config || {};
       var codes = cfg.visitorParkingCodes || [];
       if (!Array.isArray(codes)) return "";
       return codes
         .map(function (c) {
           var t = String(c).trim();
+          if (!t) return "";
+          if (t.length >= 2 && t.slice(0, 2).toLowerCase() === "v-") {
+            t = t.slice(2).trim();
+          }
           if (!t) return "";
           return "<option value=\"" + G.escapeAttr(t) + "\"></option>";
         })
@@ -17089,7 +17093,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
     function pageVisitas() {
       if (window.CG_ACTIONS && CG_ACTIONS.syncParkingSlotsFromBuilding) CG_ACTIONS.syncParkingSlotsFromBuilding();
-      var vpDatalist = visitorParkingDatalistOptionsHtml();
+      var vpSuffixDatalist = visitorParkingSuffixDatalistOptionsHtml();
       return (
         "<div class=\"cg-page-compact\">" +
         "<div class=\"cg-vis-module-head\">" +
@@ -17110,8 +17114,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"visitRegAdd\" data-cg-empty=\"1\"><i class=\"fa-solid fa-plus\"></i> Nueva visita</button></div></div>" +
         "<div class=\"card-b cg-vis-reg-card-b\">" +
         "<div id=\"vis-reg-stack\" class=\"cg-vis-reg-stack\" aria-live=\"polite\"></div>" +
-        "<datalist id=\"visitor-parking-suggest\">" +
-        vpDatalist +
+        "<datalist id=\"visitor-parking-suffix-suggest\">" +
+        vpSuffixDatalist +
         "</datalist></div></div></div>" +
         "<div id=\"vis-sub-hist\" class=\"cg-vis-sub-page\" data-vis-sub=\"hist\" hidden style=\"display:none\">" +
         "<div class=\"cg-module-intro\">" +
@@ -22241,6 +22245,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return best;
   }
 
+  /** Construye el código guardado a partir del sufijo (siempre con prefijo V-). */
+  function visitVisitorParkingSuffixToFullCode(suffixRaw) {
+    var s = String(suffixRaw || "").trim();
+    while (s.length >= 2 && s.slice(0, 2).toLowerCase() === "v-") {
+      s = s.slice(2).trim();
+    }
+    return "V-" + s;
+  }
+
   function visitFormApplyVehicularFromLast(form, last) {
     if (!last || !last.vehicular) return false;
     var filled = false;
@@ -22262,10 +22275,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
               .replace(/\s+/g, "");
       filled = true;
     }
-    var parkIn = form.querySelector('input[name="visitorParkingCode"]');
-    if (parkIn && !String(parkIn.value || "").trim()) {
+    var parkSuf = form.querySelector('input[name="visitorParkingSuffix"]');
+    if (parkSuf && !String(parkSuf.value || "").trim()) {
       var pk = String(last.visitorParkingCode || "").trim();
-      parkIn.value = pk || "V-";
+      while (pk.length >= 2 && pk.slice(0, 2).toLowerCase() === "v-") {
+        pk = pk.slice(2).trim();
+      }
+      parkSuf.value = pk;
       filled = true;
     }
     return filled;
@@ -22450,8 +22466,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"cg-form-grid-2\">" +
       "<div class=\"form-group\"><label>Patente</label><input name=\"plate\" class=\"cg-vis-plate\" placeholder=\"Ej: ABCD12\" autocomplete=\"off\" autocapitalize=\"characters\" spellcheck=\"false\" /></div>" +
       "<div class=\"form-group\"><label>Estacionamiento (visita)</label>" +
-      "<input type=\"text\" name=\"visitorParkingCode\" class=\"cg-vis-visitor-parking\" list=\"visitor-parking-suggest\" placeholder=\"Complete tras V- (ej. 3 → V-3) o elija sugerencia\" autocomplete=\"off\" /></div></div>" +
-      "<p class=\"page-desc\" style=\"margin:0.15rem 0 0;font-size:0.75rem;line-height:1.35\">Texto libre; si configuró sugerencias en Administración, aparecerán al escribir.</p></div></div>" +
+      "<div class=\"cg-vis-park-combo\" style=\"display:flex;align-items:stretch;width:100%;max-width:24rem;border:1px solid var(--gray-200);border-radius:8px;overflow:hidden;font:inherit;background:var(--white)\">" +
+      "<span class=\"cg-vis-park-prefix\" style=\"display:inline-flex;align-items:center;padding:0.45rem 0.55rem;background:color-mix(in srgb,var(--gray-200) 65%,transparent);font-weight:700;color:var(--gray-700);border-right:1px solid var(--gray-200);flex-shrink:0;user-select:none;font-size:0.95rem\" title=\"Prefijo fijo\">V-</span>" +
+      "<input type=\"text\" name=\"visitorParkingSuffix\" class=\"cg-vis-visitor-parking-suffix\" list=\"visitor-parking-suffix-suggest\" placeholder=\"Número o texto (ej. 3)\" autocomplete=\"off\" style=\"flex:1;min-width:0;border:0;outline:0;padding:0.45rem 0.65rem;font:inherit\" /></div></div></div>" +
+      "<p class=\"page-desc\" style=\"margin:0.15rem 0 0;font-size:0.75rem;line-height:1.35\">El código guardado siempre usa el prefijo <strong>V-</strong>. Las sugerencias de Administración muestran solo la parte que va después de V-.</p></div></div>" +
       "<button type=\"submit\" class=\"btn btn-primary\"><i class=\"fa-solid fa-right-to-bracket\"></i> Registrar ingreso</button></form></div></div>"
     );
   }
@@ -22559,7 +22577,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var ingreso = (fd.get("visitIngreso") || "persona").toString();
       var vehEl = form.querySelector(".cg-vis-veh");
       var veh = vehEl && vehEl.checked;
-      var vpc = veh ? (fd.get("visitorParkingCode") || "").toString().trim() : "";
+      var vpc = veh ? visitVisitorParkingSuffixToFullCode(fd.get("visitorParkingSuffix")) : "";
       var visitor = "";
       var proveedorId = "";
       var visitKind = "persona";
@@ -27037,14 +27055,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (el.classList && el.classList.contains("cg-vis-veh") && el.closest && el.closest(".cg-vis-reg-form")) {
           var vform = el.closest(".cg-vis-reg-form");
           var vex = vform.querySelector(".cg-vis-veh-extra");
-          var parkInp = vform.querySelector('input[name="visitorParkingCode"]');
+          var parkSuf = vform.querySelector('input[name="visitorParkingSuffix"]');
           var plateIn = vform.querySelector('input[name="plate"]');
           if (el.checked) {
             if (vex) vex.style.display = "block";
-            if (parkInp && !String(parkInp.value || "").trim()) parkInp.value = "V-";
           } else {
             if (vex) vex.style.display = "none";
-            if (parkInp) parkInp.value = "";
+            if (parkSuf) parkSuf.value = "";
             if (plateIn) plateIn.value = "";
           }
           return;
