@@ -4889,7 +4889,27 @@
     }
     .cg-res-next-list li:last-child { border-bottom: none; }
     .cg-res-next-space { font-weight: 700; color: var(--blue-800); }
+    .cg-res-next-space.cg-res-space-cell { align-items: center; }
     .cg-res-next-meta { color: var(--gray-600); font-size: 0.82rem; }
+    .cg-res-space-ic {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.72rem;
+      height: 1.72rem;
+      border-radius: 9px;
+      background: color-mix(in srgb, var(--blue-500) 14%, transparent);
+      color: var(--blue-600);
+      flex-shrink: 0;
+    }
+    .cg-res-space-ic i { font-size: 0.84rem; line-height: 1; }
+    .cg-res-space-cell {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      min-width: 0;
+    }
+    table.data-table td .cg-res-space-cell { vertical-align: middle; }
     table.data-table tr.cg-row-visit-open td { background: rgba(219, 234, 254, 0.4); }
     table.data-table tr.cg-row-visit-open:hover td { background: rgba(219, 234, 254, 0.58); }
     table.data-table tr.cg-row-visit-warn td { background: rgba(254, 243, 199, 0.55); }
@@ -9445,6 +9465,94 @@
       return out;
     }
 
+    /**
+     * Icono según nombre del espacio reservado (heurística por palabras clave ES/EN).
+     * HTML seguro para insertar junto al texto del espacio.
+     */
+    function reservaEspacioIconHtml(spaceRaw) {
+      var spaceStr = String(spaceRaw || "").trim();
+      var s = spaceStr
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+      var icon = "fa-door-open";
+      var typeHint = "Espacio común";
+      if (!spaceStr) {
+        icon = "fa-map-location-dot";
+        typeHint = "Sin nombre de espacio";
+      } else if (/\b(piscina|pileta|pool|natacion)\b/.test(s)) {
+        icon = "fa-person-swimming";
+        typeHint = "Piscina / uso acuático";
+      } else if (/\b(gimnasio|gym|fitness|musculacion)\b/.test(s)) {
+        icon = "fa-dumbbell";
+        typeHint = "Gimnasio / fitness";
+      } else if (/\b(quincho|parrilla|asado|barbacoa|bbq|barbecue)\b/.test(s)) {
+        icon = "fa-fire";
+        typeHint = "Quincho / parrilla";
+      } else if (/\b(salon|multiuso|multi-uso|evento|fiesta|banquete|matrimonio)\b/.test(s)) {
+        icon = "fa-champagne-glasses";
+        typeHint = "Salón / evento social";
+      } else if (/\b(reunion|reuniones|junta|juntas|meeting|directorio)\b/.test(s) || /\bsala (de )?(reunion|juntas)\b/.test(s)) {
+        icon = "fa-users";
+        typeHint = "Sala de reuniones";
+      } else if (/\b(terraza|azotea|roof)\b/.test(s)) {
+        icon = "fa-sun";
+        typeHint = "Terraza / exterior";
+      } else if (/\b(lavanderia|laundry)\b/.test(s)) {
+        icon = "fa-shirt";
+        typeHint = "Lavandería";
+      } else if (/\b(bici|bicicleta|bike|ciclo)\b/.test(s)) {
+        icon = "fa-bicycle";
+        typeHint = "Bicicletas";
+      } else if (/\b(estacionamiento|parking)\b/.test(s)) {
+        icon = "fa-square-parking";
+        typeHint = "Estacionamiento";
+      } else if (/\b(jardin|patio|verde|paisaj)\b/.test(s)) {
+        icon = "fa-seedling";
+        typeHint = "Jardín / patio";
+      } else if (/\b(comedor)\b/.test(s)) {
+        icon = "fa-plate-wheat";
+        typeHint = "Comedor";
+      } else if (/\b(cocina)\b/.test(s)) {
+        icon = "fa-utensils";
+        typeHint = "Cocina";
+      } else if (/\b(cine|multimedia|proyector)\b/.test(s)) {
+        icon = "fa-film";
+        typeHint = "Cine / multimedia";
+      } else if (/\b(biblioteca|lectura)\b/.test(s)) {
+        icon = "fa-book";
+        typeHint = "Biblioteca / lectura";
+      } else if (/\b(sauna|spa|hidromasaje|jacuzzi)\b/.test(s)) {
+        icon = "fa-hot-tub-person";
+        typeHint = "Sauna / spa";
+      } else if (/\b(cancha|futbol|tenis|basquet|deporte|paddle|padel)\b/.test(s)) {
+        icon = "fa-futbol";
+        typeHint = "Deportes / cancha";
+      } else if (/\b(juego|juegos|infantil|ninos)\b/.test(s)) {
+        icon = "fa-chess";
+        typeHint = "Juegos / infantil";
+      } else if (/\b(cowork|coworking|oficina)\b/.test(s)) {
+        icon = "fa-laptop";
+        typeHint = "Cowork / oficina";
+      } else if (/\b(taller|herramient)\b/.test(s)) {
+        icon = "fa-screwdriver-wrench";
+        typeHint = "Taller";
+      } else if (/\b(capilla|oratorio)\b/.test(s)) {
+        icon = "fa-place-of-worship";
+        typeHint = "Capilla";
+      }
+      var titleEsc = escapeAttr(typeHint);
+      return (
+        '<span class="cg-res-space-ic" role="img" aria-label="' +
+        titleEsc +
+        '" title="' +
+        titleEsc +
+        '"><i class="fa-solid ' +
+        icon +
+        '" aria-hidden="true"></i></span>'
+      );
+    }
+
     /* ┌─ 11. API pública (único objeto global del core) ─────────────────────────────── */
     window.CG = {
       APP_BRAND_NAME, MANUFACTURER_LOGO_URL,
@@ -9455,7 +9563,7 @@
       conserjeShiftBlockerFor,
       currentUser, setSession, clearSession, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict,
       cleanupStaffDirectoryAndShiftOrphans,
-      canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, normalizeActivityName, normalizeNovedadUsuarioTexto, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
+      canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
       proveedorSelectOptionsHtml,
       uid, load, save, LS, persist: P,
@@ -17639,7 +17747,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         return ymdYest && G.isSameChileYmd(v.at, ymdYest);
       }).length;
       var reservasActivas = reservas.filter(function (r) {
-        return r && r.end && new Date(r.end) >= today;
+        if (!r || !r.end) return false;
+        var end = new Date(r.end);
+        return !isNaN(end.getTime()) && end >= today;
       }).length;
       var encList = G.state.encomiendas || [];
       var encPend = encList.filter(function (e) {
@@ -17708,6 +17818,70 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             : "<p class=\"page-desc\">Sin novedades.</p>";
         } catch (eNov) {}
       }
+      var resDet = document.getElementById("cg-dash-res-detail-body");
+      if (resDet) {
+        try {
+          resDet.innerHTML = buildDashboardReservasVigentesDetailHtml();
+        } catch (eRes) {}
+      }
+    }
+
+    /** Listado detallado de reservas con término hoy o futuro (misma regla que el KPI del panel). */
+    function buildDashboardReservasVigentesDetailHtml() {
+      var today = new Date();
+      var allR = Array.isArray(G.state.reservas) ? G.state.reservas : [];
+      var vig = allR.filter(function (r) {
+        if (!r || !r.end) return false;
+        var end = new Date(r.end);
+        return !isNaN(end.getTime()) && end >= today;
+      });
+      vig.sort(function (a, b) {
+        return new Date(a.start) - new Date(b.start);
+      });
+      var limit = 15;
+      var rows = vig.slice(0, limit);
+      if (!rows.length) {
+        return (
+          "<p class=\"page-desc\" style=\"margin:0\">No hay reservas con término hoy o a futuro.</p>" +
+          "<p class=\"page-desc\" style=\"margin:0.5rem 0 0\">" +
+          "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"reservas\">Ir a Reservas</button></p>"
+        );
+      }
+      var html =
+        "<div class=\"data-table-wrap\" style=\"overflow:auto;max-height:min(420px,50vh)\"><table class=\"data-table cg-dash-res-detail-table\"><thead><tr>" +
+        "<th>Espacio</th><th>Depto</th><th>Inicio</th><th>Término</th><th>Nota</th><th>Registrado por</th></tr></thead><tbody>";
+      rows.forEach(function (r) {
+        var dep = G.deptById(r.deptId);
+        var note = String(r.note || "").trim();
+        var noteShow = note ? (note.length > 140 ? G.escapeHtml(note.slice(0, 140)) + "…" : G.escapeHtml(note)) : "—";
+        var regP = (r.registradoPor && String(r.registradoPor).trim()) || "—";
+        html +=
+          "<tr><td><span class=\"cg-res-space-cell\">" +
+          (typeof G.reservaEspacioIconHtml === "function" ? G.reservaEspacioIconHtml(r.space) : "") +
+          "<strong>" +
+          G.escapeHtml(r.space || "—") +
+          "</strong></span></td><td>" +
+          G.escapeHtml(dep ? dep.number : "—") +
+          "</td><td style=\"white-space:nowrap\">" +
+          G.fmtDate(r.start) +
+          "</td><td style=\"white-space:nowrap\">" +
+          G.fmtDate(r.end) +
+          "</td><td style=\"max-width:16rem;font-size:0.86rem;line-height:1.35\">" +
+          noteShow +
+          "</td><td style=\"font-size:0.86rem\">" +
+          G.escapeHtml(regP) +
+          "</td></tr>";
+      });
+      html += "</tbody></table></div>";
+      html +=
+        "<p class=\"page-desc\" style=\"margin:0.65rem 0 0;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;justify-content:space-between\">" +
+        "<span>" +
+        (vig.length > limit
+          ? "Mostrando las <strong>" + limit + "</strong> más próximas por fecha de inicio (de <strong>" + vig.length + "</strong> vigentes)."
+          : "<strong>" + vig.length + "</strong> reserva(s) vigente(s).") +
+        "</span>" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"reservas\">Módulo Reservas</button></p>";
+      return html;
     }
 
     function readDashActivityMonthKey() {
@@ -18319,6 +18493,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact cg-dash-stat-card--with-footer-btn\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-box\" aria-hidden=\"true\"></i> Encomiendas</h3></div><div class=\"card-b cg-dash-stat-card-b--stack\"><div class=\"cg-dash-stat-card-b__top\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-enc-pend\">" + encPend + "</p><p class=\"page-desc\">Pendientes de retiro en conserjería</p><p class=\"page-desc\">Recibidas hoy: <strong id=\"dash-stat-enc-today\">" + encReceivedToday + "</strong></p><span id=\"dash-stat-enc-delta\">" + encRecDelta + "</span></div>" +
         (encPend ? "<div class=\"cg-dash-stat-card-b__footer\"><button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"encomiendas\">Ver módulo</button></div>" : "") + "</div></div>" +
         "</div>" +
+        "<div class=\"card cg-dash-nov-card cg-dash-res-detail-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-calendar-check\" aria-hidden=\"true\"></i> Detalle de reservas vigentes</h3><span class=\"page-desc\" style=\"margin:0;font-size:0.78rem;flex:1;text-align:right\">Misma regla que la tarjeta superior: vigencia hasta hoy o futura</span></div><div class=\"card-b\" id=\"cg-dash-res-detail-body\" aria-live=\"polite\">" +
+        buildDashboardReservasVigentesDetailHtml() +
+        "</div></div>" +
         "<div class=\"cg-dash-charts-row\">" +
         "<div class=\"card cg-dash-chart-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-chart-column\" aria-hidden=\"true\"></i> Visitas: hoy vs ayer</h3></div><div class=\"card-b\">" +
         "<p class=\"cg-dash-chart-meta\" id=\"dash-visits-chart-summary\" aria-live=\"polite\"></p>" +
@@ -24905,7 +25082,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
               var dep = G.deptById(r.deptId);
               var regP = (r.registradoPor && String(r.registradoPor).trim()) || "";
               return (
-                "<li><span class=\"cg-res-next-space\">" +
+                "<li><span class=\"cg-res-next-space cg-res-space-cell\">" +
+                (typeof G.reservaEspacioIconHtml === "function" ? G.reservaEspacioIconHtml(r.space) : "") +
                 G.escapeHtml(r.space || "—") +
                 "</span><span class=\"cg-res-next-meta\">Depto " +
                 G.escapeHtml(dep ? dep.number : "—") +
@@ -24937,7 +25115,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     rows.forEach(function (r) {
       var dep = G.deptById(r.deptId);
       var regR = (r.registradoPor && String(r.registradoPor).trim()) || "—";
-      html += "<tr><td>" + G.escapeHtml(r.space) + "</td><td>" + G.escapeHtml(dep ? dep.number : "—") + "</td>";
+      html +=
+        "<tr><td><span class=\"cg-res-space-cell\">" +
+        (typeof G.reservaEspacioIconHtml === "function" ? G.reservaEspacioIconHtml(r.space) : "") +
+        G.escapeHtml(r.space || "—") +
+        "</span></td><td>" +
+        G.escapeHtml(dep ? dep.number : "—") +
+        "</td>";
       html += "<td>" + G.fmtDate(r.start) + "</td><td>" + G.fmtDate(r.end) + "</td><td>" + G.escapeHtml(r.note) + "</td>";
       html += "<td><div class=\"cg-reg-por-cell\"><span class=\"cg-reg-por-line\">Reserva registrada por <strong>" + G.escapeHtml(regR) + "</strong></span></div></td>";
       html +=
