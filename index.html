@@ -5525,6 +5525,17 @@
       line-height: 1.38;
       margin: 0.35rem 0 0;
     }
+    .tl-nov-note {
+      font-size: 0.78rem;
+      line-height: 1.4;
+      color: var(--gray-600);
+      margin: 0.45rem 0 0;
+      padding: 0.45rem 0.55rem;
+      background: var(--gray-50, #f9fafb);
+      border-radius: 6px;
+      border-left: 3px solid var(--gray-300);
+    }
+    .tl-nov-note strong { font-weight: 600; color: var(--gray-700); }
     /* Bitácora: conserje sin turno → registros distorsionados / ilegibles hasta abrir turno */
     .cg-nov-tl-shell {
       position: relative;
@@ -5555,6 +5566,19 @@
       pointer-events: auto;
       user-select: auto;
     }
+    /* Alerta al cerrar turno (modal) */
+    .cg-shift-close-alert {
+      margin: 0;
+      padding: 0.85rem 1rem;
+      background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+      border: 1px solid #ea580c;
+      border-radius: 10px;
+      color: #9a3412;
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+    .cg-shift-close-alert strong { color: #7c2d12; }
+    .cg-shift-close-alert ul { margin: 0.65rem 0 0; padding-left: 1.25rem; color: #7c2d12; }
     @media (prefers-reduced-motion: reduce) {
       #cg-nov-bitacora-card.cg-nov-bitacora--sin-turno .cg-nov-tl-shell .timeline {
         transition: none;
@@ -17204,6 +17228,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
               novRec
                 .map(function (n) {
                   var tx = n.text == null ? "" : String(n.text);
+                  var nt = String(n.note || "").trim();
+                  var tail = nt ? " · <span style=\"opacity:0.88\">" + G.escapeHtml(nt.slice(0, 40)) + (nt.length > 40 ? "…" : "") + "</span>" : "";
                   return (
                     "<li style=\"padding:0.5rem 0;border-bottom:1px solid var(--gray-200)\"><strong>#" +
                     (n.seq || "—") +
@@ -17212,6 +17238,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                     " — " +
                     G.escapeHtml(tx.slice(0, 80)) +
                     (tx.length > 80 ? "…" : "") +
+                    tail +
                     "</li>"
                   );
                 })
@@ -17482,7 +17509,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             "Aquí registra la apertura y el cierre de turno y, además, lo que debe quedar escrito entre conserjes y administración: incidentes, mantenimiento, seguridad, avisos a la comunidad y cualquier hecho relevante del edificio.",
           cards: [
             { ic: "fa-play", title: "Turno", txt: "Primera acción del día en recepción: abrir turno desde este módulo cuando corresponda." },
-            { ic: "fa-tags", title: "Categorías", txt: "Elija la categoría que mejor describa la novedad; facilita buscar después." },
+            { ic: "fa-tags", title: "Categorías", txt: "Elija la categoría que mejor describa la novedad; puede añadir además una nota opcional junto a la descripción." },
             { ic: "fa-filter", title: "Filtros y búsqueda", txt: "Por rango de fechas (hoy, semana, mes) o texto para localizar entradas antiguas." }
           ],
           list: [
@@ -17845,8 +17872,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"card cg-dash-nov-card\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-clipboard-list\" aria-hidden=\"true\"></i> Novedades recientes</h3></div><div class=\"card-b\" id=\"cg-dash-nov-recent-body\">" +
         (novRec.length ? "<ul style=\"list-style:none\">" + novRec.map(function (n) {
           var tx = n.text == null ? "" : String(n.text);
+          var nt = String(n.note || "").trim();
+          var tail = nt ? " · <span style=\"opacity:0.88\">" + G.escapeHtml(nt.slice(0, 40)) + (nt.length > 40 ? "…" : "") + "</span>" : "";
           return "<li style=\"padding:0.5rem 0;border-bottom:1px solid var(--gray-200)\"><strong>#" + (n.seq || "—") + "</strong> · " + G.fmtDate(n.at) +
-            " — " + G.escapeHtml(tx.slice(0, 80)) + (tx.length > 80 ? "…" : "") + "</li>";
+            " — " + G.escapeHtml(tx.slice(0, 80)) + (tx.length > 80 ? "…" : "") + tail + "</li>";
         }).join("") + "</ul>" : "<p class=\"page-desc\">Sin novedades.</p>") +
         "</div></div></div>"
       );
@@ -18169,11 +18198,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<form id=\"f-nov\" action=\"#\" method=\"post\">" +
         "<div class=\"form-group\"><label>Categoría</label><select name=\"category\" required>" + catsForm + "</select></div>" +
         "<div class=\"form-group\"><label>Descripción</label><textarea name=\"text\" rows=\"3\" required placeholder=\"Detalle de la novedad…\"></textarea></div>" +
+        "<div class=\"form-group\"><label>Nota <span style=\"font-weight:400;opacity:0.85\">(opcional)</span></label><textarea name=\"note\" rows=\"2\" placeholder=\"Aclaraciones, seguimiento, referencia interna…\"></textarea></div>" +
         "<button type=\"submit\" class=\"btn btn-primary\"><i class=\"fa-solid fa-book\"></i> Registrar</button></form></div></div>" +
         "<div class=\"card\" id=\"cg-nov-bitacora-card\"><div class=\"card-h\"><h3>Bitácora</h3><div class=\"toolbar cg-nov-bit-toolbar\">" +
         "<div class=\"cg-nov-q-wrap form-group\" style=\"margin:0\">" +
         "<label for=\"flt-nov-q\">Buscar</label>" +
-        "<input type=\"search\" id=\"flt-nov-q\" placeholder=\"Texto, # de registro, autor…\" autocomplete=\"off\" />" +
+        "<input type=\"search\" id=\"flt-nov-q\" placeholder=\"Texto, nota, # de registro, autor…\" autocomplete=\"off\" />" +
         "</div>" +
         "<div class=\"cg-nov-date-wrap form-group\" style=\"margin:0\">" +
         "<label for=\"flt-nov-d1\">Desde</label>" +
@@ -24478,9 +24508,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "Abra su turno en el recuadro <strong>Control de turno</strong> para poder registrar entradas en el libro.";
     var catEl = f.querySelector('[name="category"]');
     var textEl = f.querySelector('[name="text"]');
+    var noteEl = f.querySelector('[name="note"]');
     var subEl = f.querySelector('button[type="submit"]');
     if (catEl) catEl.disabled = locked;
     if (textEl) textEl.disabled = locked;
+    if (noteEl) noteEl.disabled = locked;
     if (subEl) subEl.disabled = locked;
     f.classList.toggle("cg-nov-form-locked", locked);
     if (wrap) wrap.classList.remove("cg-nov-form-locked");
@@ -24601,13 +24633,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
   };
 
-  A.shiftCierreTurno = function () {
-    if (
-      !confirm(
-        "¿Registrar cierre de turno? Se cerrará el tramo actual (desde que pulsó «Abrir turno»). Para iniciar otro tramo deberá pulsar «Abrir turno» de nuevo. Su sesión sigue activa."
-      )
-    )
-      return;
+  function shiftCierreTurnoExecute() {
     var u = G.currentUser();
     if (!u) return;
     if (u.role === "admin") {
@@ -24651,6 +24677,49 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       A.renderShiftPanelNovedades();
       if (document.getElementById("tl-nov")) A.renderNovedades();
     }
+  }
+
+  /** Muestra alerta en modal antes de cerrar el tramo (sustituye al confirm del navegador). */
+  A.shiftCierreTurno = function () {
+    var u = G.currentUser();
+    if (!u) return;
+    if (u.role === "admin") {
+      G.toast("El administrador no registra cierres de turno. Si queda un tramo antiguo suyo, elimínelo en Administración → Turnos.", "warn");
+      return;
+    }
+    var open = shiftFindOpen(G.state.shiftLogs || [], u.id);
+    if (!open) {
+      G.toast("No hay turno abierto", "warn");
+      return;
+    }
+    var startLab = G.fmtDate(open.startAt);
+    UI.openModal(
+      "<div class=\"modal modal-lg cg-shift-close-alert-modal\">" +
+        "<div class=\"modal-h\"><h4><i class=\"fa-solid fa-triangle-exclamation\" style=\"color:#ea580c;margin-right:0.35rem\" aria-hidden=\"true\"></i> Cerrar turno</h4>" +
+        "<button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal aria-label=\"Cancelar\">Cerrar</button></div>" +
+        "<div class=\"modal-b\">" +
+        "<div class=\"cg-shift-close-alert\" role=\"alert\">" +
+        "<strong>¿Confirma que desea cerrar su turno ahora?</strong>" +
+        "<ul>" +
+        "<li>Se finalizará el tramo abierto desde <strong>" +
+        G.escapeHtml(startLab) +
+        "</strong>.</li>" +
+        "<li>Hasta que pulse <strong>Abrir turno</strong> de nuevo, el sistema <strong>bloqueará</strong> visitas, encomiendas, reservas y nuevas entradas en el libro de novedades.</li>" +
+        "<li>Se añadirá automáticamente la marca <strong>Turno cerrado</strong> en la bitácora.</li>" +
+        "<li>Cerrar la sesión del navegador <strong>no cierra</strong> el turno: use este botón solo cuando termine su responsabilidad en recepción.</li>" +
+        "</ul></div>" +
+        "<p class=\"page-desc\" style=\"margin:0.9rem 0 0;line-height:1.45\">Su cuenta seguirá iniciada sesión; solo cambia el estado del turno de trabajo.</p>" +
+        "</div>" +
+        "<div class=\"modal-f\" style=\"display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:flex-end;width:100%\">" +
+        "<button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
+        "<button type=\"button\" class=\"btn btn-danger\" data-cg-act=\"shiftCierreTurnoConfirm\"><i class=\"fa-solid fa-clock\" aria-hidden=\"true\"></i> Sí, cerrar turno</button>" +
+        "</div></div>"
+    );
+  };
+
+  A.shiftCierreTurnoConfirm = function () {
+    UI.closeModal();
+    shiftCierreTurnoExecute();
   };
 
   A.shiftLogDel = function (id) {
@@ -24798,6 +24867,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           " " +
           (n.text || "") +
           " " +
+          (n.note || "") +
+          " " +
           (n.userName || "") +
           " " +
           (n.category || "")
@@ -24885,6 +24956,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<p>" +
         G.escapeHtml(n.text) +
         "</p>" +
+        (String(n.note || "").trim()
+          ? "<p class=\"tl-nov-note\"><strong>Nota:</strong> " + G.escapeHtml(String(n.note).trim()) + "</p>"
+          : "") +
         actions +
         "</div></div>"
       );
@@ -24915,6 +24989,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           G.toast(vt.message, "error");
           return;
         }
+        var vn = G.validate.textBlock((f.note && f.note.value) || "", { label: "Nota", min: 0, max: 4000 });
+        if (!vn.ok) {
+          G.toast(vn.message, "error");
+          return;
+        }
         var rec = {
           id: G.uid(),
           seq: nextNovedadSeq(),
@@ -24922,7 +25001,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           userId: u.id,
           userName: u.name,
           category: f.category.value,
-          text: vt.value
+          text: vt.value,
+          note: vn.value || ""
         };
         G.state.novedades = (Array.isArray(G.state.novedades) ? G.state.novedades : []).concat([rec]);
         if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("novedades");
@@ -24999,6 +25079,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"form-group\"><label>Texto en bitácora</label><textarea name=\"text\" rows=\"3\" required>" +
         G.escapeHtml(text) +
         "</textarea></div>" +
+        "<div class=\"form-group\"><label>Nota <span style=\"font-weight:400;opacity:0.85\">(opcional)</span></label><textarea name=\"note\" rows=\"2\" placeholder=\"Aclaración o detalle adicional…\">" +
+        G.escapeHtml(n ? String(n.note || "") : "") +
+        "</textarea></div>" +
         "<div class=\"form-group\"><label>Fecha y hora</label><input name=\"at\" type=\"datetime-local\" required value=\"" +
         G.escapeAttr(atVal) +
         "\" /></div>" +
@@ -25035,6 +25118,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     var text = vt.value;
+    var vnote = G.validate.textBlock((f.note && f.note.value) || "", { label: "Nota", min: 0, max: 4000 });
+    if (!vnote.ok) {
+      G.toast(vnote.message, "error");
+      return;
+    }
     var vAt = G.validate.datetimeLocal(f.at.value, "Fecha y hora");
     if (!vAt.ok) {
       G.toast(vAt.message, "error");
@@ -25047,6 +25135,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       category: "Turno",
       at: at,
       text: text,
+      note: vnote.value || "",
       userId: usr.id,
       userName: usr.name,
       shiftSegmentId: seg || ""
@@ -25165,6 +25254,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"form-group\"><label>Descripción</label><textarea name=\"text\" rows=\"4\">" +
         G.escapeHtml(n.text) +
         "</textarea></div>" +
+        "<div class=\"form-group\"><label>Nota <span style=\"font-weight:400;opacity:0.85\">(opcional)</span></label><textarea name=\"note\" rows=\"3\" placeholder=\"Aclaraciones, seguimiento, referencia interna…\">" +
+        G.escapeHtml(String(n.note || "")) +
+        "</textarea></div>" +
         "<input type=\"hidden\" name=\"nid\" value=\"" +
         G.escapeAttr(n.id) +
         "\" /></form></div>" +
@@ -25203,7 +25295,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.toast(vtx.message, "error");
       return;
     }
-    var patch = { category: f.category.value, text: vtx.value };
+    var vnx = G.validate.textBlock((f.note && f.note.value) || "", { label: "Nota", min: 0, max: 4000 });
+    if (!vnx.ok) {
+      G.toast(vnx.message, "error");
+      return;
+    }
+    var patch = { category: f.category.value, text: vtx.value, note: vnx.value || "" };
     if (uSave && uSave.role === "admin" && f.at && f.userId) {
       var vAtN = G.validate.datetimeLocal(f.at.value, "Fecha y hora del registro");
       if (!vAtN.ok) {
@@ -26884,6 +26981,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             G.escapeHtml(n.userName || "—") +
             "</td><td style=\"max-width:16rem;font-size:calc(0.908rem * 1.01)\">" +
             G.escapeHtml(n.text || "") +
+            (String(n.note || "").trim()
+              ? "<br><span class=\"page-desc\" style=\"margin:0.25rem 0 0;display:block\">Nota: " +
+                G.escapeHtml(String(n.note).trim()) +
+                "</span>"
+              : "") +
             "</td><td>" +
             vinc +
             "</td><td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"novTurnoOpen\" data-cg-id=\"" +
