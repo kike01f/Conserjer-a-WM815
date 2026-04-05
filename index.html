@@ -9785,7 +9785,7 @@
                     <div class="leyenda-item"><div class="leyenda-cuadro" style="background: var(--map-info);"></div><span style="font-size: 0.8rem;">Arriendo sin arrendatarios</span></div>
                     <div class="leyenda-item"><div class="leyenda-cuadro" style="background: var(--map-airbnb);"></div><span style="font-size: 0.8rem;">Airbnb / temporal</span></div>
                     <div class="leyenda-item"><div class="leyenda-cuadro" style="background: #ffffff; border: 2px dashed #94a3b8;"></div><span style="font-size: 0.8rem;">Vacía / disponible</span></div>
-                    <div class="leyenda-item"><div class="leyenda-cuadro" style="background: var(--map-nuevo-res);"></div><span style="font-size: 0.8rem;">Nuevo residente (7 días)</span></div>
+                    <div class="leyenda-item"><div class="leyenda-cuadro" style="background: var(--map-nuevo-res);"></div><span style="font-size: 0.8rem;">Nuevo residente (3 días)</span></div>
                     <div class="leyenda-item"><div class="leyenda-cuadro" style="border: 3px solid var(--map-airbnb); background: #ffffff;"></div><span style="font-size: 0.8rem;">Contrato de arriendo</span></div>
                 </div>
                 <p class="leyenda-tipos-residente" style="font-size: 0.78rem; color: var(--secondary-text); margin: 10px 0 0; line-height: 1.45; max-width: 52rem;">
@@ -10775,7 +10775,7 @@
             box-shadow: 0 0 0 2px rgba(84, 153, 199, 0.45), 0 4px 14px rgba(84, 153, 199, 0.35) !important;
         }
 
-        /* Unidades con residentes recién incorporados (últimos 7 días) - Debe ir al final para tener prioridad */
+        /* Unidades con residentes recién incorporados (últimos 3 días) - Debe ir al final para tener prioridad */
         .unit.occupied.new-resident {
             background: var(--map-nuevo-res) !important;
             color: #ffffff !important;
@@ -14577,7 +14577,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             
             buildingMap.innerHTML = '';
             const now = new Date();
-            const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+            const NUEVO_RESIDENTE_MAP_MS = 3 * 24 * 60 * 60 * 1000;
             const MAX_COLUMNAS_POR_PISO = 15;
             const structure = appState.config.buildingStructure || {};
             const units = appState.units || [];
@@ -14676,7 +14676,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                                 hasNewResident = unit.residents.some(r => {
                                     if (!r) return false;
                                     const regDate = r.registeredAt ? new Date(r.registeredAt) : (unit.createdAt ? new Date(unit.createdAt) : null);
-                                    return regDate && !isNaN(regDate.getTime()) && (now.getTime() - regDate.getTime()) >= 0 && (now.getTime() - regDate.getTime()) <= ONE_WEEK_MS;
+                                    return regDate && !isNaN(regDate.getTime()) && (now.getTime() - regDate.getTime()) >= 0 && (now.getTime() - regDate.getTime()) <= NUEVO_RESIDENTE_MAP_MS;
                                 });
                                 hasTenants = unit.residents.some(r => r && r.type && r.type.toLowerCase().includes('arrendatario'));
                             }
