@@ -9266,11 +9266,40 @@
       var PH = "\uE000";
       var chunks = [];
       var chunkIx = 0;
-      s = orig.replace(/\b(?:[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9.-]*[A-ZÁÉÍÓÚÑ0-9]|[A-ZÁÉÍÓÚÑ]{3,})\b/g, function (m) {
-        if (/^\d+$/.test(m)) return m;
-        chunks.push(m);
-        return PH + String(chunkIx++) + PH;
-      });
+
+      /** Si el usuario escribió casi todo en mayúsculas, no tratar cada palabra como sigla. */
+      function novedadLettersUpperRatio(str) {
+        var letters = str.match(/[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]/g);
+        if (!letters || letters.length < 3) return 0;
+        var n = 0;
+        var li;
+        for (li = 0; li < letters.length; li++) {
+          var ch = letters[li];
+          if (ch === ch.toUpperCase() && /[A-ZÁÉÍÓÚÑÜ]/.test(ch)) n++;
+        }
+        return n / letters.length;
+      }
+
+      var mostlyUpper = novedadLettersUpperRatio(orig) >= 0.72 && !/[a-záéíóúñ]/.test(orig);
+
+      if (!mostlyUpper) {
+        s = orig.replace(
+          /\b(?:[A-ZÁÉÍÓÚÑ]{2,}\d[A-ZÁÉÍÓÚÑ0-9]*|\d+[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9]*|[A-ZÁÉÍÓÚÑ]{2,}(?:\/[A-ZÁÉÍÓÚÑ]+)+|[A-ZÁÉÍÓÚÑ](?:\.[A-ZÁÉÍÓÚÑ])+(?:\.[A-ZÁÉÍÓÚÑ])*)\b/g,
+          function (m) {
+            chunks.push(m);
+            return PH + String(chunkIx++) + PH;
+          }
+        );
+        s = s.replace(
+          /\b(?:PDF|TV|GPS|RFID|USB|LCD|LED|DVD|CCTV|API|URL|HTTP|HTTPS|SMTP|HTML|XML|JSON|WLAN|HDMI|SSD|HDD|DNS|DHCP|VPN|LAN|WAN|OTP|PIN|SIM|GSM|LTE|NFC|IIoT|IOT|Wi-?Fi|OS\d{1,4})\b/gi,
+          function (m) {
+            chunks.push(m);
+            return PH + String(chunkIx++) + PH;
+          }
+        );
+      } else {
+        s = orig;
+      }
 
       var lower = s.toLocaleLowerCase("es");
 
@@ -9343,6 +9372,44 @@
         if (proper[k]) return proper[k];
         return w.toLowerCase();
       });
+
+      if (mostlyUpper) {
+        lower = lower.replace(/\btv\b/g, "TV");
+        lower = lower.replace(/\bpdf\b/g, "PDF");
+        lower = lower.replace(/\bgps\b/g, "GPS");
+        lower = lower.replace(/\brfid\b/g, "RFID");
+        lower = lower.replace(/\busb\b/g, "USB");
+        lower = lower.replace(/\blcd\b/g, "LCD");
+        lower = lower.replace(/\bled\b/g, "LED");
+        lower = lower.replace(/\bdvd\b/g, "DVD");
+        lower = lower.replace(/\bcctv\b/g, "CCTV");
+        lower = lower.replace(/\bapi\b/g, "API");
+        lower = lower.replace(/\burl\b/g, "URL");
+        lower = lower.replace(/\bhtml\b/g, "HTML");
+        lower = lower.replace(/\bxml\b/g, "XML");
+        lower = lower.replace(/\bjson\b/g, "JSON");
+        lower = lower.replace(/\bhdmi\b/g, "HDMI");
+        lower = lower.replace(/\blan\b/g, "LAN");
+        lower = lower.replace(/\bwan\b/g, "WAN");
+        lower = lower.replace(/\bvpn\b/g, "VPN");
+        lower = lower.replace(/\bdns\b/g, "DNS");
+        lower = lower.replace(/\bdhcp\b/g, "DHCP");
+        lower = lower.replace(/\botp\b/g, "OTP");
+        lower = lower.replace(/\bpin\b/g, "PIN");
+        lower = lower.replace(/\bnfc\b/g, "NFC");
+        lower = lower.replace(/\blte\b/g, "LTE");
+        lower = lower.replace(/\bgsm\b/g, "GSM");
+        lower = lower.replace(/\bsim\b/g, "SIM");
+        lower = lower.replace(/\bwifi\b/g, "WIFI");
+        lower = lower.replace(/\bwlan\b/g, "WLAN");
+        lower = lower.replace(/\bssd\b/g, "SSD");
+        lower = lower.replace(/\bhdd\b/g, "HDD");
+        lower = lower.replace(/\ba\/a\b/g, "A/A");
+        lower = lower.replace(/\ba\/c\b/g, "A/C");
+        lower = lower.replace(/\bos(\d{1,4})\b/g, function (_, d) {
+          return "OS" + d;
+        });
+      }
 
       var ci;
       for (ci = 0; ci < chunks.length; ci++) {
