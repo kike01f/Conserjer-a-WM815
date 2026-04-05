@@ -342,6 +342,55 @@
         } catch (eEv) {}
       }
 
+      /**
+       * Fusiona el array remoto de visitas con la copia en caché (mismo id): si local ya tenía salida
+       * y el snapshot remoto llegó sin outAt o con salida más antigua, se conserva la salida local.
+       * Evita que listas «abiertas» muestren visitas ya salidas por race / last-write-wins en Firestore.
+       */
+      function mergeVisitsPreserveLocalExit(remoteArr, localArr) {
+        if (!Array.isArray(remoteArr) || !Array.isArray(localArr)) return remoteArr;
+
+        function outMs(v) {
+          if (!v || v.outAt == null || v.outAt === "") return 0;
+          var t = new Date(v.outAt).getTime();
+          return t !== t ? 0 : t;
+        }
+
+        var localById = Object.create(null);
+        var i;
+        for (i = 0; i < localArr.length; i++) {
+          var lv = localArr[i];
+          if (lv && lv.id != null && String(lv.id) !== "") localById[String(lv.id)] = lv;
+        }
+
+        var out = [];
+        for (i = 0; i < remoteArr.length; i++) {
+          var rv = remoteArr[i];
+          if (!rv || rv.id == null || String(rv.id) === "") {
+            out.push(rv);
+            continue;
+          }
+          var loc = localById[String(rv.id)];
+          if (!loc) {
+            out.push(rv);
+            continue;
+          }
+          var rOut = outMs(rv);
+          var lOut = outMs(loc);
+          if (lOut > 0 && (rOut === 0 || lOut > rOut)) {
+            out.push(
+              Object.assign({}, rv, {
+                outAt: loc.outAt,
+                salidaRegistradoPor: loc.salidaRegistradoPor != null ? loc.salidaRegistradoPor : rv.salidaRegistradoPor
+              })
+            );
+          } else {
+            out.push(rv);
+          }
+        }
+        return out;
+      }
+
       window.cgFsBridge = {
         active: fsActive,
         kvCol: kvCol,
@@ -435,9 +484,34 @@
               return;
             }
           }
+
+          var remoteSnapshot = next;
+          if (shortKey === "visits") {
+            try {
+              var prevStr = window.__cgFsMem[shortKey];
+              if (typeof prevStr !== "string" || !prevStr) {
+                prevStr = tryLocalStorageGet(full);
+              }
+              if (typeof prevStr === "string" && prevStr) {
+                var locArr = JSON.parse(prevStr);
+                var remArr = JSON.parse(remoteSnapshot);
+                if (Array.isArray(locArr) && Array.isArray(remArr)) {
+                  var merged = mergeVisitsPreserveLocalExit(remArr, locArr);
+                  next = JSON.stringify(merged);
+                }
+              }
+            } catch (eVisMerge) {}
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
           window.__cgFsMem[shortKey] = next;
           if (window.__cgFsUseLocalCache) tryLocalStorageSet(full, next);
           cgDispatchCloudStorageApplied(shortKey, "modified");
+          if (shortKey === "visits" && next !== remoteSnapshot && window.cgFsBridge && typeof window.cgFsBridge.queueWrite === "function") {
+            window.cgFsBridge.queueWrite(shortKey, next);
+          }
         }
       };
 
@@ -1212,6 +1286,7 @@
       overflow: hidden;
       display: -webkit-box;
       -webkit-line-clamp: 2;
+      line-clamp: 2;
       -webkit-box-orient: vertical;
     }
     .cg-chat-reply-preview {
@@ -7067,14 +7142,38 @@
         .toUpperCase()
         .replace(/\s+/g, "");
     }
+    /** Booleano estricto: evita que JSON/sync deje vehicular como "true" o 1 y se clasifique mal (peatonal vs vehíc.). */
+    function __cgCoerceVisitVehicular(veRaw) {
+      if (veRaw === true || veRaw === 1) return true;
+      if (veRaw === false || veRaw === 0) return false;
+      if (veRaw == null || veRaw === "") return false;
+      if (typeof veRaw === "string") {
+        var s = veRaw.trim().toLowerCase();
+        if (s === "true" || s === "1" || s === "yes" || s === "si" || s === "sí") return true;
+        if (s === "false" || s === "0" || s === "no") return false;
+        return false;
+      }
+      if (typeof veRaw === "object") return false;
+      return !!veRaw;
+    }
     function __cgNormalizeVisitPlatesInArray(arr) {
       if (!Array.isArray(arr)) return arr;
-      return arr.map(function (v) {
-        if (!v || !v.vehicular) return v;
+      var changed = false;
+      var next = arr.map(function (v) {
+        if (!v || typeof v !== "object") return v;
+        var vehicular = __cgCoerceVisitVehicular(v.vehicular);
+        var boolOk = typeof v.vehicular === "boolean" && v.vehicular === vehicular;
+        if (!vehicular) {
+          if (boolOk) return v;
+          changed = true;
+          return Object.assign({}, v, { vehicular: false });
+        }
         var n = __cgNormalizeVisitPlateString(v.plate);
-        if ((v.plate || "") === n) return v;
-        return Object.assign({}, v, { plate: n });
+        if (boolOk && (v.plate || "") === n) return v;
+        changed = true;
+        return Object.assign({}, v, { vehicular: true, plate: n });
       });
+      return changed ? next : arr;
     }
 
     /* ┌─ 6. Estado de aplicación (getters/setters → load/save por clave) ─────────────── */
@@ -7092,7 +7191,9 @@
       set parkingSlots(v) { save("parkingSlots", v); },
       get bodegas() { return load("bodegas", []); },
       set bodegas(v) { save("bodegas", v); },
-      get visits() { return load("visits", []); },
+      get visits() {
+        return __cgNormalizeVisitPlatesInArray(load("visits", []));
+      },
       set visits(v) { save("visits", __cgNormalizeVisitPlatesInArray(v)); },
       get reservas() { return load("reservas", []); },
       set reservas(v) { save("reservas", v); },
@@ -24125,11 +24226,15 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   A.visitOut = function (id) {
     var vHit = (G.state.visits || []).find(function (x) { return x.id === id; });
-    if (vHit && visitIsPeatonalPersona(vHit)) {
+    if (!vHit) {
+      G.toast("No se encontró la visita (pudo sincronizarse o eliminarse).", "warn");
+      return;
+    }
+    if (visitIsPeatonalPersona(vHit)) {
       G.toast("Las visitas peatonales no llevan registro de salida.", "warn");
       return;
     }
-    if (vHit && vHit.vehicular) {
+    if (vHit.vehicular) {
       var dCf = G.deptById(vHit.deptId);
       var deptLbl = dCf ? String(dCf.number || "").trim() || "—" : "—";
       var plateCf = (vHit.plate && String(vHit.plate).trim()) || "—";
