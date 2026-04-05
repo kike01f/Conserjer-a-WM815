@@ -23492,7 +23492,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       } else if (!v.outAt) {
         elapsed = v.vehicular ? fmtDurVisit(v) : fmtDurOpenVisit(v);
       } else {
-        elapsed = "Salida " + G.fmtDate(v.outAt);
+        elapsed = v.vehicular ? fmtDurVisitPermanencia(v) : "Salida " + G.fmtDate(v.outAt);
       }
       var rowCls = "";
       if (v.vehicular && !visitIsProveedor(v)) {
@@ -23590,6 +23590,20 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var hh = Math.floor(h);
     var mm = Math.round((h - hh) * 60);
     return hh + " h " + mm + " min (dentro)";
+  }
+
+  /** Tiempo entre ingreso y salida (solo texto; la fecha de salida va en su columna). */
+  function fmtDurVisitPermanencia(v) {
+    var t0 = new Date(v.at).getTime();
+    var t1 = new Date(v.outAt).getTime();
+    if (!isFinite(t0) || !isFinite(t1)) return "—";
+    var ms = t1 - t0;
+    if (ms < 0) return "—";
+    var totalMin = Math.floor(ms / 60000);
+    var hh = Math.floor(totalMin / 60);
+    var mm = totalMin % 60;
+    if (totalMin === 0 && ms > 0) return "Menos de 1 min de permanencia";
+    return hh + " h " + mm + " min de permanencia";
   }
 
   function visitFormFormatRutAsYouType(raw) {
