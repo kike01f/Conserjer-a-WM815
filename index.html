@@ -25241,7 +25241,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             : "<span class=\"cg-prov-servicio-tag\">" + serv + "</span>";
         html +=
           "<tr class=\"cg-prov-row\"><td class=\"cg-prov-col-empresa\"><div class=\"cg-prov-empresa-cell\">" +
-          (typeof proveedorServicioIconHtml === "function" ? proveedorServicioIconHtml(p.tipoServicio) : "<span class=\"cg-prov-empresa-ic\" aria-hidden=\"true\"><i class=\"fa-solid fa-truck\"></i></span>") +
+          (typeof G.proveedorServicioIconHtml === "function"
+            ? G.proveedorServicioIconHtml(p.tipoServicio)
+            : "<span class=\"cg-prov-empresa-ic\" aria-hidden=\"true\"><i class=\"fa-solid fa-truck\"></i></span>") +
           "<strong class=\"cg-prov-empresa-txt\">" +
           G.escapeHtml(p.empresa) +
           "</strong></div></td><td class=\"cg-prov-col-servicio\">" +
