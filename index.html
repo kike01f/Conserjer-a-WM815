@@ -3840,13 +3840,15 @@
     }
     .card-h h3 { font-size: 1rem; flex: 1; min-width: 120px; }
     .cg-dash-stat-card .card-h h3,
-    .cg-dash-nov-card .card-h h3 {
+    .cg-dash-nov-card .card-h h3,
+    .cg-dash-veh-card .card-h h3 {
       display: flex;
       align-items: center;
       gap: 0.5rem;
     }
     .cg-dash-stat-card .card-h h3 > i:first-child,
-    .cg-dash-nov-card .card-h h3 > i:first-child {
+    .cg-dash-nov-card .card-h h3 > i:first-child,
+    .cg-dash-veh-card .card-h h3 > i:first-child {
       color: var(--blue-500);
       opacity: 0.92;
       font-size: 1.08em;
@@ -5125,6 +5127,9 @@
       min-width: 2.85rem;
     }
 
+    #dash-veh-card {
+      border-left: 4px solid #ea580c;
+    }
     #dash-veh-card .cg-dash-veh-item {
       border-radius: 10px;
       border: 1px solid var(--gray-200);
@@ -6763,15 +6768,34 @@
     html[data-cg-theme="dark"] .cg-vis-open-card h4 {
       color: var(--blue-400);
     }
+    html[data-cg-theme="dark"] #dash-veh-card {
+      border-left-color: #fb923c;
+    }
+    html[data-cg-theme="dark"] #dash-veh-card .cg-dash-veh-item {
+      border-color: var(--gray-300);
+      color: var(--gray-700);
+    }
+    html[data-cg-theme="dark"] #dash-veh-card .cg-dash-veh-item .page-desc {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] #dash-veh-card .cg-dash-veh-item strong {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] #dash-veh-card .cg-dash-veh-item--ok {
+      background: rgba(34, 197, 94, 0.12);
+      border-color: rgba(52, 211, 153, 0.42);
+    }
     html[data-cg-theme="dark"] #dash-veh-card .cg-dash-veh-item--warn {
       background: rgba(234, 179, 8, 0.14);
       border-color: rgba(250, 204, 21, 0.45);
-      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] #dash-veh-card .cg-dash-veh-item--grace {
+      background: rgba(251, 146, 60, 0.12);
+      border-color: rgba(251, 146, 60, 0.42);
     }
     html[data-cg-theme="dark"] #dash-veh-card .cg-dash-veh-item--multa {
       background: rgba(248, 113, 113, 0.14);
       border-color: rgba(251, 113, 133, 0.5);
-      color: var(--gray-800);
     }
     html[data-cg-theme="dark"] .cg-chat-reply-preview {
       background: var(--gray-100);
@@ -19970,7 +19994,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"card-h cg-dash-bday-card-h\"><h3><i class=\"fa-solid fa-cake-candles\" style=\"opacity:0.9\"></i> Hoy hay algo que celebrar</h3></div>" +
         "<div class=\"card-b\" id=\"dash-staff-bday-body\" aria-live=\"polite\"></div></div>" +
         "<div id=\"dash-scheduled-alerts-mount\" class=\"cg-dash-sched-mount\" aria-live=\"polite\"></div>" +
-        "<div class=\"card cg-dash-veh-card\" id=\"dash-veh-card\" style=\"display:none;border-left:4px solid #ea580c\">" +
+        "<div class=\"card cg-dash-veh-card\" id=\"dash-veh-card\" style=\"display:none\">" +
         "<div class=\"card-h\"><h3><i class=\"fa-solid fa-car-side\" style=\"opacity:0.85\"></i> Visitas vehiculares en curso</h3></div>" +
         "<div class=\"card-b\" id=\"dash-veh-alerts\" aria-live=\"polite\"></div></div>" +
         "<div class=\"cg-dash-stat-grid\">" +
