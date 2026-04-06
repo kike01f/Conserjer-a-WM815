@@ -5210,6 +5210,27 @@
     #dash-veh-card .cg-dash-veh-item--multa { background: #fff1f2; border-color: #fda4af; }
     #dash-veh-card .cg-dash-veh-item strong { color: var(--blue-900); }
     #dash-veh-card .cg-dash-veh-actions { margin-top: 0.45rem; display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+    #dash-prov-card {
+      border-left: 4px solid #d97706;
+    }
+    #dash-prov-card .cg-dash-prov-item {
+      border-radius: 10px;
+      border: 1px solid var(--gray-200);
+      padding: 0.65rem 0.75rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.86rem;
+      background: #fffbeb;
+    }
+    #dash-prov-card .cg-dash-prov-item:last-child { margin-bottom: 0; }
+    #dash-prov-card .cg-dash-prov-item strong { color: var(--blue-900); }
+    #dash-prov-card .cg-dash-prov-actions {
+      margin-top: 0.45rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      align-items: center;
+    }
+    #dash-prov-card .cg-dash-prov-ic { margin-right: 0.35rem; vertical-align: middle; }
     .cg-empty-table { text-align: center; padding: 1.35rem 1rem !important; color: var(--gray-500); font-size: calc(0.808rem * 1.01); }
 
     /* Módulos compactos: visitas, encomiendas, reservas, proveedores */
@@ -6877,6 +6898,20 @@
     html[data-cg-theme="dark"] #dash-veh-card .cg-dash-veh-item--multa {
       background: rgba(248, 113, 113, 0.14);
       border-color: rgba(251, 113, 133, 0.5);
+    }
+    html[data-cg-theme="dark"] #dash-prov-card {
+      border-left-color: #fbbf24;
+    }
+    html[data-cg-theme="dark"] #dash-prov-card .cg-dash-prov-item {
+      border-color: var(--gray-300);
+      background: rgba(234, 179, 8, 0.1);
+      color: var(--gray-700);
+    }
+    html[data-cg-theme="dark"] #dash-prov-card .cg-dash-prov-item .page-desc {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] #dash-prov-card .cg-dash-prov-item strong {
+      color: var(--gray-800);
     }
     html[data-cg-theme="dark"] .cg-chat-reply-preview {
       background: var(--gray-100);
@@ -19213,6 +19248,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return "<span class=\"cg-dash-delta cg-dash-delta--down\">" + d + " vs ayer</span>";
     }
 
+    function cgDashVisitIsProv(v) {
+      return !!(v && (v.visitKind === "proveedor" || v.proveedorId));
+    }
+
     function destroyDashboardCharts() {
       if (dashChartVisit) {
         try { dashChartVisit.destroy(); } catch (e) {}
@@ -19237,7 +19276,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var pNow = G.cgChileYmdParts(today);
       return {
         visitsToday: visits.filter(function (v) { return isSameDay(v.at, today); }).length,
+        visitsProvToday: visits.filter(function (v) {
+          return isSameDay(v.at, today) && cgDashVisitIsProv(v);
+        }).length,
         visitsYesterday: visits.filter(function (v) { return ymdYest && G.isSameChileYmd(v.at, ymdYest); }).length,
+        visitsProvYesterday: visits.filter(function (v) {
+          return ymdYest && G.isSameChileYmd(v.at, ymdYest) && cgDashVisitIsProv(v);
+        }).length,
         encToday: enc.filter(function (e) { return e.receivedAt && isSameDay(e.receivedAt, today); }).length,
         encYesterday: enc.filter(function (e) { return e.receivedAt && ymdYest && G.isSameChileYmd(e.receivedAt, ymdYest); }).length,
         yLbl: ymdYest ? G.cgChileFormatYmdWeekdayShort(ymdYest) : "—",
@@ -19247,7 +19292,22 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
     function cgApplyDashboardVisitEncSummariesToDom(m) {
       var sumV = document.getElementById("dash-visits-chart-summary");
-      if (sumV) sumV.textContent = "Ayer (" + m.yLbl + "): " + m.visitsYesterday + " · Hoy (" + m.tLbl + "): " + m.visitsToday;
+      if (sumV) {
+        sumV.textContent =
+          "Ayer (" +
+          m.yLbl +
+          "): " +
+          m.visitsYesterday +
+          " (proveed. " +
+          (m.visitsProvYesterday != null ? m.visitsProvYesterday : 0) +
+          ") · Hoy (" +
+          m.tLbl +
+          "): " +
+          m.visitsToday +
+          " (proveed. " +
+          (m.visitsProvToday != null ? m.visitsProvToday : 0) +
+          ")";
+      }
       var sumE = document.getElementById("dash-enc-chart-summary");
       if (sumE) sumE.textContent = "Por fecha de recepción en conserjería · Ayer: " + m.encYesterday + " · Hoy: " + m.encToday;
     }
@@ -19384,6 +19444,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var visitsToday = visits.filter(function (v) {
         return G.isSameDay(v.at, today);
       }).length;
+      var visitsProvToday = visits.filter(function (v) {
+        return G.isSameDay(v.at, today) && cgDashVisitIsProv(v);
+      }).length;
       var visitsYesterday = visits.filter(function (v) {
         return ymdYest && G.isSameChileYmd(v.at, ymdYest);
       }).length;
@@ -19400,6 +19463,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }).length;
       var elV = document.getElementById("dash-stat-visits-today");
       if (elV) elV.textContent = String(visitsToday);
+      var elVprov = document.getElementById("dash-stat-visits-prov-today");
+      if (elVprov) elVprov.textContent = String(visitsProvToday);
+      var elVpart = document.getElementById("dash-stat-visits-part-today");
+      if (elVpart) elVpart.textContent = String(Math.max(0, visitsToday - visitsProvToday));
       var elDeltaV = document.getElementById("dash-stat-visits-delta");
       if (elDeltaV) elDeltaV.innerHTML = dashCompareDelta(visitsToday, visitsYesterday);
       var elRcur = document.getElementById("dash-stat-reservas-en-curso");
@@ -20115,6 +20182,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       const reservasArr = G.state.reservas || [];
       const novedadesArr = G.state.novedades || [];
       const visitsToday = visitsArr.filter(v => G.isSameDay(v.at, today)).length;
+      const visitsProvToday = visitsArr.filter(function (v) {
+        return G.isSameDay(v.at, today) && (v.visitKind === "proveedor" || v.proveedorId);
+      }).length;
+      const visitsPartToday = Math.max(0, visitsToday - visitsProvToday);
       const visitsYesterday = visitsArr.filter(v => ymdYest && G.isSameChileYmd(v.at, ymdYest)).length;
       const resDashM = cgReservasDashboardMetrics(reservasArr, today);
       const encList = G.state.encomiendas || [];
@@ -20154,8 +20225,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"card cg-dash-veh-card\" id=\"dash-veh-card\" style=\"display:none\">" +
         "<div class=\"card-h\"><h3><i class=\"fa-solid fa-car-side\" style=\"opacity:0.85\"></i> Visitas vehiculares en curso</h3></div>" +
         "<div class=\"card-b\" id=\"dash-veh-alerts\" aria-live=\"polite\"></div></div>" +
+        "<div class=\"card cg-dash-prov-card\" id=\"dash-prov-card\" style=\"display:none\">" +
+        "<div class=\"card-h\"><h3><i class=\"fa-solid fa-truck\" style=\"opacity:0.85\"></i> Proveedores dentro del edificio</h3></div>" +
+        "<div class=\"card-b\" id=\"dash-prov-alerts\" aria-live=\"polite\"></div></div>" +
         "<div class=\"cg-dash-stat-grid\">" +
-        "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-user-group\" aria-hidden=\"true\"></i> Visitas hoy</h3></div><div class=\"card-b\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-visits-today\">" + visitsToday + "</p><p class=\"page-desc\">Entradas registradas con fecha de hoy</p><span id=\"dash-stat-visits-delta\">" + visDelta + "</span></div></div>" +
+        "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-user-group\" aria-hidden=\"true\"></i> Visitas hoy</h3></div><div class=\"card-b\"><p class=\"cg-dash-stat-val\" id=\"dash-stat-visits-today\">" + visitsToday + "</p><p class=\"page-desc\">Entradas registradas con fecha de hoy</p>" +
+        "<p class=\"page-desc\" style=\"margin:0.4rem 0 0;font-size:0.82rem;line-height:1.4\">Desglose: <strong id=\"dash-stat-visits-prov-today\">" +
+        visitsProvToday +
+        "</strong> proveedor(es) · <strong id=\"dash-stat-visits-part-today\">" +
+        visitsPartToday +
+        "</strong> particular(es)</p><span id=\"dash-stat-visits-delta\">" + visDelta + "</span></div></div>" +
         "<div class=\"card cg-dash-stat-card cg-dash-stat-card--compact\"><div class=\"card-h\"><h3><i class=\"fa-solid fa-calendar-check\" aria-hidden=\"true\"></i> Reservas</h3></div><div class=\"card-b cg-dash-res-kpi-split\">" +
         "<div class=\"cg-dash-res-kpi-row cg-dash-res-kpi-row--ahora\"><span class=\"cg-dash-res-kpi-val\" id=\"dash-stat-reservas-en-curso\">" +
         resDashM.enCursoN +
@@ -20210,6 +20289,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         checkVehicularVisitWarnings();
         if (window.CG_ACTIONS && CG_ACTIONS.updateVisitLiveDurations) CG_ACTIONS.updateVisitLiveDurations();
         if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardVehAlerts) CG_ACTIONS.renderDashboardVehAlerts();
+        if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardProvVisits) CG_ACTIONS.renderDashboardProvVisits();
         if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardStaffBirthdays) CG_ACTIONS.renderDashboardStaffBirthdays();
         if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardScheduledAlerts) CG_ACTIONS.renderDashboardScheduledAlerts();
         if (window.CG && typeof window.CG.applyFestiveAmbienceToDom === "function") window.CG.applyFestiveAmbienceToDom();
@@ -20610,6 +20690,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         } catch (eDashSync) {}
       }
       if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardVehAlerts) CG_ACTIONS.renderDashboardVehAlerts();
+      if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardProvVisits) CG_ACTIONS.renderDashboardProvVisits();
       if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardStaffBirthdays) CG_ACTIONS.renderDashboardStaffBirthdays();
       if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardScheduledAlerts) CG_ACTIONS.renderDashboardScheduledAlerts();
       if (window.CG && typeof window.CG.applyFestiveAmbienceToDom === "function") window.CG.applyFestiveAmbienceToDom();
@@ -20870,6 +20951,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           try {
             A.renderDashboardVehAlerts();
           } catch (eDv) {}
+        }
+        if (A && typeof A.renderDashboardProvVisits === "function") {
+          try {
+            A.renderDashboardProvVisits();
+          } catch (eDpv) {}
         }
         if (dash) updateDashboardChartsSummaryAndActivity();
       }
@@ -23456,6 +23542,91 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       .join("");
   };
 
+  A.renderDashboardProvVisits = function () {
+    var el = document.getElementById("dash-prov-alerts");
+    var card = document.getElementById("dash-prov-card");
+    if (!el || !card) return;
+    var rows = (G.state.visits || []).filter(function (v) {
+      return visitIsProveedor(v) && !v.outAt;
+    });
+    if (!rows.length) {
+      card.style.display = "none";
+      el.innerHTML = "";
+      return;
+    }
+    card.style.display = "";
+    rows.sort(function (a, b) {
+      return new Date(a.at) - new Date(b.at);
+    });
+    el.innerHTML = rows
+      .map(function (v) {
+        var dep = G.deptById(v.deptId);
+        var deptLbl = dep ? dep.number : "—";
+        var pv = proveedorById(v.proveedorId);
+        var provIc =
+          pv && typeof G.proveedorServicioIconHtml === "function"
+            ? "<span class=\"cg-dash-prov-ic\">" + G.proveedorServicioIconHtml(pv.tipoServicio, "compact") + "</span>"
+            : "<span class=\"cg-dash-prov-ic\"><i class=\"fa-solid fa-truck\" aria-hidden=\"true\"></i></span>";
+        var empresaHead = pv && String(pv.empresa || "").trim() ? String(pv.empresa).trim() : String(v.visitor || "—");
+        var visTrim = String(v.visitor || "").trim();
+        var subVisitor =
+          pv && String(pv.empresa || "").trim() && visTrim && visTrim.toLowerCase() !== String(pv.empresa).trim().toLowerCase()
+            ? "Visitante: " + G.escapeHtml(visTrim) + " · "
+            : "";
+        var rutLine = v.visitorRut ? "RUT " + G.escapeHtml(v.visitorRut) + " · " : "";
+        var plateNorm = "";
+        if (v.vehicular) {
+          plateNorm =
+            typeof G.normalizeVisitPlateString === "function"
+              ? G.normalizeVisitPlateString(v.plate)
+              : String(v.plate || "")
+                  .trim()
+                  .toUpperCase()
+                  .replace(/\s+/g, "");
+        }
+        var plateLine = v.vehicular ? "Patente " + G.escapeHtml(plateNorm || "—") + " · " : "";
+        var mock = { at: v.at };
+        var tlab = v.vehicular ? fmtDurVisit(mock) : fmtDurOpenVisit(mock);
+        var atEsc = G.escapeAttr ? G.escapeAttr(String(v.at)) : String(v.at).replace(/"/g, "&quot;");
+        var liveSpan =
+          "<span data-cg-visit-live=\"1\" data-at=\"" +
+          atEsc +
+          "\" data-veh=\"" +
+          (v.vehicular ? "1" : "0") +
+          "\" data-out=\"0\"><strong>" +
+          G.escapeHtml(tlab) +
+          "</strong></span>";
+        var tipoServ =
+          pv && String(pv.tipoServicio || "").trim()
+            ? "<div class=\"page-desc\" style=\"margin:0.15rem 0 0;font-size:0.75rem\">" + G.escapeHtml(String(pv.tipoServicio).trim()) + "</div>"
+            : "";
+        return (
+          "<div class=\"cg-dash-prov-item\"><div><strong>Depto " +
+          G.escapeHtml(deptLbl) +
+          "</strong> · " +
+          provIc +
+          "<strong>" +
+          G.escapeHtml(empresaHead) +
+          "</strong></div>" +
+          "<div class=\"page-desc\" style=\"margin:0.25rem 0 0;font-size:0.8rem;line-height:1.35\">" +
+          subVisitor +
+          rutLine +
+          plateLine +
+          "Tiempo: " +
+          liveSpan +
+          "</div>" +
+          tipoServ +
+          "<div class=\"cg-dash-prov-actions\">" +
+          "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"visitOut\" data-cg-id=\"" +
+          G.escapeHtml(v.id) +
+          "\">Salida</button> " +
+          "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-nav=\"visitas\">Ir a Visitas</button></div></div>"
+        );
+      })
+      .join("");
+    if (A.updateVisitLiveDurations) A.updateVisitLiveDurations();
+  };
+
   function encTipoLabel(tipo) {
     var t = String(tipo || "").toLowerCase();
     if (t === "propietario") return "Propietario";
@@ -24845,6 +25016,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (options.toastMsg) G.toast(options.toastMsg, options.toastType || "success");
     A.renderVisitas();
     if (A.renderDashboardVehAlerts) A.renderDashboardVehAlerts();
+    if (A.renderDashboardProvVisits) A.renderDashboardProvVisits();
     return true;
   }
 
@@ -26848,6 +27020,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     G.toast("Salida registrada");
     A.renderVisitas();
     if (A.renderDashboardVehAlerts) A.renderDashboardVehAlerts();
+    if (A.renderDashboardProvVisits) A.renderDashboardProvVisits();
   };
 
   A.visitDel = function (id) {
@@ -26875,6 +27048,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     G.toast("Visita eliminada");
     A.renderVisitas();
     if (A.renderDashboardVehAlerts) A.renderDashboardVehAlerts();
+    if (A.renderDashboardProvVisits) A.renderDashboardProvVisits();
     UI.checkVehicularVisitWarnings();
   };
 
