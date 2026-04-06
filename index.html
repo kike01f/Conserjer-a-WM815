@@ -6417,6 +6417,174 @@
       color: var(--gray-800) !important;
       border-color: var(--gray-300) !important;
     }
+
+    /* Panel principal (#app-main): texto y bloques con colores fijos en CSS */
+    html[data-cg-theme="dark"] #app-main {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .parking-grid.pk-map-root {
+      background: var(--card-color);
+      border-color: var(--gray-200);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .parking-space:not(.assigned):not(.rental-assigned):not(.available) {
+      background: var(--gray-100);
+      color: var(--gray-800);
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .parking-space:not(.assigned):not(.rental-assigned) .pk-code {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .parking-space:not(.assigned):not(.rental-assigned) .pk-meta {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .parking-space.available {
+      color: #86efac;
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .parking-space.available .pk-code {
+      color: #bbf7d0;
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .parking-space.available .pk-meta {
+      color: #86efac;
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .pk-legend {
+      background: var(--card-color);
+      color: var(--gray-800);
+      border-color: var(--gray-200);
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .pk-legend .pk-swatch {
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .map-intro-dark {
+      color: var(--gray-800);
+      background: var(--card-color);
+      border-color: var(--gray-200);
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .map-intro-dark strong {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .pk-stat {
+      background: var(--card-color);
+      border-color: var(--gray-200);
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .pk-stat-val {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-map-estacionamientos .pk-stat-lbl {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .cg-dash-act-table tr:hover td {
+      background: rgba(148, 163, 184, 0.12);
+    }
+    html[data-cg-theme="dark"] .cg-dash-res-detail-table tr.cg-res-row--hoy td,
+    html[data-cg-theme="dark"] .cg-dash-res-detail-table tr.cg-res-row--en-curso td {
+      background: rgba(34, 197, 94, 0.16);
+    }
+    html[data-cg-theme="dark"] .cg-dash-res-detail-table tr.cg-res-row--hoy:hover td,
+    html[data-cg-theme="dark"] .cg-dash-res-detail-table tr.cg-res-row--en-curso:hover td {
+      background: rgba(34, 197, 94, 0.24);
+    }
+    html[data-cg-theme="dark"] .cg-dash-res-detail-table tr.cg-res-row--futura td {
+      background: rgba(59, 130, 246, 0.14);
+    }
+    html[data-cg-theme="dark"] .cg-dash-res-detail-table tr.cg-res-row--futura:hover td {
+      background: rgba(59, 130, 246, 0.22);
+    }
+    html[data-cg-theme="dark"] .cg-dash-res-kpi-row {
+      background: rgba(34, 197, 94, 0.12);
+    }
+    html[data-cg-theme="dark"] .cg-dash-res-kpi-row--prox {
+      background: rgba(59, 130, 246, 0.14);
+    }
+    html[data-cg-theme="dark"] .cg-dash-res-kpi-row--ahora .cg-dash-res-kpi-val {
+      color: #6ee7b7;
+    }
+    html[data-cg-theme="dark"] .cg-dash-res-kpi-row--prox .cg-dash-res-kpi-val {
+      color: #93c5fd;
+    }
+    html[data-cg-theme="dark"] .cg-res-next-space {
+      color: var(--blue-400);
+    }
+    html[data-cg-theme="dark"] .cg-stat-chip .cg-stat-chip-val {
+      color: var(--blue-400);
+    }
+    html[data-cg-theme="dark"] .cg-vis-open-card h4 {
+      color: var(--blue-400);
+    }
+    html[data-cg-theme="dark"] #dash-veh-card .cg-dash-veh-item--warn {
+      background: rgba(234, 179, 8, 0.14);
+      border-color: rgba(250, 204, 21, 0.45);
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] #dash-veh-card .cg-dash-veh-item--multa {
+      background: rgba(248, 113, 113, 0.14);
+      border-color: rgba(251, 113, 133, 0.5);
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-chat-reply-preview {
+      background: var(--card-color);
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .cg-chat-reply-preview-text {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-reply-preview-close {
+      background: var(--gray-100);
+      color: var(--gray-700);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-reply-preview-close:hover {
+      background: var(--gray-200);
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-chat-bubble-reply-snippet {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .cg-chat-form {
+      background: var(--gray-100);
+      border-top-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .cg-chat-form textarea {
+      color: var(--gray-800);
+      background: var(--gray-50);
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .cg-chat-form textarea::placeholder {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-emoji-toggle[aria-expanded="true"] {
+      background: color-mix(in srgb, var(--blue-500) 22%, var(--gray-100));
+      color: var(--blue-400);
+    }
+    html[data-cg-theme="dark"] #modal-root .modal {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] #modal-root .modal-h h4 {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .tl-cat.tl-cat-otros {
+      background: var(--gray-200);
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .tl-card.tl-card-nov-multa {
+      background: linear-gradient(90deg, rgba(234, 179, 8, 0.12) 0%, var(--gray-50) 14%);
+    }
+    html[data-cg-theme="dark"] .tl-card.tl-turno-card {
+      background: linear-gradient(145deg, rgba(13, 148, 136, 0.18) 0%, var(--gray-100) 45%, var(--gray-50) 100%);
+      border-color: #2dd4bf;
+    }
+    textarea.cg-plain-textarea {
+      width: 100%;
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      line-height: 1.45;
+      color: var(--gray-800);
+      background: var(--gray-100);
+      border: 1px solid var(--gray-300);
+      border-radius: 8px;
+      padding: 0.5rem;
+      box-sizing: border-box;
+    }
+
     html[data-cg-theme="dark"] #dept-module-host-inner {
       --gray-50: #121820;
       --gray-100: #181f2a;
@@ -9417,6 +9585,9 @@
         document.documentElement.setAttribute("data-cg-theme", p.theme);
         document.documentElement.removeAttribute("data-cg-mode");
       }
+      try {
+        window.dispatchEvent(new CustomEvent("cg-theme-change", { detail: { theme: p.theme } }));
+      } catch (eThEv) {}
     }
 
     function hexToRgb(hex) {
@@ -18150,10 +18321,18 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         var b = st.getPropertyValue("--blue-500").trim();
         if (b) blue = b;
       } catch (e2) {}
-      var grayBar = "rgba(148, 163, 184, 0.62)";
+      var isDarkChart =
+        document.documentElement &&
+        document.documentElement.getAttribute("data-cg-theme") === "dark";
+      var grayBar = isDarkChart ? "rgba(148, 163, 184, 0.35)" : "rgba(148, 163, 184, 0.62)";
       var amber = "#d97706";
 
       function barOptions(yesterdayCaption, todayCaption, unitWord) {
+        var isDark =
+          document.documentElement &&
+          document.documentElement.getAttribute("data-cg-theme") === "dark";
+        var tickColor = isDark ? "#9eb0c8" : "#475569";
+        var gridColor = isDark ? "rgba(148, 163, 184, 0.12)" : "rgba(148, 163, 184, 0.18)";
         return {
           responsive: true,
           maintainAspectRatio: false,
@@ -18172,11 +18351,14 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             }
           },
           scales: {
-            x: { grid: { display: false }, ticks: { font: { size: 11 }, maxRotation: 0 } },
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 11 }, maxRotation: 0, color: tickColor }
+            },
             y: {
               beginAtZero: true,
-              ticks: { stepSize: 1, precision: 0 },
-              grid: { color: "rgba(148, 163, 184, 0.18)" }
+              ticks: { stepSize: 1, precision: 0, color: tickColor },
+              grid: { color: gridColor }
             }
           }
         };
@@ -19869,6 +20051,13 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       bindPageEvents, checkVehicularVisitWarnings, renderDashboardCharts,
       refreshAfterRemoteLsKey
     };
+    window.addEventListener("cg-theme-change", function () {
+      try {
+        if (typeof getCurrentView === "function" && getCurrentView() === "dashboard" && typeof renderDashboardCharts === "function") {
+          renderDashboardCharts();
+        }
+      } catch (eThemeCh) {}
+    });
   })();
   </script>
 
@@ -21463,8 +21652,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"modal-b\" style=\"max-height:min(70vh,520px)\">" +
       "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Vista de consulta (mismos datos que en <strong>Residentes</strong>). Para modificar residentes, notas o usos, abra ese módulo.</p>" +
       "<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.5rem;margin-bottom:0.75rem\">" +
-      "<div style=\"padding:0.5rem 0.65rem;background:var(--gray-50);border-radius:8px;border:1px solid var(--gray-200)\"><div style=\"font-size:0.7rem;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.03em\">Uso</div><strong style=\"color:#0f172a\">" + G.escapeHtml(tipoUsoUnidadDisplay(unit.tipoUso)) + "</strong></div>" +
-      "<div style=\"padding:0.5rem 0.65rem;background:var(--gray-50);border-radius:8px;border:1px solid var(--gray-200)\"><div style=\"font-size:0.7rem;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.03em\">Residentes</div><strong style=\"color:#0f172a\">" + String(residents.length) + "</strong></div></div>" +
+      "<div style=\"padding:0.5rem 0.65rem;background:var(--gray-50);border-radius:8px;border:1px solid var(--gray-200)\"><div style=\"font-size:0.7rem;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.03em\">Uso</div><strong style=\"color:var(--gray-800)\">" + G.escapeHtml(tipoUsoUnidadDisplay(unit.tipoUso)) + "</strong></div>" +
+      "<div style=\"padding:0.5rem 0.65rem;background:var(--gray-50);border-radius:8px;border:1px solid var(--gray-200)\"><div style=\"font-size:0.7rem;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.03em\">Residentes</div><strong style=\"color:var(--gray-800)\">" + String(residents.length) + "</strong></div></div>" +
       "<div style=\"margin-bottom:0.65rem\"><div style=\"font-size:0.75rem;font-weight:600;color:var(--gray-700);margin-bottom:0.25rem\">Estacionamientos asignados</div>" + parkBlock + "</div>" +
       rParkBlock +
       "<div style=\"margin-bottom:0.65rem\"><div style=\"font-size:0.75rem;font-weight:600;color:var(--gray-700);margin-bottom:0.25rem\">Bodegas</div>" + bodBlock + "</div>" +
@@ -23270,7 +23459,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "</p>" +
       "<p class=\"page-desc\" style=\"margin-top:0\">Sin servidor SMTP: envío desde su cliente habitual. Si envía solo con copiar/pegar, use <em>Marcar correo enviado</em>. Opcional: <em>Copiar diseño HTML</em> para colores.</p>" +
       "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje que se envía</p>" +
-      "<textarea id=\"" + taId + "\" style=\"width:100%;min-height:180px;font-family:ui-monospace,monospace;font-size:0.8rem;line-height:1.45;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:0.5rem\">" + G.escapeHtml(plain) + "</textarea>" +
+      "<textarea id=\"" + taId + "\" class=\"cg-plain-textarea\" style=\"min-height:180px\">" + G.escapeHtml(plain) + "</textarea>" +
       "<p class=\"page-desc\" style=\"margin:0.75rem 0 0.25rem;font-size:0.8rem\">Vista previa con colores (solo referencia / copiar HTML)</p>" +
       "<div class=\"email-html-preview\"><div id=\"enc-mail-preview\" class=\"email-html-preview-inner\"></div></div>" +
       "<div class=\"toolbar\" style=\"margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem\">" +
@@ -23345,7 +23534,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       ". <strong>Abrir correo</strong> abre el cliente y <strong>deja constancia en el historial</strong> (check).</p>" +
       "<p class=\"page-desc\" style=\"margin-top:0\">Sin servidor SMTP: envío desde su cliente habitual. Si envía solo con copiar/pegar, use <em>Marcar correo enviado</em>. <em>Copiar diseño HTML</em> para colores en Gmail u Outlook.</p>" +
       "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje (texto plano para mailto)</p>" +
-      "<textarea id=\"" + taId + "\" style=\"width:100%;min-height:200px;font-family:ui-monospace,monospace;font-size:0.8rem;line-height:1.45;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:0.5rem\">" + G.escapeHtml(plain) + "</textarea>" +
+      "<textarea id=\"" + taId + "\" class=\"cg-plain-textarea\" style=\"min-height:200px\">" + G.escapeHtml(plain) + "</textarea>" +
       "<p class=\"page-desc\" style=\"margin:0.75rem 0 0.25rem;font-size:0.8rem\">Vista previa con colores (referencia / copiar HTML)</p>" +
       "<div class=\"email-html-preview\"><div id=\"" + prevId + "\" class=\"email-html-preview-inner\"></div></div>" +
       "<div class=\"toolbar\" style=\"margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem\">" +
@@ -23405,7 +23594,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje (texto plano para mailto)</p>" +
       "<textarea id=\"" +
       taId +
-      "\" style=\"width:100%;min-height:200px;font-family:ui-monospace,monospace;font-size:0.8rem;line-height:1.45;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:0.5rem\">" +
+      "\" class=\"cg-plain-textarea\" style=\"min-height:200px\">" +
       G.escapeHtml(plain) +
       "</textarea>" +
       "<p class=\"page-desc\" style=\"margin:0.75rem 0 0.25rem;font-size:0.8rem\">Vista previa HTML (referencia / copiar)</p>" +
@@ -25643,7 +25832,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>Parte y envío</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
       "<div class=\"modal-b\"><p class=\"page-desc\"><strong>Abrir correo</strong> abre su cliente y <strong>deja constancia en el historial</strong> (check verde). Incluye ficha del departamento e integrantes con e-mail. Opcional: <em>Copiar diseño HTML</em> para pegar con colores; si envía solo por copiar, use <em>Marcar correo enviado</em>.</p>" +
       "<p class=\"page-desc\" style=\"margin:0.5rem 0 0.25rem;font-size:0.8rem;font-weight:600\">Mensaje que se envía</p>" +
-      "<textarea id=\"parte-txt\" style=\"width:100%;min-height:200px;font-family:ui-monospace,monospace;font-size:0.8rem;line-height:1.45;color:#0f172a;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:0.5rem\">" + G.escapeHtml(plain) + "</textarea>" +
+      "<textarea id=\"parte-txt\" class=\"cg-plain-textarea\" style=\"min-height:200px\">" + G.escapeHtml(plain) + "</textarea>" +
       "<p class=\"page-desc\" style=\"margin:0.75rem 0 0.25rem;font-size:0.8rem\">Vista previa con colores (opcional)</p>" +
       "<div class=\"email-html-preview\"><div id=\"parte-mail-preview\" class=\"email-html-preview-inner\"></div></div>" +
       "<div class=\"toolbar\" style=\"margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem\">" +
