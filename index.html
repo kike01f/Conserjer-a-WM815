@@ -23304,11 +23304,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           log[v.id] = entry;
           var o = visitBuildWarn30Mail(v);
           try {
+            cgOpenMailtoHref(mailtoHrefPlain(o.email, o.subj, o.body));
             visitApplyResidentNotified(v.id, {
               closeModal: false,
               logMsg: "Alerta automática: aviso 30 min visita vehicular — correo abierto (constancia en historial)"
             });
-            cgOpenMailtoHref(mailtoHrefPlain(o.email, o.subj, o.body));
           } catch (e3) {}
         } else if (!entry.mail30m && !resEm && !entry.mail30mSkip) {
           entry.mail30mSkip = true;
@@ -23340,11 +23340,11 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           log[v.id] = entryM;
           var om = visitBuildMultaMail(v);
           try {
+            cgOpenMailtoHref(mailtoHrefPlain(om.email, om.subj, om.body));
             visitApplyResidentNotified(v.id, {
               closeModal: false,
               logMsg: "Alerta automática: aviso multa visita vehicular — correo abierto (constancia en historial)"
             });
-            cgOpenMailtoHref(mailtoHrefPlain(om.email, om.subj, om.body));
           } catch (e4) {}
           var k3 = "multa_mail_toast_" + v.id;
           if (!G.persist.sessionGetRaw(k3)) {
@@ -23631,10 +23631,45 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
 
   /**
-   * Abre mailto: (u otro protocolo registrado) con el cliente predeterminado del sistema.
-   * Estrategias en cascada: clic en <a> sin target (Safari/iOS, evita Outlook web en Chrome),
-   * location.assign / href, iframe oculto (algunos entornos antiguos).
-   * No usar target="_blank" en el ancla: suele abrir pestaña y enrutar a correo web.
+   * Inserta bajo la barra del modal un <a href="mailto:…"> real: el clic del usuario lo trata el
+   * sistema como enlace nativo (Outlook/Mail de escritorio), sin preventDefault de la delegación.
+   */
+  function cgInstallMailtoFallbackLink(href) {
+    if (!href || typeof href !== "string") return;
+    setTimeout(function () {
+      try {
+        var modal = document.querySelector(".modal-overlay .modal");
+        if (!modal) return;
+        var prev = modal.querySelector(".cg-mailto-fallback-strip");
+        if (prev) prev.remove();
+        var p = document.createElement("p");
+        p.className = "cg-mailto-fallback-strip page-desc";
+        p.style.margin = "0.65rem 0 0";
+        p.style.padding = "0.55rem 0.7rem";
+        p.style.borderRadius = "8px";
+        p.style.border = "1px solid var(--gray-200)";
+        p.style.background = "var(--gray-50)";
+        p.style.fontSize = "0.82rem";
+        p.style.lineHeight = "1.45";
+        p.innerHTML =
+          "<strong>Si no se abrió el programa de correo</strong>, use este enlace (abre el cliente predeterminado del equipo): " +
+          '<a href="' +
+          G.escapeAttr(href) +
+          "\" class=\"btn btn-secondary btn-sm\" style=\"margin-left:0.25rem;vertical-align:middle;text-decoration:none\">Abrir en aplicación de correo</a>";
+        var tb = modal.querySelector(".modal-b .toolbar");
+        if (tb && tb.parentNode) {
+          tb.parentNode.insertBefore(p, tb.nextSibling);
+        } else {
+          var mb = modal.querySelector(".modal-b");
+          if (mb) mb.appendChild(p);
+        }
+      } catch (eF) {}
+    }, 180);
+  }
+
+  /**
+   * Abre mailto: hacia el cliente predeterminado del SO. Orden: location (misma ventana, sin pestaña),
+   * ancla programática, assign, iframe. Luego enlace visible en modal como respaldo.
    */
   function cgOpenMailtoHref(href) {
     if (!href || typeof href !== "string") return;
@@ -23644,34 +23679,30 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       } catch (x) {}
     }
     try {
+      window.location.href = href;
+    } catch (eLoc) {}
+    try {
       var a = document.createElement("a");
       a.href = href;
+      a.setAttribute("rel", "noopener");
       a.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;overflow:hidden;";
       document.body.appendChild(a);
       if (typeof a.click === "function") a.click();
       removeEl(a);
-    } catch (eA) {
-      try {
-        window.location.assign(href);
-      } catch (eB) {
-        try {
-          window.location.href = href;
-        } catch (eC) {
-          try {
-            var ifr = document.createElement("iframe");
-            ifr.setAttribute("aria-hidden", "true");
-            ifr.setAttribute("tabindex", "-1");
-            ifr.style.cssText =
-              "position:fixed;width:1px;height:1px;left:0;top:0;border:0;opacity:0;pointer-events:none;";
-            ifr.src = href;
-            document.body.appendChild(ifr);
-            setTimeout(function () {
-              removeEl(ifr);
-            }, 5000);
-          } catch (eD) {}
-        }
-      }
-    }
+    } catch (eA) {}
+    try {
+      var ifr = document.createElement("iframe");
+      ifr.setAttribute("aria-hidden", "true");
+      ifr.setAttribute("tabindex", "-1");
+      ifr.style.cssText =
+        "position:fixed;width:1px;height:1px;left:0;top:0;border:0;opacity:0;pointer-events:none;";
+      ifr.src = href;
+      document.body.appendChild(ifr);
+      setTimeout(function () {
+        removeEl(ifr);
+      }, 5000);
+    } catch (eC) {}
+    cgInstallMailtoFallbackLink(href);
   }
 
   function emailHtmlEscape(s) {
@@ -24791,6 +24822,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     plain = cgEmailPlainFromOptionalTextarea("enc-mail-txt-" + id, plain);
     var href = mailtoHrefPlain(mail, subj, plain);
+    cgOpenMailtoHref(href);
     if (
       !encomiendaApplyNotifyMark(id, encKind, {
         closeModal: false,
@@ -24799,9 +24831,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       })
     ) {
       G.toast("No se encontró la encomienda", "error");
-      return;
     }
-    cgOpenMailtoHref(href);
   };
 
   function visitApplyResidentNotified(visitId, options) {
@@ -24862,6 +24892,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       visitIngresoNotifyBodyText(rec)
     );
     var href = mailtoHrefPlain(inf.email, subjIng, plain);
+    cgOpenMailtoHref(href);
     if (
       !visitApplyResidentNotified(visitId, {
         closeModal: false,
@@ -24870,9 +24901,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       })
     ) {
       G.toast("No se encontró el registro de visita", "error");
-      return;
     }
-    cgOpenMailtoHref(href);
   };
 
   A.visitVehOpenMailtoMark = function (visitId, kind) {
@@ -24898,6 +24927,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         : "Se ha excedido el tiempo máximo del estacionamiento de visitas — Depto " + deptLbl;
     plain = cgEmailPlainFromOptionalTextarea("visit-mail-txt-" + visitId + "-" + k, plain);
     var href = mailtoHrefPlain(inf.email, subj, plain);
+    cgOpenMailtoHref(href);
     if (
       !visitApplyResidentNotified(visitId, {
         closeModal: false,
@@ -24907,9 +24937,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       })
     ) {
       G.toast("No se encontró el registro de visita", "error");
-      return;
     }
-    cgOpenMailtoHref(href);
   };
 
   function renderEncDestinatarioPanel(deptId, preselect) {
@@ -26964,6 +26992,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     }
     var plainParte = cgEmailPlainFromOptionalTextarea("parte-txt", parts.plain);
     var hrefParte = mailtoHrefPlain(parts.mail, parts.subj, plainParte);
+    cgOpenMailtoHref(hrefParte);
     if (
       !visitApplyResidentNotified(id, {
         closeModal: false,
@@ -26972,9 +27001,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       })
     ) {
       G.toast("No se encontró el registro de visita", "error");
-      return;
     }
-    cgOpenMailtoHref(hrefParte);
   };
 
   A.visitParte = function (id) {
