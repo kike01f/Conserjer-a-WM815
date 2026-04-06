@@ -7393,7 +7393,7 @@
                 <i class="fa-regular fa-face-smile" aria-hidden="true"></i>
               </button>
               <label class="sr-only" for="cg-chat-input">Escribir mensaje</label>
-              <textarea id="cg-chat-input" rows="2" maxlength="4000" placeholder="Escriba un mensaje…"></textarea>
+              <textarea id="cg-chat-input" rows="2" maxlength="4000" placeholder="Escriba un mensaje… (Enter envía, Shift+Enter nueva línea)"></textarea>
               <button type="submit" class="btn btn-primary btn-sm cg-chat-send-fab" title="Enviar mensaje" aria-label="Enviar mensaje"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i></button>
             </div>
           </div>
@@ -18303,6 +18303,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           });
           input.addEventListener("blur", function () {
             staffChatClearTypingBroadcast();
+          });
+          input.addEventListener("keydown", function (e) {
+            if (e.key !== "Enter" || e.shiftKey) return;
+            if (e.isComposing || e.keyCode === 229) return;
+            e.preventDefault();
+            if (form && typeof form.requestSubmit === "function") {
+              form.requestSubmit();
+            } else if (form) {
+              form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+            }
           });
         }
       }
