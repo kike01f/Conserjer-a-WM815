@@ -10851,41 +10851,71 @@
     }
 
     /**
-     * Clase Font Awesome (fa-*) según texto de «tipo de servicio» del proveedor (ES/EN).
-     * Heurística por palabras clave; si no coincide, fa-truck.
+     * Clase Font Awesome (fa-*) según «tipo de servicio» (ES/EN, sin acentos en la comparación).
+     * Reglas de arriba abajo: las más específicas primero para reducir falsos positivos.
      */
     function proveedorServicioIconClass(tipoRaw) {
       var t = String(tipoRaw || "").trim();
+      if (!t) return "fa-truck";
       var s = t
         .toLowerCase()
         .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "");
-      if (!t) return "fa-truck";
-      if (/\b(ascensor|ascensores|montacargas|elevator|lift)\b/.test(s)) return "fa-elevator";
-      if (/\b(electric|electrico|electricidad|iluminacion|alumbrado|cableado electrico|tablero electrico)\b/.test(s)) return "fa-bolt";
-      if (/\b(plomer|gasfiter|gasfiteria|fontaner|fontaneria|plumbing|caneria|cañeria|tuberia|desague|desagüe|agua potable|filtracion|osmosis)\b/.test(s)) return "fa-faucet";
-      if (/\b(gas natural|gas licuado|calefont|caldera\b|calefaccion|calefacción)\b/.test(s)) return "fa-fire-flame-curved";
-      if (/\b(aire acond|climatiz|hvac|ventilacion|ventilación|split\b|vrf|extractor)\b/.test(s)) return "fa-fan";
-      if (/\b(frio industrial|frío industrial|refrigerac|camara fria|cámara fría|chiller)\b/.test(s)) return "fa-snowflake";
-      if (/\b(incendio|extintor|contraincendio|contra incendio|rociador|sprinkler)\b/.test(s)) return "fa-fire-extinguisher";
-      if (/\b(seguridad electronica|alarma\b|intrusion|intrusión|sensor\b|monitoreo remoto)\b/.test(s)) return "fa-bell";
-      if (/\b(cctv|videovigilancia|camara ip|cámara ip|camaras de seguridad|cámaras de seguridad)\b/.test(s)) return "fa-video";
-      if (/\b(vigilancia|guardia|porteria remota)\b/.test(s)) return "fa-shield-halved";
-      if (/\b(redes|red ip|internet|fibra|wifi|wi-fi|cableado estructurado|datacenter|data center|telemetria)\b/.test(s)) return "fa-network-wired";
-      if (/\b(telefonia|telefonía|voip|central telefonica|central telefónica)\b/.test(s)) return "fa-phone";
-      if (/\b(tv cable|tdt|antena colectiva|television por cable|televisión por cable)\b/.test(s)) return "fa-satellite-dish";
-      if (/\b(computacion|computación|informatica|informática|software|soporte ti|soporte it|desarrollo|sistemas)\b/.test(s)) return "fa-laptop";
-      if (/\b(limpieza|aseo|housekeeping|mucama|sanitizacion|sanitización|desinfeccion|desinfección)\b/.test(s)) return "fa-broom";
-      if (/\b(jardin|jardín|jardineria|jardinería|paisajismo|riego|poda|cesped|césped)\b/.test(s)) return "fa-seedling";
-      if (/\b(pintura|pintor|revestimiento textil)\b/.test(s)) return "fa-paint-roller";
-      if (/\b(construc|obra\b|albanil|albañil|hormigon|hormigón|demolicion|demolición|maestro mayor)\b/.test(s)) return "fa-helmet-safety";
-      if (/\b(cerrajer|cerrajero|chapa\b|llaves maestras|duplicado llave)\b/.test(s)) return "fa-key";
-      if (/\b(fumigacion|fumigación|plagas|desratizacion|desratización|control de plagas)\b/.test(s)) return "fa-bug";
-      if (/\b(mudanza|flete|logistica|logística|transporte de carga)\b/.test(s)) return "fa-truck-ramp-box";
-      if (/\b(mantenimiento|mantencion|mantención|reparacion general|reparación general|servicio tecnico|servicio técnico)\b/.test(s)) return "fa-screwdriver-wrench";
-      if (/\b(medicion|medición|medidor|instrumentacion)\b/.test(s)) return "fa-gauge-high";
-      if (/\b(cristal|vidrio|ventanal|ventana aluminio)\b/.test(s)) return "fa-border-all";
-      if (/\b(audiovisual|sonido|amplificacion|micrófono|microfono)\b/.test(s)) return "fa-volume-high";
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/ñ/g, "n");
+      var rules = [
+        [/\b(ascensor|ascensores|ascensorista|montacargas|elevator|lift)\b|escalera mecanica|silla salvaescaleras|modernizacion (de )?ascensor/i, "fa-elevator"],
+        [/\bpiscina\b|\bpileta\b|\bpool\b|cloracion (de )?piscina|tratamiento de agua.*piscina|mantencion.*piscina|quimica (de )?piscina/i, "fa-person-swimming"],
+        [/fotovoltaico|paneles? solares?|energia solar|\bsolar\b.*(fotovoltaico|termico|panel)/i, "fa-solar-panel"],
+        [/grupo electrogeno|grupo electrico|generador (electrico|diesel|gas)|\bups\b|inversor (solar|electrico)|baterias (de )?respald|banco de baterias/i, "fa-car-battery"],
+        [/citofon|videoportero|portero (electrico|visor)|intercomunicador|portero ip/i, "fa-phone-volume"],
+        [
+          /instalacion(es)? electricas?|electricidad|\belectricos?\b|\belectricas?\b|tablero(s)? electric|luminaria|alumbrado publico|iluminacion( led)?|enchufe|tomacorriente|cableado electric|baja tension|media tension|certificacion sec|prueba de tension|corto circuito|canalizacion electric|instalador(es)? electric|corrientes? debiles|electromecanica/i,
+          "fa-bolt"
+        ],
+        [/gasfiter|gasfiteria|plomer|fontaner|plumbing|caneria|tuberia hidraulica|desague|cloaca|agua potable|osmosis inversa|bomba de agua|hidroneumatico|filtros? de agua|\bsanitarios?\b|inodoro|\bwc\b|lavamanos|griferia|bateria sanitaria|filtracion (de )?agua|reparacion de filtraciones/i, "fa-faucet"],
+        [/gas (natural|licuado)|instalacion de gas|red de gas|medidor de gas|\bcalefont\b|\btermo(s)?\b|caldera(?!cion)|calefaccion central|estufa a gas|cocina a gas|calefont ionizado/i, "fa-fire-flame-curved"],
+        [/aire acond|climatiz|hvac|minisplit|multi[\s-]*split|\bvrf\b|bomba de calor|heat pump|conductos? (de )?aire|extractor(es)? (de )?aire|campana extractora|ventilacion mecanica/i, "fa-fan"],
+        [/refrigerac|camara fria|vitrina refrigerada|chiller|equipo de frio|cuarto frio|linea de frio/i, "fa-snowflake"],
+        [/incendio|extintor|contra[\s-]*incendio|rociador|sprinkler|hidrante|deteccion (de )?incendio|red humeda|bomba (de )?incendio/i, "fa-fire-extinguisher"],
+        [/\bcctv\b|videovigilancia|camara(s)? (de )?seguridad|camara ip|\bdvr\b|\bnvr\b|videograbador|videovigilado/i, "fa-video"],
+        [/control de acceso|torniquete|lector (rfid|biometrico|huella)|\brfid\b|biometrico|huella digital|tag de acceso|credencial(es)? de acceso/i, "fa-id-card"],
+        [/alarma(s)? (de )?(robo|intrusion|panico)|\bintrusion\b|sensor(es)? (de )?movimiento|monitoreo (de )?alarmas?|central de alarmas/i, "fa-bell"],
+        [/vigilancia (privada|armada)?|guardia(s)? (de )?seguridad|seguridad fisica|ronda(s)? de seguridad|custodia/i, "fa-shield-halved"],
+        [/fibra optica|wifi|wi[\s-]?fi|redes (informaticas|de datos)|cableado (estructurado|de red)|\blan\b|\bwan\b|router|switch (de )?red|firewall|punto(s)? (de )?red|datacenter|data center|telemetria|internet (fijo|empresa)|ciberseguridad (de )?red/i, "fa-network-wired"],
+        [/voip|telefonia ip|central telefonica|conmutador telefonico|\btelecomunicaciones\b(?!.*\b(datos|informatic|redes?)\b)/i, "fa-phone"],
+        [/tv cable|\btdt\b|antena colectiva|television por cable|senal (digital|satelital)|iptv/i, "fa-satellite-dish"],
+        [
+          /computacion|computadora(s)?|informatica|\bpc\b|notebook|servidor(es)?|\bwindows\b|\blinux\b|macos|office 365|microsoft 365|backup (en la )?nube|hosting web|desarrollo (de )?software|programacion de sistemas|aplicacion movil|\bit\b corporativ|soporte (ti|it|informatico)|help[\s-]*desk|seguridad informatica|office\b|excel\b|correo corporativo/i,
+          "fa-laptop"
+        ],
+        [/impresion|impresora(s)?|fotocopi|grafica publicitar|plotter|rotulacion digital|copisteria/i, "fa-print"],
+        [/catering|banqueteria|coffee break|colacion(es)?|servicio de banquetes|chef a domicilio|banqueteria eventos/i, "fa-mug-hot"],
+        [/lavanderia|lavado (de )?ropa|tintoreria|planchado industrial/i, "fa-shirt"],
+        [/limpieza|aseo|housekeeping|mucama|sanitizacion|desinfeccion|lavado de (alfombras|fachada|vidrios)|aseo industrial|limpieza post obra/i, "fa-broom"],
+        [/basura|retiro de escombros|contenedor(es)?|reciclaje|residuos|vertedero|gestion de residuos/i, "fa-trash-can"],
+        [/jardin|jardineria|paisajismo|riego (automatico|por goteo)|poda|cesped|cesped sintetico|arboricultura|forestacion/i, "fa-seedling"],
+        [/fumigacion|plagas|desratizacion|cucaracha|chinches|termitas|control de plagas|sanidad ambiental/i, "fa-bug"],
+        [/pintura|pintor(es)?\b|revestimiento (textil|acustico)|impermeabilizacion|sellador de techos|pintura epoxi/i, "fa-paint-roller"],
+        [/cristaleria|vidrieria|doble vidrio|ventana(s)? (de )?aluminio|cerramiento (de )?vidrio|vidrios templados/i, "fa-border-all"],
+        [/rotulo|letrero(s)?|senaletica|senalizacion|neon|corporea(s)?|senalizacion vial/i, "fa-sign-hanging"],
+        [/\bacustica\b|acustica arquitectonic|sonido ambiental|amplificacion|microfono|parlante(s)?|mezcla (de )?audio|audio conferencia/i, "fa-volume-high"],
+        [/proyecto(s)? (de )?ingenier|calculo estructural|diseno (civil|estructural)|topografia|replanteo|inspeccion tecnica/i, "fa-ruler-combined"],
+        [/paramedico|primeros auxilios|botiquin|\bdea\b|desfibrilador|enfermeria ocupacional|curso (de )?primeros auxilios/i, "fa-kit-medical"],
+        [/notaria|notario|legalizacion|certificado (de )?firma|autentificacion de documentos/i, "fa-file-contract"],
+        [/mudanza|flete(s)?|transporte de muebles|guardamuebles|embalaje|traslado de oficina/i, "fa-truck-ramp-box"],
+        [/trabajo(s)? en altura|andamio|rapel|linea de vida|altura industrial|acceso con cuerdas/i, "fa-arrow-up-from-ground-water"],
+        [/soldadura|soldador|herreria|metalurgia artesanal|soldadura tig|mig mag/i, "fa-hammer"],
+        [/carpinteria|melamina|muebles a medida|ebanisteria/i, "fa-tree"],
+        [/drywall|yeso carton|cielo falso|tabiqueria|obra gris|estructura metalica liviana|steel framing/i, "fa-helmet-safety"],
+        [/construc(cion)?|obra civil|albanil|hormigon|demolicion|maestro mayor de obra|reparacion estructural|movimiento de tierra/i, "fa-helmet-safety"],
+        [/cerrajer|cerrajero|multilock|chapa (de )?seguridad|duplicado (de )?llave|apertura sin destruccion/i, "fa-key"],
+        [/medicion(es)?|lectura (de )?medidor|medidor(es)? (de )?(luz|agua|gas)|instrumentacion industrial|calibracion de equipos/i, "fa-gauge-high"],
+        [/mantenimiento general|mantencion integral|reparaciones varias|servicio tecnico multirubro|multiservicios|servicios generales edificio/i, "fa-screwdriver-wrench"]
+      ];
+      var ri;
+      for (ri = 0; ri < rules.length; ri++) {
+        if (rules[ri][0].test(s)) return rules[ri][1];
+      }
       return "fa-truck";
     }
 
@@ -18336,17 +18366,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var CG_STAFF_CHAT_MAX_LEN = 4000;
     function staffChatSend(text) {
       var u = G.currentUser();
-      if (!u || !String(text).trim()) return;
+      if (!u || !String(text).trim()) return false;
       var t = String(text).trim().replace(/\u0000/g, "");
       if (t.length > CG_STAFF_CHAT_MAX_LEN) {
         G.toast("Mensaje demasiado largo (máx. " + CG_STAFF_CHAT_MAX_LEN + " caracteres).", "warn");
-        return;
+        return false;
       }
       if (G.validate && typeof G.validate.textBlock === "function") {
         var vt = G.validate.textBlock(t, { label: "Mensaje", min: 1, max: CG_STAFF_CHAT_MAX_LEN });
         if (!vt.ok) {
           G.toast(vt.message, "warn");
-          return;
+          return false;
         }
         t = vt.value;
       }
@@ -18378,6 +18408,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       staffChatClearReplyDraft();
       staffChatRenderThread();
       staffChatUpdateBadge();
+      return true;
     }
     function staffChatSendBuzz() {
       var u = G.currentUser();
@@ -18590,8 +18621,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           if (!input) return;
           var t = input.value.trim();
           if (!t) return;
-          staffChatSend(t);
-          input.value = "";
+          if (staffChatSend(t)) input.value = "";
         });
         if (input && !input.__cgStaffChatTypingBound) {
           input.__cgStaffChatTypingBound = true;
