@@ -6572,6 +6572,253 @@
       background: linear-gradient(145deg, rgba(13, 148, 136, 0.18) 0%, var(--gray-100) 45%, var(--gray-50) 100%);
       border-color: #2dd4bf;
     }
+
+    /* —— Modo noche: pulido global (chat, emoji, visitas, dashboard, manual, tablas) —— */
+    html[data-cg-theme="dark"] button.cg-chat-msg-reply-btn {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-msg-reply-btn:hover {
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--blue-400);
+    }
+    html[data-cg-theme="dark"] .cg-chat-bubble--me button.cg-chat-msg-reply-btn:hover {
+      background: rgba(0, 0, 0, 0.15);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-msg-delete-btn {
+      color: var(--gray-500);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-bubble-reply,
+    html[data-cg-theme="dark"] div.cg-chat-bubble-reply {
+      background: rgba(255, 255, 255, 0.06);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-bubble-reply:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+    html[data-cg-theme="dark"] .cg-chat-bubble--me button.cg-chat-bubble-reply,
+    html[data-cg-theme="dark"] .cg-chat-bubble--me div.cg-chat-bubble-reply {
+      background: rgba(0, 0, 0, 0.18);
+      border-left-color: var(--blue-400);
+    }
+    html[data-cg-theme="dark"] .cg-chat-bubble--me .cg-chat-bubble-reply-name {
+      color: var(--blue-400);
+    }
+    html[data-cg-theme="dark"] .cg-chat-emoji-popover {
+      background: var(--card-color);
+      border-color: var(--gray-300);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-emoji-cell:hover {
+      background: var(--gray-200);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-emoji-cell:active {
+      background: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .cg-chat-emoji-tabs {
+      background: var(--gray-100);
+      border-top-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-emoji-tab {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-emoji-tab:hover {
+      background: rgba(255, 255, 255, 0.06);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-emoji-tab[aria-selected="true"] {
+      background: var(--gray-200);
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-emoji-toggle {
+      background: var(--gray-100);
+      border-color: var(--gray-300);
+      color: var(--gray-700);
+    }
+    html[data-cg-theme="dark"] button.cg-chat-emoji-toggle:hover {
+      background: var(--gray-200);
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-vis-type-opt:has(input:checked) {
+      background: color-mix(in srgb, var(--blue-500) 16%, var(--gray-100));
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue-500) 22%, transparent);
+    }
+    html[data-cg-theme="dark"] .cg-vis-reg-sheet-h {
+      background: linear-gradient(135deg, color-mix(in srgb, var(--blue-500) 14%, var(--gray-100)) 0%, var(--card-color) 100%);
+    }
+    html[data-cg-theme="dark"] .cg-vis-open-card {
+      background: var(--card-color);
+    }
+    html[data-cg-theme="dark"] .cg-dash-bday-chip {
+      background: var(--gray-100);
+      border-color: color-mix(in srgb, #f9a8d4 45%, var(--gray-300));
+      color: #f9a8d8;
+    }
+    html[data-cg-theme="dark"] .cg-dash-bday-lead {
+      color: #fda4af;
+    }
+    html[data-cg-theme="dark"] .cg-dash-bday-msg {
+      color: #fbcfe8;
+    }
+    html[data-cg-theme="dark"] .cg-dash-sched-card {
+      background: linear-gradient(135deg, rgba(234, 179, 8, 0.12) 0%, var(--gray-100) 42%, var(--gray-50) 100%);
+      border-color: rgba(250, 204, 21, 0.35);
+      box-shadow: 0 3px 18px rgba(0, 0, 0, 0.35);
+    }
+    html[data-cg-theme="dark"] .cg-dash-sched-card .cg-dash-bday-card-h h3 {
+      color: #fde047;
+    }
+    html[data-cg-theme="dark"] .cg-dash-sched-alert-msg {
+      color: #fef3c7;
+    }
+    html[data-cg-theme="dark"] .cg-dash-sched-meta {
+      color: #fde68a !important;
+    }
+    html[data-cg-theme="dark"] .cg-dash-delta--up {
+      background: rgba(16, 185, 129, 0.2);
+      color: #6ee7b7;
+    }
+    html[data-cg-theme="dark"] .cg-dash-delta--down {
+      background: rgba(248, 113, 113, 0.18);
+      color: #fca5a5;
+    }
+    html[data-cg-theme="dark"] .btn-danger {
+      background: rgba(248, 113, 113, 0.18);
+      color: #fca5a5;
+      border: 1px solid rgba(248, 113, 113, 0.35);
+    }
+    html[data-cg-theme="dark"] .btn-danger:hover {
+      background: var(--danger);
+      color: #fff;
+      border-color: var(--danger);
+    }
+    html[data-cg-theme="dark"] table.data-table td {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] table.data-table tr:hover td {
+      background: rgba(148, 163, 184, 0.1);
+    }
+    html[data-cg-theme="dark"] tr.cg-res-row--hoy td,
+    html[data-cg-theme="dark"] tr.cg-res-row--en-curso td {
+      background: rgba(34, 197, 94, 0.14);
+    }
+    html[data-cg-theme="dark"] tr.cg-res-row--hoy:hover td,
+    html[data-cg-theme="dark"] tr.cg-res-row--en-curso:hover td {
+      background: rgba(34, 197, 94, 0.22);
+    }
+    html[data-cg-theme="dark"] tr.cg-res-row--futura td {
+      background: rgba(59, 130, 246, 0.12);
+    }
+    html[data-cg-theme="dark"] tr.cg-res-row--futura:hover td {
+      background: rgba(59, 130, 246, 0.2);
+    }
+
+    /* Manual de usuario */
+    html[data-cg-theme="dark"] .cg-manual-toc-title {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .cg-manual-toc {
+      background: var(--card-color);
+      border-color: var(--gray-300);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+    }
+    html[data-cg-theme="dark"] .cg-manual-toc button {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .cg-manual-toc-num {
+      background: var(--gray-200);
+      color: var(--gray-700);
+    }
+    html[data-cg-theme="dark"] .cg-manual-toc button:hover {
+      background: var(--gray-100);
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-manual-toc button.cg-manual-toc--active {
+      background: linear-gradient(120deg, rgba(99, 102, 241, 0.28), rgba(99, 102, 241, 0.12));
+      color: #e0e7ff;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+    }
+    html[data-cg-theme="dark"] .cg-manual-toc button.cg-manual-toc--active .cg-manual-toc-num {
+      background: #6366f1;
+      color: #fff;
+    }
+    html[data-cg-theme="dark"] .cg-manual-panel {
+      background: var(--card-color);
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .cg-manual-progress {
+      background: var(--gray-200);
+    }
+    html[data-cg-theme="dark"] .cg-manual-step__hero {
+      background: linear-gradient(135deg, var(--step-soft), var(--gray-100) 55%, var(--gray-50));
+    }
+    html[data-cg-theme="dark"] .cg-manual-step__kicker {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .cg-manual-step h3 {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-manual-lead {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .cg-manual-lead strong {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-manual-card {
+      background: var(--gray-100);
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .cg-manual-card__body strong {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-manual-card__body p {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .cg-manual-callout--tip {
+      background: rgba(16, 185, 129, 0.14);
+      border-color: rgba(52, 211, 153, 0.35);
+      color: #6ee7b7;
+    }
+    html[data-cg-theme="dark"] .cg-manual-callout--note {
+      background: rgba(59, 130, 246, 0.14);
+      border-color: rgba(96, 165, 250, 0.35);
+      color: #93c5fd;
+    }
+    html[data-cg-theme="dark"] .cg-manual-flow {
+      background: var(--gray-100);
+      border-color: var(--gray-400);
+    }
+    html[data-cg-theme="dark"] .cg-manual-flow__node {
+      background: var(--card-color);
+      border-color: var(--gray-300);
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-manual-flow__arrow {
+      color: var(--gray-500);
+    }
+    html[data-cg-theme="dark"] .cg-manual-media-chip {
+      background: var(--gray-100);
+      border-color: var(--gray-300);
+      color: var(--gray-700);
+    }
+    html[data-cg-theme="dark"] .cg-manual-step ul.cg-manual-list li {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .cg-manual-nav {
+      border-top-color: var(--gray-200);
+    }
+    html[data-cg-theme="dark"] .cg-manual-counter-pill {
+      background: var(--gray-200);
+      color: var(--gray-700);
+    }
+    html[data-cg-theme="dark"] .cg-page-compact .cg-manual-intro {
+      background: linear-gradient(115deg, rgba(99, 102, 241, 0.15) 0%, var(--gray-100) 50%, var(--gray-50) 100%);
+      border-color: rgba(167, 139, 250, 0.35);
+    }
+    html[data-cg-theme="dark"] #modal-root .modal-b form,
+    html[data-cg-theme="dark"] body > .modal .modal-content form {
+      background: var(--gray-100);
+      border-color: var(--gray-200);
+      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.35);
+    }
+
     textarea.cg-plain-textarea {
       width: 100%;
       font-family: ui-monospace, monospace;
