@@ -5605,6 +5605,14 @@
     }
     .cg-vis-open-name { font-weight: 600; color: var(--blue-900); line-height: 1.25; }
     .cg-vis-open-rut { font-size: 0.74rem; font-weight: 600; color: var(--gray-700); line-height: 1.2; }
+    .cg-vis-open-plate {
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--blue-700);
+      line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+    }
     .cg-vis-hist-wrap { max-height: min(78vh, 780px); overflow: auto; border-radius: 8px; border: 1px solid var(--gray-200); }
     .cg-vis-module-head {
       display: flex;
@@ -7118,6 +7126,9 @@
     }
     html[data-cg-theme="dark"] .cg-vis-open-meta {
       color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .cg-vis-open-plate {
+      color: #93c5fd;
     }
     html[data-cg-theme="dark"] .cg-vis-sub-tab.active {
       color: var(--on-accent);
@@ -26213,6 +26224,21 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
               var rutOpen = v.visitorRut
                 ? "<span class=\"cg-vis-open-rut\">RUT " + G.escapeHtml(v.visitorRut) + "</span>"
                 : "";
+              var plateNorm = "";
+              if (v.vehicular) {
+                plateNorm =
+                  typeof G.normalizeVisitPlateString === "function"
+                    ? G.normalizeVisitPlateString(v.plate)
+                    : String(v.plate || "")
+                        .trim()
+                        .toUpperCase()
+                        .replace(/\s+/g, "");
+              }
+              var plateOpen = plateNorm
+                ? "<span class=\"cg-vis-open-plate\">Patente " + G.escapeHtml(plateNorm) + "</span>"
+                : v.vehicular
+                  ? "<span class=\"cg-vis-open-plate\">Patente —</span>"
+                  : "";
               var liveT = "";
               if (!v.outAt) {
                 var mv = { at: v.at };
@@ -26234,6 +26260,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 G.escapeHtml(v.visitor || "—") +
                 "</strong>" +
                 rutOpen +
+                plateOpen +
                 "</span>" +
                 "<span class=\"cg-vis-open-meta\">" +
                 meta +
