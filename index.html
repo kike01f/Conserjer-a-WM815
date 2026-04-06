@@ -23631,25 +23631,46 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
 
   /**
-   * Abre mailto: usando el gestor predeterminado del SO (Outlook de escritorio, Mail, Thunderbird…).
-   * No usar target="_blank": en Chrome/Edge suele abrir una pestaña y enrutar a Outlook en la web
-   * en lugar del cliente instalado.
+   * Abre mailto: (u otro protocolo registrado) con el cliente predeterminado del sistema.
+   * Estrategias en cascada: clic en <a> sin target (Safari/iOS, evita Outlook web en Chrome),
+   * location.assign / href, iframe oculto (algunos entornos antiguos).
+   * No usar target="_blank" en el ancla: suele abrir pestaña y enrutar a correo web.
    */
   function cgOpenMailtoHref(href) {
     if (!href || typeof href !== "string") return;
-    try {
-      window.location.assign(href);
-    } catch (eM0) {
+    function removeEl(el) {
       try {
-        var a = document.createElement("a");
-        a.setAttribute("href", href);
-        a.style.position = "fixed";
-        a.style.left = "-9999px";
-        a.style.opacity = "0";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      } catch (eM2) {}
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      } catch (x) {}
+    }
+    try {
+      var a = document.createElement("a");
+      a.href = href;
+      a.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;overflow:hidden;";
+      document.body.appendChild(a);
+      if (typeof a.click === "function") a.click();
+      removeEl(a);
+    } catch (eA) {
+      try {
+        window.location.assign(href);
+      } catch (eB) {
+        try {
+          window.location.href = href;
+        } catch (eC) {
+          try {
+            var ifr = document.createElement("iframe");
+            ifr.setAttribute("aria-hidden", "true");
+            ifr.setAttribute("tabindex", "-1");
+            ifr.style.cssText =
+              "position:fixed;width:1px;height:1px;left:0;top:0;border:0;opacity:0;pointer-events:none;";
+            ifr.src = href;
+            document.body.appendChild(ifr);
+            setTimeout(function () {
+              removeEl(ifr);
+            }, 5000);
+          } catch (eD) {}
+        }
+      }
     }
   }
 
@@ -24360,41 +24381,84 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   A.copyRichEmail = function (htmlStr, plainStr) {
     plainStr = plainStr || "";
     var htmlForClip = cgEmailClipboardFullDocument(htmlStr);
-    if (navigator.clipboard && typeof ClipboardItem !== "undefined") {
+    var toastHtmlOk = function () {
+      G.toast("Diseño HTML copiado: péguelo en el cuerpo del correo (optimizado para Outlook y otros clientes).");
+    };
+    var toastPlainOnly = function () {
+      G.toast("Se copió solo texto plano (HTML no disponible en este navegador o permiso denegado).", "warn");
+    };
+    function tryExecCommandCopyHtml() {
       try {
-        var item = new ClipboardItem({
-          "text/html": new Blob([htmlForClip], { type: "text/html;charset=utf-8" }),
+        if (typeof document.execCommand !== "function") return false;
+        var div = document.createElement("div");
+        div.contentEditable = "true";
+        div.setAttribute("contenteditable", "true");
+        div.style.cssText =
+          "position:fixed;left:-9999px;top:0;width:400px;height:300px;overflow:auto;opacity:0;pointer-events:none;";
+        div.innerHTML = htmlForClip;
+        document.body.appendChild(div);
+        var rng = document.createRange();
+        rng.selectNodeContents(div);
+        var sel = window.getSelection();
+        if (!sel) {
+          removeEl(div);
+          return false;
+        }
+        sel.removeAllRanges();
+        sel.addRange(rng);
+        var ok = false;
+        try {
+          ok = document.execCommand("copy");
+        } catch (ex) {}
+        sel.removeAllRanges();
+        removeEl(div);
+        if (ok) {
+          toastHtmlOk();
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+    function removeEl(el) {
+      try {
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      } catch (x) {}
+    }
+    function clipWriteHtmlMime(mimeHtml) {
+      return navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([htmlForClip], { type: mimeHtml }),
           "text/plain": new Blob([plainStr], { type: "text/plain;charset=utf-8" })
-        });
-        navigator.clipboard.write([item]).then(
-          function () {
-            G.toast("Diseño HTML copiado: péguelo en el cuerpo del correo (optimizado para Outlook y otros clientes).");
-          },
-          function () {
-            navigator.clipboard.writeText(plainStr).then(
-              function () {
-                G.toast("Se copió solo texto plano (HTML no disponible en este navegador)", "warn");
-              },
-              function () {
+        })
+      ]);
+    }
+    if (navigator.clipboard && typeof ClipboardItem !== "undefined") {
+      clipWriteHtmlMime("text/html;charset=utf-8")
+        .then(toastHtmlOk)
+        .catch(function () {
+          clipWriteHtmlMime("text/html")
+            .then(toastHtmlOk)
+            .catch(function () {
+              if (tryExecCommandCopyHtml()) return;
+              if (navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(plainStr).then(toastPlainOnly, function () {
+                  G.toast("No se pudo copiar al portapapeles", "warn");
+                });
+              } else {
                 G.toast("No se pudo copiar al portapapeles", "warn");
               }
-            );
-          }
-        );
-        return;
-      } catch (err) {
-        /* continuar a texto */
-      }
+            });
+        });
+      return;
     }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(plainStr).then(
-        function () {
-          G.toast("Copiado como texto (use un navegador reciente para copiar HTML)", "warn");
-        },
-        function () {
+    if (!tryExecCommandCopyHtml()) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(plainStr).then(toastPlainOnly, function () {
           G.toast("No se pudo copiar", "warn");
-        }
-      );
+        });
+      } else {
+        G.toast("No se pudo copiar (sin API de portapapeles)", "warn");
+      }
     }
   };
 
