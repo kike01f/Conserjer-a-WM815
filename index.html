@@ -5649,6 +5649,11 @@
     }
     .cg-vis-hist-wrap table.data-table thead th { position: sticky; top: 0; z-index: 1; box-shadow: 0 1px 0 var(--gray-200); }
     .badge-vis-persona { background: #d1fae5; color: #065f46; font-size: calc(0.657rem * 1.01); }
+    .cg-vis-prov-ic-wrap {
+      display: inline-flex;
+      vertical-align: middle;
+      margin-right: 0.15rem;
+    }
     .badge-vis-proveedor { background: #fef3c7; color: #92400e; font-size: calc(0.657rem * 1.01); }
 
     .cg-enc-dest-panel { border: 1px solid var(--gray-200); border-radius: 10px; background: var(--gray-50); padding: 0.75rem 0.85rem; }
@@ -10845,6 +10850,68 @@
       );
     }
 
+    /**
+     * Clase Font Awesome (fa-*) según texto de «tipo de servicio» del proveedor (ES/EN).
+     * Heurística por palabras clave; si no coincide, fa-truck.
+     */
+    function proveedorServicioIconClass(tipoRaw) {
+      var t = String(tipoRaw || "").trim();
+      var s = t
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+      if (!t) return "fa-truck";
+      if (/\b(ascensor|ascensores|montacargas|elevator|lift)\b/.test(s)) return "fa-elevator";
+      if (/\b(electric|electrico|electricidad|iluminacion|alumbrado|cableado electrico|tablero electrico)\b/.test(s)) return "fa-bolt";
+      if (/\b(plomer|gasfiter|gasfiteria|fontaner|fontaneria|plumbing|caneria|cañeria|tuberia|desague|desagüe|agua potable|filtracion|osmosis)\b/.test(s)) return "fa-faucet";
+      if (/\b(gas natural|gas licuado|calefont|caldera\b|calefaccion|calefacción)\b/.test(s)) return "fa-fire-flame-curved";
+      if (/\b(aire acond|climatiz|hvac|ventilacion|ventilación|split\b|vrf|extractor)\b/.test(s)) return "fa-fan";
+      if (/\b(frio industrial|frío industrial|refrigerac|camara fria|cámara fría|chiller)\b/.test(s)) return "fa-snowflake";
+      if (/\b(incendio|extintor|contraincendio|contra incendio|rociador|sprinkler)\b/.test(s)) return "fa-fire-extinguisher";
+      if (/\b(seguridad electronica|alarma\b|intrusion|intrusión|sensor\b|monitoreo remoto)\b/.test(s)) return "fa-bell";
+      if (/\b(cctv|videovigilancia|camara ip|cámara ip|camaras de seguridad|cámaras de seguridad)\b/.test(s)) return "fa-video";
+      if (/\b(vigilancia|guardia|porteria remota)\b/.test(s)) return "fa-shield-halved";
+      if (/\b(redes|red ip|internet|fibra|wifi|wi-fi|cableado estructurado|datacenter|data center|telemetria)\b/.test(s)) return "fa-network-wired";
+      if (/\b(telefonia|telefonía|voip|central telefonica|central telefónica)\b/.test(s)) return "fa-phone";
+      if (/\b(tv cable|tdt|antena colectiva|television por cable|televisión por cable)\b/.test(s)) return "fa-satellite-dish";
+      if (/\b(computacion|computación|informatica|informática|software|soporte ti|soporte it|desarrollo|sistemas)\b/.test(s)) return "fa-laptop";
+      if (/\b(limpieza|aseo|housekeeping|mucama|sanitizacion|sanitización|desinfeccion|desinfección)\b/.test(s)) return "fa-broom";
+      if (/\b(jardin|jardín|jardineria|jardinería|paisajismo|riego|poda|cesped|césped)\b/.test(s)) return "fa-seedling";
+      if (/\b(pintura|pintor|revestimiento textil)\b/.test(s)) return "fa-paint-roller";
+      if (/\b(construc|obra\b|albanil|albañil|hormigon|hormigón|demolicion|demolición|maestro mayor)\b/.test(s)) return "fa-helmet-safety";
+      if (/\b(cerrajer|cerrajero|chapa\b|llaves maestras|duplicado llave)\b/.test(s)) return "fa-key";
+      if (/\b(fumigacion|fumigación|plagas|desratizacion|desratización|control de plagas)\b/.test(s)) return "fa-bug";
+      if (/\b(mudanza|flete|logistica|logística|transporte de carga)\b/.test(s)) return "fa-truck-ramp-box";
+      if (/\b(mantenimiento|mantencion|mantención|reparacion general|reparación general|servicio tecnico|servicio técnico)\b/.test(s)) return "fa-screwdriver-wrench";
+      if (/\b(medicion|medición|medidor|instrumentacion)\b/.test(s)) return "fa-gauge-high";
+      if (/\b(cristal|vidrio|ventanal|ventana aluminio)\b/.test(s)) return "fa-border-all";
+      if (/\b(audiovisual|sonido|amplificacion|micrófono|microfono)\b/.test(s)) return "fa-volume-high";
+      return "fa-truck";
+    }
+
+    /**
+     * HTML seguro: icono alusivo al tipo de servicio. variant "compact" = mismo tamaño que reservas (tablas densas).
+     */
+    function proveedorServicioIconHtml(tipoServicioRaw, variant) {
+      var icon = sanitizeFaIconClass(proveedorServicioIconClass(tipoServicioRaw));
+      var raw = String(tipoServicioRaw || "").trim();
+      var hint = raw || "Proveedor sin tipo de servicio";
+      var titleEsc = escapeAttr(hint.length > 90 ? hint.slice(0, 87) + "…" : hint);
+      var wrapClass =
+        variant === "compact" ? "cg-res-space-ic" : "cg-prov-empresa-ic";
+      return (
+        '<span class="' +
+        wrapClass +
+        '" role="img" aria-label="' +
+        titleEsc +
+        '" title="' +
+        titleEsc +
+        '"><i class="fa-solid ' +
+        icon +
+        '" aria-hidden="true"></i></span>'
+      );
+    }
+
     /* ┌─ 11. API pública (único objeto global del core) ─────────────────────────────── */
     window.CG = {
       APP_BRAND_NAME, MANUFACTURER_LOGO_URL,
@@ -10855,7 +10922,7 @@
       conserjeShiftBlockerFor,
       currentUser, setSession, clearSession, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict,
       cleanupStaffDirectoryAndShiftOrphans,
-      canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, reservaOcurreEnDiaChile, reservaEnCursoAhora, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
+      canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, reservaOcurreEnDiaChile, reservaEnCursoAhora, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, proveedorServicioIconClass, proveedorServicioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
       proveedorSelectOptionsHtml,
       uid, load, save, LS, persist: P,
@@ -25173,7 +25240,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             ? "<span class=\"cg-prov-empty-cell\">—</span>"
             : "<span class=\"cg-prov-servicio-tag\">" + serv + "</span>";
         html +=
-          "<tr class=\"cg-prov-row\"><td class=\"cg-prov-col-empresa\"><div class=\"cg-prov-empresa-cell\"><span class=\"cg-prov-empresa-ic\" aria-hidden=\"true\"><i class=\"fa-solid fa-truck\"></i></span><strong class=\"cg-prov-empresa-txt\">" +
+          "<tr class=\"cg-prov-row\"><td class=\"cg-prov-col-empresa\"><div class=\"cg-prov-empresa-cell\">" +
+          (typeof proveedorServicioIconHtml === "function" ? proveedorServicioIconHtml(p.tipoServicio) : "<span class=\"cg-prov-empresa-ic\" aria-hidden=\"true\"><i class=\"fa-solid fa-truck\"></i></span>") +
+          "<strong class=\"cg-prov-empresa-txt\">" +
           G.escapeHtml(p.empresa) +
           "</strong></div></td><td class=\"cg-prov-col-servicio\">" +
           servTag +
@@ -26032,8 +26101,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
               var dep = G.deptById(v.deptId);
               var pv = proveedorById(v.proveedorId);
               var isProv = v.visitKind === "proveedor" || !!v.proveedorId;
+              var provIcOpen =
+                isProv && pv && typeof G.proveedorServicioIconHtml === "function"
+                  ? "<span class=\"cg-vis-prov-ic-wrap\">" + G.proveedorServicioIconHtml(pv.tipoServicio, "compact") + "</span>"
+                  : "";
               var badge = isProv
-                ? "<span class=\"badge badge-vis-proveedor\">Proveedor</span>"
+                ? provIcOpen + "<span class=\"badge badge-vis-proveedor\">Proveedor</span>"
                 : "<span class=\"badge badge-vis-persona\">Persona</span>";
               var meta = (dep ? "Depto " + G.escapeHtml(dep.number) : "—") + (isProv && pv ? " · " + G.escapeHtml(pv.empresa) : "");
               var rutOpen = v.visitorRut
@@ -26092,8 +26165,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var estVis = visitVisitorParkingDisplay(v);
       var pv = proveedorById(v.proveedorId);
       var isProv = v.visitKind === "proveedor" || !!v.proveedorId;
+      var provIconMini =
+        isProv && pv && typeof G.proveedorServicioIconHtml === "function"
+          ? "<span class=\"cg-vis-prov-ic-wrap\">" + G.proveedorServicioIconHtml(pv.tipoServicio, "compact") + "</span>"
+          : "";
       var tipoBadge = isProv
-        ? "<span class=\"badge badge-vis-proveedor\" style=\"margin-right:0.35rem;vertical-align:middle\">Proveedor</span>"
+        ? provIconMini + "<span class=\"badge badge-vis-proveedor\" style=\"margin-right:0.35rem;vertical-align:middle\">Proveedor</span>"
         : "<span class=\"badge badge-vis-persona\" style=\"margin-right:0.35rem;vertical-align:middle\">Persona</span>";
       var rutHist =
         v.visitorRut
