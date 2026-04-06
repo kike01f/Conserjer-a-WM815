@@ -6581,9 +6581,16 @@
     html[data-cg-theme="dark"] .modal {
       box-shadow: 0 28px 64px rgba(0, 0, 0, 0.65);
     }
-    html[data-cg-theme="dark"] .email-html-preview,
+    /* Vista previa de correo: mismo lienzo blanco que el mensaje real (el HTML inline ya es claro). */
+    html[data-cg-theme="dark"] .email-html-preview {
+      background: #ffffff;
+      border-color: var(--gray-300);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset, 0 8px 28px rgba(0, 0, 0, 0.35);
+      color: #1e293b;
+    }
     html[data-cg-theme="dark"] .email-html-preview .email-html-preview-inner {
-      background: var(--gray-100);
+      background: #ffffff;
+      color: #1e293b;
     }
     html[data-cg-theme="dark"] table.data-table tr.cg-row-visit-open td {
       background: rgba(59, 130, 246, 0.16);
@@ -10460,7 +10467,35 @@
     }
 
     function getEmailShellThemeColors() {
-      var s = getComputedStyle(document.documentElement);
+      var root = document.documentElement;
+      /**
+       * Los HTML de correo usan lienzo claro (#fff) fijo para Outlook/Gmail. En modo noche las variables
+       * globales invierten grises (p. ej. --gray-800 ≈ texto claro): si las leyéramos aquí, saludo y
+       * cuerpo quedarían gris muy claro sobre blanco. Devolvemos siempre colores pensados para fondo blanco.
+       */
+      if (root.getAttribute("data-cg-theme") === "dark") {
+        return {
+          ribbon: "#74bd20",
+          headG1: "#1e3a0f",
+          headG2: "#365f14",
+          headG3: "#74bd20",
+          accentDark: "#5f9a18",
+          blue100: "#ecfccb",
+          blue400: "#8fd03a",
+          outerBg1: "#e8eef5",
+          outerBg2: "#f1f5f9",
+          outerBg3: "#f8fafc",
+          cardBorder: "#e2e8f0",
+          footerBg: "#f8fafc",
+          footerBorder: "#e2e8f0",
+          innerText: "#1e293b",
+          footerMuted: "#475569",
+          footerText: "#334155",
+          logoRowBg: "#ffffff",
+          logoRowBorder: "#e8edf4"
+        };
+      }
+      var s = getComputedStyle(root);
       function v(n, fb) {
         var x = (s.getPropertyValue(n) || "").trim();
         return x || fb;
@@ -23788,8 +23823,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         : "Mensaje generado desde " + G.APP_BRAND_NAME + ".";
     var cardBg = CG_EMAIL_CARD_BG;
     var cardBorder = "#e7e7ea";
-    var innerText = C.innerText || "#3f3f46";
-    var muted = "#71717a";
+    var innerText = C.innerText || "#1e293b";
+    var muted = C.footerMuted || "#64748b";
     var titleCol = "#18181b";
     var outerBg = CG_EMAIL_CARD_BG;
     var ff = CG_EMAIL_FONT_FAMILY;
