@@ -23583,11 +23583,32 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     return build(shortPlain);
   }
 
-  function cgOpenMailtoHref(href) {
-    if (!href) return;
+  /** Cuerpo del mailto: respeta el texto editado en el modal si el textarea tiene contenido. */
+  function cgEmailPlainFromOptionalTextarea(textareaId, fallbackPlain) {
+    if (!textareaId) return fallbackPlain;
     try {
-      window.open(href, "_blank", "noopener,noreferrer");
-    } catch (eM1) {
+      var el = document.getElementById(textareaId);
+      if (el && "value" in el && el.value != null && String(el.value).trim() !== "") {
+        return String(el.value);
+      }
+    } catch (eTa) {}
+    return fallbackPlain;
+  }
+
+  function cgOpenMailtoHref(href) {
+    if (!href || typeof href !== "string") return;
+    try {
+      var a = document.createElement("a");
+      a.setAttribute("href", href);
+      a.setAttribute("rel", "noopener noreferrer");
+      a.setAttribute("target", "_blank");
+      a.style.position = "fixed";
+      a.style.left = "-9999px";
+      a.style.opacity = "0";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (eM0) {
       try {
         window.location.href = href;
       } catch (eM2) {}
@@ -24603,6 +24624,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.toast("Sin dirección de correo disponible", "warn");
       return;
     }
+    plain = cgEmailPlainFromOptionalTextarea("enc-mail-txt-" + id, plain);
     var href = mailtoHrefPlain(mail, subj, plain);
     if (
       !encomiendaApplyNotifyMark(id, encKind, {
@@ -24668,7 +24690,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var dep = G.deptById(rec.deptId);
     var deptLbl = dep ? dep.number : "—";
     var subjIng = "Aviso de ingreso de visita — Depto " + deptLbl;
-    var plain = visitIngresoNotifyBodyText(rec);
+    var rid = String(visitId || "x").replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!rid) rid = "x";
+    var plain = cgEmailPlainFromOptionalTextarea(
+      "visit-ingreso-txt-" + rid,
+      visitIngresoNotifyBodyText(rec)
+    );
     var href = mailtoHrefPlain(inf.email, subjIng, plain);
     if (
       !visitApplyResidentNotified(visitId, {
@@ -24704,6 +24731,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       k === "warn30"
         ? "Recordatorio: tiempo máximo estacionamiento de visitas — Depto " + deptLbl
         : "Se ha excedido el tiempo máximo del estacionamiento de visitas — Depto " + deptLbl;
+    plain = cgEmailPlainFromOptionalTextarea("visit-mail-txt-" + visitId + "-" + k, plain);
     var href = mailtoHrefPlain(inf.email, subj, plain);
     if (
       !visitApplyResidentNotified(visitId, {
@@ -26738,10 +26766,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     var parts = visitParteNotifyContent(v);
-    if (!parts.mailto) {
+    if (!parts.mail || !String(parts.mail).trim()) {
       G.toast("Sin e-mail disponible para el parte", "warn");
       return;
     }
+    var plainParte = cgEmailPlainFromOptionalTextarea("parte-txt", parts.plain);
+    var hrefParte = mailtoHrefPlain(parts.mail, parts.subj, plainParte);
     if (
       !visitApplyResidentNotified(id, {
         closeModal: false,
@@ -26752,7 +26782,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.toast("No se encontró el registro de visita", "error");
       return;
     }
-    cgOpenMailtoHref(parts.mailto);
+    cgOpenMailtoHref(hrefParte);
   };
 
   A.visitParte = function (id) {
