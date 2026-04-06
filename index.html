@@ -342,16 +342,17 @@
         } catch (eEv) {}
       }
 
-      /** IDs de visitas borradas localmente (no reinyectar al fusionar con snapshot remoto incompleto). */
-      function __cgReadPendingDeletedVisitIds() {
+      /** IDs marcados como borrados en __cgPendingDeleted por clave corta (visits, staffChatMessages, …). */
+      function __cgReadPendingDeletedIdsForKey(shortKey) {
         var out = Object.create(null);
+        if (!shortKey) return out;
         try {
           var P = window.CG_PERSIST;
           if (!P || !P.LS || typeof P.localGetRaw !== "function") return out;
           var raw = P.localGetRaw(P.LS + "__cgPendingDeleted");
           if (raw == null || raw === "") return out;
           var o = JSON.parse(raw);
-          var b = o && o.visits;
+          var b = o && o[shortKey];
           if (!b || typeof b !== "object") return out;
           var idk;
           for (idk in b) {
@@ -359,6 +360,10 @@
           }
         } catch (ePd) {}
         return out;
+      }
+
+      function __cgReadPendingDeletedVisitIds() {
+        return __cgReadPendingDeletedIdsForKey("visits");
       }
 
       /**
@@ -424,6 +429,43 @@
           out.push(lx);
           inOut[lid] = true;
         }
+        return out;
+      }
+
+      /**
+       * Chat staff: unión por id de mensaje entre remoto y caché local (evita last-write-wins que borra hilos).
+       * Respeta __cgPendingDeleted.staffChatMessages (mensajes eliminados por admin no se reinyectan).
+       */
+      function mergeStaffChatMessages(remoteArr, localArr) {
+        if (!Array.isArray(remoteArr)) remoteArr = [];
+        if (!Array.isArray(localArr)) localArr = [];
+        var pendDel = __cgReadPendingDeletedIdsForKey("staffChatMessages");
+        function atMs(m) {
+          if (!m || m.at == null) return 0;
+          var t = new Date(m.at).getTime();
+          return t !== t ? 0 : t;
+        }
+        var byId = Object.create(null);
+        function ingest(arr) {
+          var i;
+          for (i = 0; i < arr.length; i++) {
+            var m = arr[i];
+            if (!m || m.id == null || String(m.id) === "") continue;
+            var id = String(m.id);
+            if (pendDel[id]) continue;
+            if (!byId[id] || atMs(m) >= atMs(byId[id])) byId[id] = m;
+          }
+        }
+        ingest(remoteArr);
+        ingest(localArr);
+        var out = [];
+        var k;
+        for (k in byId) {
+          if (Object.prototype.hasOwnProperty.call(byId, k)) out.push(byId[k]);
+        }
+        out.sort(function (a, b) {
+          return atMs(a) - atMs(b);
+        });
         return out;
       }
 
@@ -542,10 +584,34 @@
             }
           }
 
+          if (shortKey === "staffChatMessages") {
+            try {
+              var prevStrChat = window.__cgFsMem[shortKey];
+              if (typeof prevStrChat !== "string" || !prevStrChat) {
+                prevStrChat = tryLocalStorageGet(full);
+              }
+              if (typeof prevStrChat === "string" && prevStrChat) {
+                var locChat = JSON.parse(prevStrChat);
+                var remChat = JSON.parse(remoteSnapshot);
+                if (Array.isArray(locChat) && Array.isArray(remChat)) {
+                  next = JSON.stringify(mergeStaffChatMessages(remChat, locChat));
+                }
+              }
+            } catch (eChatMerge) {}
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
           window.__cgFsMem[shortKey] = next;
           if (window.__cgFsUseLocalCache) tryLocalStorageSet(full, next);
           cgDispatchCloudStorageApplied(shortKey, "modified");
-          if (shortKey === "visits" && next !== remoteSnapshot && window.cgFsBridge && typeof window.cgFsBridge.queueWrite === "function") {
+          if (
+            (shortKey === "visits" || shortKey === "staffChatMessages") &&
+            next !== remoteSnapshot &&
+            window.cgFsBridge &&
+            typeof window.cgFsBridge.queueWrite === "function"
+          ) {
             window.cgFsBridge.queueWrite(shortKey, next);
           }
         }
