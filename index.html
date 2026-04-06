@@ -23668,8 +23668,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
   }
 
   /**
-   * Abre mailto: hacia el cliente predeterminado del SO. Orden: location (misma ventana, sin pestaña),
-   * ancla programática, assign, iframe. Luego enlace visible en modal como respaldo.
+   * Abre mailto: una sola vez por invocación: varios intentos (location + ancla + iframe) consumen
+   * el user gesture en Chrome y los siguientes lanzan “user gesture is required”.
+   * Un único .click() en <a> suele bastar si el gesto sigue vigente (p. ej. sin preventDefault previo).
    */
   function cgOpenMailtoHref(href) {
     if (!href || typeof href !== "string") return;
@@ -23679,29 +23680,21 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       } catch (x) {}
     }
     try {
-      window.location.href = href;
-    } catch (eLoc) {}
-    try {
       var a = document.createElement("a");
       a.href = href;
       a.setAttribute("rel", "noopener");
-      a.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;overflow:hidden;";
+      a.style.cssText =
+        "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0.01;overflow:hidden;pointer-events:auto;";
       document.body.appendChild(a);
-      if (typeof a.click === "function") a.click();
+      if (typeof a.click === "function") {
+        a.click();
+      }
       removeEl(a);
-    } catch (eA) {}
-    try {
-      var ifr = document.createElement("iframe");
-      ifr.setAttribute("aria-hidden", "true");
-      ifr.setAttribute("tabindex", "-1");
-      ifr.style.cssText =
-        "position:fixed;width:1px;height:1px;left:0;top:0;border:0;opacity:0;pointer-events:none;";
-      ifr.src = href;
-      document.body.appendChild(ifr);
-      setTimeout(function () {
-        removeEl(ifr);
-      }, 5000);
-    } catch (eC) {}
+    } catch (eA) {
+      try {
+        window.location.href = href;
+      } catch (eB) {}
+    }
     cgInstallMailtoFallbackLink(href);
   }
 
@@ -31238,7 +31231,17 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       if (!actions || !Object.prototype.hasOwnProperty.call(actions, act)) return false;
       var fn = actions[act];
       if (typeof fn !== "function") return false;
-      if (e && typeof e.preventDefault === "function") e.preventDefault();
+      /**
+       * Chrome/Chromium: preventDefault() en el clic puede invalidar el “user gesture” y entonces
+       * mailto: falla con “Not allowed to launch … because a user gesture is required”.
+       * Estas acciones solo abren el cliente de correo vía mailto: — no llamar preventDefault.
+       */
+      var cgActsMailtoPreserveGesture =
+        act === "encomiendaOpenMailtoMark" ||
+        act === "visitIngresoOpenMailtoMark" ||
+        act === "visitVehOpenMailtoMark" ||
+        act === "visitParteOpenMailtoMark";
+      if (!cgActsMailtoPreserveGesture && e && typeof e.preventDefault === "function") e.preventDefault();
       if (actEl.getAttribute("data-cg-close-modal") === "1" && UI.closeModal) UI.closeModal();
       if (act === "parkingMapCellClick") {
         fn(
