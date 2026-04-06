@@ -731,17 +731,18 @@
     })();
   </script>
   <script>
-    /* Modo día/noche: mismo objeto que personalización (localStorage CG.LS + personalization). */
+    /* Modo día/noche: solo esta sesión de navegador (sessionStorage CG.LS + uiThemeSession). No se sincroniza ni queda ligado a otro usuario en el mismo equipo. */
     (function () {
       try {
         var P = window.CG_PERSIST;
-        var raw = P.localGetRaw(P.LS + "personalization");
         var theme = "light";
-        if (raw) {
-          var d = P.parseJson(raw, null);
-          if (d && d.theme === "dark") theme = "dark";
-          else if (d && d.theme === "light") theme = "light";
-        }
+        try {
+          if (typeof sessionStorage !== "undefined" && sessionStorage) {
+            var s = sessionStorage.getItem(P.LS + "uiThemeSession");
+            if (s === "dark") theme = "dark";
+            else if (s === "light") theme = "light";
+          }
+        } catch (eS) {}
         document.documentElement.setAttribute("data-cg-theme", theme);
       } catch (e2) {
         document.documentElement.setAttribute("data-cg-theme", "light");
@@ -3189,10 +3190,50 @@
         4px 0 24px -8px rgba(0, 0, 0, 0.35);
     }
     .sidebar-brand,
+    .sidebar-nav-top,
     .nav-scroll,
     .sidebar-footer {
       position: relative;
       z-index: 1;
+    }
+    .sidebar-nav-top {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0.4rem 0.75rem 0.45rem;
+      border-bottom: 1px solid color-mix(in srgb, var(--cg-sidebar-p) 12%, rgba(255, 255, 255, 0.06));
+    }
+    button.cg-sidebar-theme-mini {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 2.4rem;
+      height: 2.4rem;
+      padding: 0;
+      margin: 0;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--cg-sidebar-p) 28%, rgba(255, 255, 255, 0.1));
+      background: color-mix(in srgb, var(--cg-sidebar-p) 14%, rgba(15, 23, 42, 0.55));
+      color: rgba(248, 250, 252, 0.94);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      line-height: 1;
+      transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+    }
+    button.cg-sidebar-theme-mini:hover {
+      background: color-mix(in srgb, var(--cg-sidebar-p) 26%, rgba(15, 23, 42, 0.72));
+      border-color: color-mix(in srgb, var(--cg-sidebar-p) 42%, rgba(255, 255, 255, 0.14));
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--cg-sidebar-p) 12%, transparent);
+    }
+    button.cg-sidebar-theme-mini:active {
+      transform: scale(0.96);
+    }
+    button.cg-sidebar-theme-mini:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--cg-sidebar-p-light) 65%, #fff);
+      outline-offset: 2px;
     }
     .sidebar-brand {
       display: flex;
@@ -3239,7 +3280,7 @@
     .nav-scroll {
       flex: 1;
       overflow-y: auto;
-      padding: 0.65rem 0.55rem 0.85rem;
+      padding: 0.5rem 0.55rem 0.85rem;
     }
     button.nav-item {
       appearance: none;
@@ -4871,6 +4912,7 @@
     .card.cg-card-accent--visit { border-top: 3px solid var(--blue-400); }
     .card.cg-card-accent--enc { border-top: 3px solid #f59e0b; }
     .card.cg-card-accent--res { border-top: 3px solid #10b981; }
+    .card.cg-card-accent--prov-list { border-top: 3px solid #f97316; }
     .cg-form-block { margin-bottom: 1rem; padding-bottom: 0.85rem; border-bottom: 1px solid var(--gray-100); }
     .cg-form-block:last-of-type { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
     .cg-form-block-title {
@@ -5244,6 +5286,152 @@
     .cg-prov-contactos-cell { font-size: calc(0.82rem * 1.01); line-height: 1.45; }
     .cg-prov-contactos-cell .cg-prov-contact-line { display: block; }
     .cg-prov-contactos-cell .cg-prov-contact-line + .cg-prov-contact-line { margin-top: 0.2rem; }
+
+    /* Proveedores — listado */
+    .cg-prov-table-shell {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: -0.15rem 0 0;
+      border-radius: 12px;
+      border: 1px solid var(--gray-200);
+      background: var(--white);
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+    }
+    .cg-prov-list-table {
+      margin: 0;
+      min-width: 640px;
+    }
+    .cg-prov-list-table thead th {
+      background: linear-gradient(180deg, var(--gray-50) 0%, color-mix(in srgb, var(--gray-100) 88%, var(--gray-50)) 100%);
+      border-bottom-color: var(--gray-200);
+      white-space: nowrap;
+    }
+    .cg-prov-list-table tbody tr.cg-prov-row td {
+      vertical-align: top;
+      padding-top: 0.55rem;
+      padding-bottom: 0.55rem;
+    }
+    .cg-prov-list-table tbody tr.cg-prov-row:hover td {
+      background: color-mix(in srgb, var(--blue-500) 4%, var(--white));
+    }
+    .cg-prov-empresa-cell {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.55rem;
+      min-width: 0;
+    }
+    .cg-prov-empresa-ic {
+      flex-shrink: 0;
+      width: 2.15rem;
+      height: 2.15rem;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.92rem;
+      color: var(--accent-dark, var(--blue-700));
+      background: color-mix(in srgb, var(--blue-500) 12%, var(--gray-50));
+      border: 1px solid color-mix(in srgb, var(--blue-500) 18%, var(--gray-200));
+    }
+    .cg-prov-empresa-txt {
+      display: block;
+      font-size: 0.92rem;
+      font-weight: 700;
+      line-height: 1.35;
+      color: var(--blue-900);
+      padding-top: 0.12rem;
+    }
+    .cg-prov-servicio-tag {
+      display: inline-block;
+      max-width: 100%;
+      padding: 0.28rem 0.62rem;
+      border-radius: 999px;
+      font-size: 0.74rem;
+      font-weight: 600;
+      line-height: 1.3;
+      letter-spacing: 0.02em;
+      color: var(--accent-dark, var(--blue-700));
+      background: color-mix(in srgb, var(--blue-500) 11%, transparent);
+      border: 1px solid color-mix(in srgb, var(--blue-500) 22%, var(--gray-200));
+      word-break: break-word;
+    }
+    .cg-prov-contactos-cell.cg-prov-contactos-cell--blocks {
+      min-width: 11rem;
+      max-width: 22rem;
+    }
+    .cg-prov-contact-block {
+      padding: 0.38rem 0.52rem;
+      margin: 0.2rem 0 0;
+      border-radius: 8px;
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      font-size: calc(0.78rem * 1.02);
+      line-height: 1.4;
+    }
+    .cg-prov-contact-block:first-child {
+      margin-top: 0;
+    }
+    .cg-prov-col-extras {
+      max-width: min(280px, 34vw);
+    }
+    .cg-prov-extras {
+      max-width: none;
+    }
+    .cg-prov-actions {
+      white-space: nowrap;
+      text-align: right;
+      vertical-align: middle !important;
+    }
+    .cg-prov-actions .btn-sm + .btn-sm {
+      margin-left: 0.2rem;
+    }
+    .cg-prov-actions-h {
+      width: 1%;
+      text-align: right;
+      vertical-align: middle;
+    }
+    .cg-prov-empty-cell {
+      color: var(--gray-500);
+      font-size: 0.88em;
+      font-weight: 500;
+    }
+    .cg-page-compact .cg-prov-list-table {
+      font-size: calc(0.75rem * 1.01);
+    }
+    .cg-page-compact .cg-prov-empresa-txt {
+      font-size: 0.88rem;
+    }
+    html[data-cg-theme="dark"] .cg-prov-table-shell {
+      border-color: var(--gray-300);
+      background: var(--card-color);
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.32);
+    }
+    html[data-cg-theme="dark"] .cg-prov-list-table thead th {
+      background: linear-gradient(180deg, var(--gray-100) 0%, var(--gray-50) 100%);
+    }
+    html[data-cg-theme="dark"] .cg-prov-list-table tbody tr.cg-prov-row:hover td {
+      background: color-mix(in srgb, var(--blue-400) 8%, var(--card-color));
+    }
+    html[data-cg-theme="dark"] .cg-prov-empresa-ic {
+      color: #a3e635;
+      background: color-mix(in srgb, var(--blue-500) 16%, var(--gray-100));
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .cg-prov-empresa-txt {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-prov-servicio-tag {
+      color: var(--gray-800);
+      background: color-mix(in srgb, var(--blue-400) 14%, var(--gray-100));
+      border-color: color-mix(in srgb, var(--blue-400) 28%, var(--gray-300));
+    }
+    html[data-cg-theme="dark"] .cg-prov-contact-block {
+      background: var(--gray-50);
+      border-color: var(--gray-200);
+    }
+    html[data-cg-theme="dark"] .card.cg-card-accent--prov-list {
+      border-top-color: #fb923c;
+    }
 
     /* Visitas — selector tipo, lista rápida, badges */
     .cg-vis-type-pick {
@@ -7056,12 +7244,6 @@
     html[data-cg-theme="dark"] #dept-module-host-inner table td {
       border-color: var(--border-color);
     }
-    .nav-item.nav-item--theme {
-      margin-bottom: 0.45rem;
-      padding-bottom: 0.7rem;
-      border-bottom: 1px solid color-mix(in srgb, var(--cg-sidebar-p) 16%, rgba(255, 255, 255, 0.07));
-    }
-
     /* Modal edición E- (tema oscuro, sin variables del antiguo hub) */
     .modal.pk-modal-dark {
       background: #1a2332 !important;
@@ -7257,6 +7439,7 @@
         <strong>Conserjería</strong>
         <span>Panel residencial</span>
       </div>
+      <div class="sidebar-nav-top" id="sidebar-nav-top" aria-label="Accesos rápidos del menú"></div>
       <nav class="nav-scroll" id="nav" aria-label="Módulos de la aplicación"></nav>
       <div class="sidebar-footer">
         <div id="sidebar-user-line"></div>
@@ -8302,6 +8485,13 @@
     function clearSession() {
       state.session = null;
       save("session", null);
+      clearUiThemeSession();
+      if (document.documentElement) {
+        document.documentElement.setAttribute("data-cg-theme", "light");
+        try {
+          window.dispatchEvent(new CustomEvent("cg-theme-change", { detail: { theme: "light" } }));
+        } catch (eTh) {}
+      }
       if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function" && !__cgEffectiveCloudOnly()) {
         window.CG.cloudPushKeyImmediate("session");
       }
@@ -9401,7 +9591,8 @@
         ["dashScheduledAlerts", migrateDashScheduledAlerts],
         ["festiveAmbience", migrateFestiveAmbience],
         ["festiveAmorAmistadFeb12", migrateFestiveAmorAmistadFeb12],
-        ["festiveAmorAmistadThemePack", migrateFestiveAmorAmistadThemePack]
+        ["festiveAmorAmistadThemePack", migrateFestiveAmorAmistadThemePack],
+        ["personalizationThemeSession", migratePersonalizationThemeSessionV1]
       ];
       var si;
       for (si = 0; si < steps.length; si++) {
@@ -9442,6 +9633,17 @@
 
     function migrateDashScheduledAlerts() {
       if (P.localGetRaw(LS + "dashScheduledAlerts") === null) save("dashScheduledAlerts", []);
+    }
+
+    /** Modo día/noche ya no vive en personalization (localStorage): solo sesión de navegador. Limpia clave heredada. */
+    function migratePersonalizationThemeSessionV1() {
+      if (load("migrated_personalization_theme_session_v1", false)) return;
+      var d = load("personalization", null);
+      if (d && typeof d === "object" && Object.prototype.hasOwnProperty.call(d, "theme")) {
+        delete d.theme;
+        save("personalization", d);
+      }
+      save("migrated_personalization_theme_session_v1", true);
     }
 
     function defaultFestiveAmbienceObject() {
@@ -9986,11 +10188,34 @@
     ];
 
     /* ┌─ 10. Personalización / temas (paleta, CSS export, email shell) ───────────────── */
+    var CG_UI_THEME_SESSION_KEY = "uiThemeSession";
+    function readUiThemeFromSession() {
+      try {
+        if (typeof sessionStorage === "undefined" || !sessionStorage) return null;
+        var s = sessionStorage.getItem(LS + CG_UI_THEME_SESSION_KEY);
+        if (s === "dark" || s === "light") return s;
+      } catch (eUt) {}
+      return null;
+    }
+    function writeUiThemeToSession(theme) {
+      try {
+        if (typeof sessionStorage === "undefined" || !sessionStorage) return;
+        sessionStorage.setItem(LS + CG_UI_THEME_SESSION_KEY, theme === "dark" ? "dark" : "light");
+      } catch (eW) {}
+    }
+    function clearUiThemeSession() {
+      try {
+        if (typeof sessionStorage === "undefined" || !sessionStorage) return;
+        sessionStorage.removeItem(LS + CG_UI_THEME_SESSION_KEY);
+      } catch (eC) {}
+    }
+
     function getPersonalization() {
       var d = load("personalization", null);
       if (!d || typeof d !== "object") d = {};
       var pal = PERSONALIZATION_PALETTE_IDS.indexOf(d.palette) >= 0 ? d.palette : "lima";
-      var theme = d.theme === "dark" ? "dark" : "light";
+      var sess = readUiThemeFromSession();
+      var theme = sess === "dark" ? "dark" : "light";
       return { palette: pal, theme: theme };
     }
 
@@ -10001,8 +10226,13 @@
       var nextTheme = cur.theme;
       if (partial && partial.theme != null) {
         nextTheme = partial.theme === "dark" ? "dark" : "light";
+        writeUiThemeToSession(nextTheme);
       }
-      save("personalization", { palette: nextPalette, theme: nextTheme });
+      var stored = load("personalization", null);
+      if (!stored || typeof stored !== "object") stored = {};
+      stored.palette = nextPalette;
+      delete stored.theme;
+      save("personalization", stored);
       applyPersonalizationToDom();
     }
 
@@ -18452,32 +18682,37 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
     function renderNav() {
       const nav = document.getElementById("nav");
+      const navTop = document.getElementById("sidebar-nav-top");
       if (!nav) return;
       nav.innerHTML = "";
+      if (navTop) navTop.innerHTML = "";
       var cu = G.currentUser();
       if (!cu) return;
       var shiftLocked = conserjeMustOpenShiftBeforeModules();
       var th0 = (typeof G.getPersonalization === "function" && G.getPersonalization().theme) || "light";
-      var themeBtn = document.createElement("button");
-      themeBtn.type = "button";
-      themeBtn.className = "nav-item nav-item--theme";
-      themeBtn.setAttribute("aria-label", th0 === "dark" ? "Activar modo día" : "Activar modo noche");
-      var themeIc = document.createElement("i");
-      themeIc.className = "fa-solid " + (th0 === "dark" ? "fa-sun" : "fa-moon");
-      themeIc.setAttribute("aria-hidden", "true");
-      var themeSp = document.createElement("span");
-      themeSp.textContent = th0 === "dark" ? "Modo día" : "Modo noche";
-      themeBtn.appendChild(themeIc);
-      themeBtn.appendChild(themeSp);
-      themeBtn.onclick = function () {
-        var tCur = (typeof G.getPersonalization === "function" && G.getPersonalization().theme) || "light";
-        var tNext = tCur === "dark" ? "light" : "dark";
-        if (typeof G.setPersonalization === "function") G.setPersonalization({ theme: tNext });
-        G.toast(tNext === "dark" ? "Modo noche activado" : "Modo día activado", "success");
-        renderNav();
-        closeSidebarMobile();
-      };
-      nav.appendChild(themeBtn);
+      if (navTop) {
+        var themeBtn = document.createElement("button");
+        themeBtn.type = "button";
+        themeBtn.className = "cg-sidebar-theme-mini";
+        themeBtn.setAttribute(
+          "aria-label",
+          th0 === "dark" ? "Activar modo día (interfaz clara)" : "Activar modo noche (interfaz oscura)"
+        );
+        themeBtn.title = th0 === "dark" ? "Modo día" : "Modo noche";
+        var themeIc = document.createElement("i");
+        themeIc.className = "fa-solid " + (th0 === "dark" ? "fa-sun" : "fa-moon");
+        themeIc.setAttribute("aria-hidden", "true");
+        themeBtn.appendChild(themeIc);
+        themeBtn.onclick = function () {
+          var tCur = (typeof G.getPersonalization === "function" && G.getPersonalization().theme) || "light";
+          var tNext = tCur === "dark" ? "light" : "dark";
+          if (typeof G.setPersonalization === "function") G.setPersonalization({ theme: tNext });
+          G.toast(tNext === "dark" ? "Modo noche activado" : "Modo día activado", "success");
+          renderNav();
+          closeSidebarMobile();
+        };
+        navTop.appendChild(themeBtn);
+      }
       G.MODULES.forEach(function (m) {
         if (m.adminOnly && cu.role !== "admin") return;
         if (!G.canSeeModule(m.id)) return;
@@ -19840,7 +20075,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "<div class=\"toolbar\">" +
         "<button type=\"submit\" class=\"btn btn-primary\"><i class=\"fa-solid fa-floppy-disk\"></i> Guardar</button>" +
         "<button type=\"button\" class=\"btn btn-secondary\" id=\"btn-prov-clear\">Limpiar</button></div></form></div></div>" +
-        "<div class=\"card\"><div class=\"card-h\"><h3>Listado</h3>" +
+        "<div class=\"card cg-card-accent--prov-list\"><div class=\"card-h\"><h3>Directorio</h3>" +
         "<div class=\"toolbar\"><label class=\"sr-only\" for=\"flt-prov-q\">Filtrar proveedores</label><input type=\"search\" id=\"flt-prov-q\" placeholder=\"Buscar empresa, servicio, contactos u otros datos…\" aria-label=\"Filtrar listado de proveedores\" /></div></div>" +
         "<div class=\"card-b\"><div id=\"tbl-prov-wrap\"></div></div></div></div>"
       );
@@ -24838,9 +25073,9 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
   function proveedorContactosCellHtml(p) {
     var list = proveedorContactosNormalized(p);
-    if (!list.length) return "—";
+    if (!list.length) return "<span class=\"cg-prov-empty-cell\">—</span>";
     return (
-      "<span class=\"cg-prov-contactos-cell\">" +
+      "<div class=\"cg-prov-contactos-cell cg-prov-contactos-cell--blocks\">" +
       list
         .map(function (c) {
           var parts = [];
@@ -24848,10 +25083,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
           if (c.telefono) parts.push(c.telefono);
           if (c.email) parts.push(c.email);
           var line = parts.join(" · ");
-          return "<span class=\"cg-prov-contact-line\">" + G.escapeHtml(line) + "</span>";
+          return "<div class=\"cg-prov-contact-block\"><span class=\"cg-prov-contact-line\">" + G.escapeHtml(line) + "</span></div>";
         })
         .join("") +
-      "</span>"
+      "</div>"
     );
   }
 
@@ -24895,7 +25130,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var keys = Object.keys(ex).filter(function (k) {
       return String(ex[k] || "").trim();
     });
-    if (!keys.length) return "—";
+    if (!keys.length) return "<span class=\"cg-prov-empty-cell\">—</span>";
     var raw = keys
       .slice(0, 4)
       .map(function (k) {
@@ -24927,30 +25162,35 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       });
     }
     var html =
-      "<table class=\"data-table\"><thead><tr><th>Empresa</th><th>Servicio</th><th>Contactos</th><th>Otros datos</th><th></th></tr></thead><tbody>";
+      "<div class=\"cg-prov-table-shell\"><table class=\"data-table cg-prov-list-table\"><thead><tr><th>Empresa</th><th>Servicio</th><th>Contactos</th><th>Otros datos</th><th class=\"cg-prov-actions-h\"><span class=\"sr-only\">Acciones</span></th></tr></thead><tbody>";
     if (!rows.length) {
       html += "<tr><td class=\"cg-empty-table\" colspan=\"5\">No hay proveedores. Use el formulario superior o ajuste el filtro.</td></tr>";
     } else {
       rows.forEach(function (p) {
+        var serv = (p.tipoServicio && String(p.tipoServicio).trim()) ? G.escapeHtml(p.tipoServicio) : "—";
+        var servTag =
+          serv === "—"
+            ? "<span class=\"cg-prov-empty-cell\">—</span>"
+            : "<span class=\"cg-prov-servicio-tag\">" + serv + "</span>";
         html +=
-          "<tr><td><strong>" +
+          "<tr class=\"cg-prov-row\"><td class=\"cg-prov-col-empresa\"><div class=\"cg-prov-empresa-cell\"><span class=\"cg-prov-empresa-ic\" aria-hidden=\"true\"><i class=\"fa-solid fa-truck\"></i></span><strong class=\"cg-prov-empresa-txt\">" +
           G.escapeHtml(p.empresa) +
-          "</strong></td><td>" +
-          G.escapeHtml(p.tipoServicio || "—") +
-          "</td><td>" +
+          "</strong></div></td><td class=\"cg-prov-col-servicio\">" +
+          servTag +
+          "</td><td class=\"cg-prov-col-contactos\">" +
           proveedorContactosCellHtml(p) +
-          "</td><td>" +
+          "</td><td class=\"cg-prov-col-extras\">" +
           proveedorExtrasCellHtml(p) +
-          "</td><td style=\"white-space:nowrap\">" +
+          "</td><td class=\"cg-prov-actions\">" +
           "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"proveedorEditForm\" data-cg-id=\"" +
           G.escapeHtml(p.id) +
-          "\"><i class=\"fa-solid fa-pen\"></i></button> " +
+          "\" title=\"Editar\" aria-label=\"Editar proveedor\"><i class=\"fa-solid fa-pen\" aria-hidden=\"true\"></i></button>" +
           "<button type=\"button\" class=\"btn btn-danger btn-sm\" data-cg-act=\"proveedorDel\" data-cg-id=\"" +
           G.escapeHtml(p.id) +
-          "\"><i class=\"fa-solid fa-trash\"></i></button></td></tr>";
+          "\" title=\"Eliminar\" aria-label=\"Eliminar proveedor\"><i class=\"fa-solid fa-trash\" aria-hidden=\"true\"></i></button></td></tr>";
       });
     }
-    html += "</tbody></table>";
+    html += "</tbody></table></div>";
     w.innerHTML = html;
   };
 
@@ -29628,7 +29868,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         (curTheme === "dark" ? "btn-primary" : "btn-secondary") +
         "\" data-cg-act=\"adminApplyTheme\" data-cg-param=\"dark\"><i class=\"fa-solid fa-moon\" aria-hidden=\"true\"></i> Modo noche</button>" +
         "</div>" +
-        "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;font-size:0.8rem\">Misma opción en el menú lateral (sol / luna) para acceso rápido. Se guarda en este equipo y en la nube si usa sincronización.</p></div>";
+        "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;font-size:0.8rem\">Misma opción en el menú lateral (sol / luna). El modo día/noche vale solo para <strong>esta sesión de trabajo</strong> en el navegador (al cerrar sesión o la pestaña vuelve a modo día). La <strong>paleta de color</strong> sí se guarda en este equipo y en la nube si usa sincronización.</p></div>";
       var palCards = G.PERSONALIZATION_PALETTES.map(function (pal) {
         var active = pal.id === curPal;
         var ring = active ? "outline:2px solid var(--blue-500);outline-offset:2px;" : "";
