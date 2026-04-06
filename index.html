@@ -731,6 +731,24 @@
     })();
   </script>
   <script>
+    /* Modo día/noche: mismo objeto que personalización (localStorage CG.LS + personalization). */
+    (function () {
+      try {
+        var P = window.CG_PERSIST;
+        var raw = P.localGetRaw(P.LS + "personalization");
+        var theme = "light";
+        if (raw) {
+          var d = P.parseJson(raw, null);
+          if (d && d.theme === "dark") theme = "dark";
+          else if (d && d.theme === "light") theme = "light";
+        }
+        document.documentElement.setAttribute("data-cg-theme", theme);
+      } catch (e2) {
+        document.documentElement.setAttribute("data-cg-theme", "light");
+      }
+    })();
+  </script>
+  <script>
     /* file://: Chrome trata cada marco como origen propio; rutas con acentos pueden diferir en NFC/NFD
        → «Unsafe attempt to load URL file://… from frame with URL file://…» al enviar formularios o navegar.
        Siempre cancelamos la navegación por defecto de submit (captura) y fijamos action="#" en formularios;
@@ -2841,7 +2859,7 @@
       transition: transform 0.15s, box-shadow 0.15s, background 0.2s;
     }
     .btn:active { transform: scale(0.98); }
-    .btn-primary { background: var(--blue-500); color: var(--white); }
+    .btn-primary { background: var(--blue-500); color: var(--on-accent); }
     .btn-primary:hover { background: var(--blue-400); box-shadow: var(--shadow); }
     .btn-secondary { background: var(--gray-200); color: var(--gray-800); }
     .btn-secondary:hover { background: var(--gray-400); color: var(--white); }
@@ -3255,7 +3273,7 @@
       background: color-mix(in srgb, var(--cg-sidebar-p) 22%, rgba(15, 23, 42, 0.72));
       border-color: color-mix(in srgb, var(--cg-sidebar-p) 38%, transparent);
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--cg-sidebar-p) 14%, transparent);
-      color: var(--white);
+      color: #f8fafc;
     }
     .nav-item.nav-item--shift-locked {
       opacity: 0.48;
@@ -5715,7 +5733,7 @@
       width: 1.5rem;
       height: 1.5rem;
       background: var(--blue-500);
-      color: var(--white);
+      color: var(--on-accent);
       border-radius: 50%;
       font-size: 0.65rem;
       display: flex;
@@ -6050,7 +6068,7 @@
       font: inherit;
       font-size: 0.85rem;
     }
-    .admin-tab.active { background: var(--blue-500); color: var(--white); border-color: var(--blue-500); font-weight: 600; }
+    .admin-tab.active { background: var(--blue-500); color: var(--on-accent); border-color: var(--blue-500); font-weight: 600; }
     .admin-tab[aria-pressed="false"] { font-weight: 500; }
 
     .perm-grid { display: grid; gap: 0.5rem; }
@@ -6205,6 +6223,247 @@
       --resident-propietario: #5f9a18;
       --resident-propietario-bg: rgba(116, 189, 32, 0.14);
       --resident-propietario-border: rgba(95, 154, 24, 0.45);
+    }
+
+    /* —— Modo noche (contraste: textos, formularios, tarjetas, chat, mapa edificio, módulo Residentes) —— */
+    html[data-cg-theme="dark"] {
+      color-scheme: dark;
+      --gray-50: #121820;
+      --gray-100: #181f2a;
+      --gray-200: #243044;
+      --gray-300: #334155;
+      --gray-400: #7c8d9f;
+      --gray-500: #8b9caf;
+      --gray-600: #9eb0c8;
+      --gray-700: #c5d0e0;
+      --gray-800: #e8eef5;
+      --white: #1a2332;
+      --surface-color: #151b24;
+      --card-color: #1e2736;
+      --border-color: #2d3a4f;
+      --secondary-text: #9eb0c8;
+      --shadow: 0 4px 28px rgba(0, 0, 0, 0.55);
+      --blue-900: color-mix(in srgb, var(--blue-100) 78%, #f8fafc);
+      --blue-700: color-mix(in srgb, var(--blue-400) 52%, #dcfce7);
+      --on-accent: #0f172a;
+    }
+    html[data-cg-theme="dark"] .topbar {
+      background: rgba(22, 28, 36, 0.82);
+      border-bottom-color: color-mix(in srgb, var(--cg-topbar-shell-p) 22%, rgba(148, 163, 184, 0.22));
+      box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+        0 12px 36px -14px rgba(0, 0, 0, 0.55),
+        0 0 40px -24px color-mix(in srgb, var(--cg-topbar-shell-p) 14%, transparent);
+    }
+    html[data-cg-theme="dark"] .menu-toggle {
+      background: rgba(30, 39, 50, 0.92);
+      color: var(--gray-200);
+      border-color: color-mix(in srgb, var(--blue-500) 24%, rgba(148, 163, 184, 0.25));
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    }
+    html[data-cg-theme="dark"] .menu-toggle:hover {
+      background: rgba(40, 52, 68, 0.95);
+      color: var(--gray-100);
+    }
+    html[data-cg-theme="dark"] .cg-topbar-user-chip {
+      background: var(--card-color);
+      border-color: var(--gray-300);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    }
+    html[data-cg-theme="dark"] .cg-topbar-user-chip--conserje .cg-topbar-user-role-badge {
+      background: rgba(116, 189, 32, 0.2);
+      color: #bef264;
+      border-color: rgba(116, 189, 32, 0.38);
+    }
+    html[data-cg-theme="dark"] .cg-topbar-user-chip--admin .cg-topbar-user-role-badge {
+      background: rgba(59, 130, 246, 0.22);
+      color: #93c5fd;
+      border-color: rgba(59, 130, 246, 0.38);
+    }
+    html[data-cg-theme="dark"] .cg-topbar-user-chip--other .cg-topbar-user-role-badge {
+      background: rgba(148, 163, 184, 0.18);
+      color: var(--gray-200);
+      border-color: rgba(148, 163, 184, 0.28);
+    }
+    html[data-cg-theme="dark"] .form-group input,
+    html[data-cg-theme="dark"] .form-group select,
+    html[data-cg-theme="dark"] .form-group textarea {
+      background: var(--gray-100);
+      color: var(--gray-800);
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .toolbar input,
+    html[data-cg-theme="dark"] .toolbar select {
+      background: var(--gray-100);
+      color: var(--gray-800);
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .admin-tab:not(.active) {
+      background: var(--gray-100);
+      color: var(--gray-700);
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .modal-overlay {
+      background: rgba(0, 0, 0, 0.62);
+    }
+    html[data-cg-theme="dark"] .modal {
+      box-shadow: 0 28px 64px rgba(0, 0, 0, 0.65);
+    }
+    html[data-cg-theme="dark"] .email-html-preview,
+    html[data-cg-theme="dark"] .email-html-preview .email-html-preview-inner {
+      background: var(--gray-100);
+    }
+    html[data-cg-theme="dark"] table.data-table tr.cg-row-visit-open td {
+      background: rgba(59, 130, 246, 0.16);
+    }
+    html[data-cg-theme="dark"] table.data-table tr.cg-row-visit-open:hover td {
+      background: rgba(59, 130, 246, 0.24);
+    }
+    html[data-cg-theme="dark"] table.data-table tr.cg-row-visit-warn td {
+      background: rgba(234, 179, 8, 0.14);
+    }
+    html[data-cg-theme="dark"] table.data-table tr.cg-row-visit-warn:hover td {
+      background: rgba(234, 179, 8, 0.22);
+    }
+    html[data-cg-theme="dark"] table.data-table tr.cg-row-visit-grace td {
+      background: rgba(248, 113, 113, 0.12);
+    }
+    html[data-cg-theme="dark"] table.data-table tr.cg-row-visit-grace:hover td {
+      background: rgba(248, 113, 113, 0.18);
+    }
+    html[data-cg-theme="dark"] table.data-table tr.cg-row-visit-multa td {
+      background: rgba(239, 68, 68, 0.16);
+    }
+    html[data-cg-theme="dark"] table.data-table tr.cg-row-visit-multa:hover td {
+      background: rgba(239, 68, 68, 0.24);
+    }
+    html[data-cg-theme="dark"] .cg-dash-bday-card {
+      background: linear-gradient(135deg, #3b1c2e 0%, var(--card-color) 50%, #2d1a28 100%);
+      box-shadow: 0 3px 18px rgba(0, 0, 0, 0.4);
+    }
+    html[data-cg-theme="dark"] .cg-chat-panel-head {
+      background: linear-gradient(180deg, var(--gray-100) 0%, var(--gray-50) 100%);
+      border-bottom-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .cg-chat-thread {
+      background: var(--gray-50);
+      border-color: var(--gray-200);
+    }
+    html[data-cg-theme="dark"] .cg-chat-typing-indicator {
+      background: var(--gray-50);
+      color: var(--gray-600);
+      border-color: var(--gray-200);
+    }
+    html[data-cg-theme="dark"] .cg-chat-bubble--me {
+      background: color-mix(in srgb, var(--blue-500) 28%, var(--gray-100));
+      border-color: color-mix(in srgb, var(--blue-400) 45%, var(--gray-300));
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-chat-bubble--other {
+      background: var(--card-color);
+      border-color: var(--gray-300);
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-chat-bubble-meta,
+    html[data-cg-theme="dark"] .cg-chat-bubble-read {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .cg-chat-badge {
+      border-color: var(--card-color);
+    }
+    html[data-cg-theme="dark"] #building .resumen-edificio-map .resumen-item {
+      background: var(--card-color) !important;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    }
+    html[data-cg-theme="dark"] #building .resumen-edificio-map .resumen-item.total {
+      background: var(--card-color) !important;
+    }
+    html[data-cg-theme="dark"] #building .resumen-edificio-map .resumen-item.vacias {
+      background: var(--gray-100) !important;
+    }
+    html[data-cg-theme="dark"] #building .resumen-edificio-map .resumen-item .valor {
+      color: var(--gray-800) !important;
+    }
+    html[data-cg-theme="dark"] #building .resumen-edificio-map .resumen-item .etiqueta {
+      color: var(--secondary-text) !important;
+    }
+    html[data-cg-theme="dark"] #building .building-map-edificio {
+      background: var(--card-color) !important;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    }
+    html[data-cg-theme="dark"] #building .building-map-edificio .unit-cell:not(.occupied):not(.slot-vacio) {
+      background: var(--gray-100) !important;
+      color: var(--gray-800) !important;
+      border-color: var(--gray-300) !important;
+    }
+    html[data-cg-theme="dark"] #building .building-map-edificio .unit-cell.vacia {
+      background: var(--gray-50) !important;
+      color: var(--gray-700) !important;
+      border-color: var(--gray-400) !important;
+    }
+    html[data-cg-theme="dark"] #building .leyenda-mapa-edificio {
+      background: var(--card-color) !important;
+      color: var(--gray-800);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+    html[data-cg-theme="dark"] #building .leyenda-mapa-edificio .leyenda-item span {
+      color: var(--gray-800) !important;
+    }
+    html[data-cg-theme="dark"] .building-map {
+      background: var(--card-color) !important;
+    }
+    html[data-cg-theme="dark"] .building-map .unit:not(.occupied) {
+      background: var(--gray-100) !important;
+      color: var(--gray-800) !important;
+      border-color: var(--gray-300) !important;
+    }
+    html[data-cg-theme="dark"] #dept-module-host-inner {
+      --gray-50: #121820;
+      --gray-100: #181f2a;
+      --gray-200: #243044;
+      --gray-300: #334155;
+      --gray-400: #7c8d9f;
+      --gray-600: #9eb0c8;
+      --gray-800: #e8eef5;
+      --white: #1e2736;
+      --bg-color: #151b24;
+      --surface-color: #151b24;
+      --card-color: #1e2736;
+      --primary-text: #e8eef5;
+      --secondary-text: #9eb0c8;
+      --border-color: #2d3a4f;
+      --shadow: 0 4px 28px rgba(0, 0, 0, 0.5);
+    }
+    html[data-cg-theme="dark"] #dept-module-host-inner .header h1 {
+      color: #f8fafc;
+    }
+    html[data-cg-theme="dark"] #dept-module-host-inner .nav-tab {
+      color: var(--secondary-text);
+    }
+    html[data-cg-theme="dark"] #dept-module-host-inner .nav-tab:hover {
+      color: var(--primary-text);
+    }
+    html[data-cg-theme="dark"] #dept-module-host-inner .nav-tab.active {
+      color: var(--blue-400);
+      border-bottom-color: var(--blue-500);
+    }
+    html[data-cg-theme="dark"] #dept-module-host-inner .form-input {
+      background: var(--gray-100);
+      color: var(--primary-text);
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] #dept-module-host-inner .form-input:focus {
+      border-color: var(--blue-400);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue-500) 25%, transparent);
+    }
+    html[data-cg-theme="dark"] #dept-module-host-inner table th,
+    html[data-cg-theme="dark"] #dept-module-host-inner table td {
+      border-color: var(--border-color);
+    }
+    .nav-item.nav-item--theme {
+      margin-bottom: 0.45rem;
+      padding-bottom: 0.7rem;
+      border-bottom: 1px solid color-mix(in srgb, var(--cg-sidebar-p) 16%, rgba(255, 255, 255, 0.07));
     }
 
     /* Modal edición E- (tema oscuro, sin variables del antiguo hub) */
@@ -9135,16 +9394,19 @@
       var d = load("personalization", null);
       if (!d || typeof d !== "object") d = {};
       var pal = PERSONALIZATION_PALETTE_IDS.indexOf(d.palette) >= 0 ? d.palette : "lima";
-      return { palette: pal };
+      var theme = d.theme === "dark" ? "dark" : "light";
+      return { palette: pal, theme: theme };
     }
 
     function setPersonalization(partial) {
       var cur = getPersonalization();
-      var next = {
-        palette: partial && partial.palette != null ? partial.palette : cur.palette
-      };
-      if (PERSONALIZATION_PALETTE_IDS.indexOf(next.palette) < 0) next.palette = "lima";
-      save("personalization", next);
+      var nextPalette = partial && partial.palette != null ? partial.palette : cur.palette;
+      if (PERSONALIZATION_PALETTE_IDS.indexOf(nextPalette) < 0) nextPalette = "lima";
+      var nextTheme = cur.theme;
+      if (partial && partial.theme != null) {
+        nextTheme = partial.theme === "dark" ? "dark" : "light";
+      }
+      save("personalization", { palette: nextPalette, theme: nextTheme });
       applyPersonalizationToDom();
     }
 
@@ -9152,6 +9414,7 @@
       var p = getPersonalization();
       if (document.documentElement) {
         document.documentElement.setAttribute("data-cg-palette", p.palette);
+        document.documentElement.setAttribute("data-cg-theme", p.theme);
         document.documentElement.removeAttribute("data-cg-mode");
       }
     }
@@ -17585,6 +17848,27 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       var cu = G.currentUser();
       if (!cu) return;
       var shiftLocked = conserjeMustOpenShiftBeforeModules();
+      var th0 = (typeof G.getPersonalization === "function" && G.getPersonalization().theme) || "light";
+      var themeBtn = document.createElement("button");
+      themeBtn.type = "button";
+      themeBtn.className = "nav-item nav-item--theme";
+      themeBtn.setAttribute("aria-label", th0 === "dark" ? "Activar modo día" : "Activar modo noche");
+      var themeIc = document.createElement("i");
+      themeIc.className = "fa-solid " + (th0 === "dark" ? "fa-sun" : "fa-moon");
+      themeIc.setAttribute("aria-hidden", "true");
+      var themeSp = document.createElement("span");
+      themeSp.textContent = th0 === "dark" ? "Modo día" : "Modo noche";
+      themeBtn.appendChild(themeIc);
+      themeBtn.appendChild(themeSp);
+      themeBtn.onclick = function () {
+        var tCur = (typeof G.getPersonalization === "function" && G.getPersonalization().theme) || "light";
+        var tNext = tCur === "dark" ? "light" : "dark";
+        if (typeof G.setPersonalization === "function") G.setPersonalization({ theme: tNext });
+        G.toast(tNext === "dark" ? "Modo noche activado" : "Modo día activado", "success");
+        renderNav();
+        closeSidebarMobile();
+      };
+      nav.appendChild(themeBtn);
       G.MODULES.forEach(function (m) {
         if (m.adminOnly && cu.role !== "admin") return;
         if (!G.canSeeModule(m.id)) return;
@@ -28705,6 +28989,19 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         "</div></div>";
     } else if (tab === "personalizacion") {
       var curPal = G.getPersonalization().palette;
+      var curTheme = G.getPersonalization().theme || "light";
+      var themeRow =
+        "<div class=\"form-group\" style=\"max-width:28rem;margin-bottom:1.25rem\">" +
+        "<label>Modo día / noche</label>" +
+        "<div class=\"toolbar\" style=\"gap:0.5rem;flex-wrap:wrap\">" +
+        "<button type=\"button\" class=\"btn " +
+        (curTheme === "light" ? "btn-primary" : "btn-secondary") +
+        "\" data-cg-act=\"adminApplyTheme\" data-cg-param=\"light\"><i class=\"fa-solid fa-sun\" aria-hidden=\"true\"></i> Modo día</button>" +
+        "<button type=\"button\" class=\"btn " +
+        (curTheme === "dark" ? "btn-primary" : "btn-secondary") +
+        "\" data-cg-act=\"adminApplyTheme\" data-cg-param=\"dark\"><i class=\"fa-solid fa-moon\" aria-hidden=\"true\"></i> Modo noche</button>" +
+        "</div>" +
+        "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;font-size:0.8rem\">Misma opción en el menú lateral (sol / luna) para acceso rápido. Se guarda en este equipo y en la nube si usa sincronización.</p></div>";
       var palCards = G.PERSONALIZATION_PALETTES.map(function (pal) {
         var active = pal.id === curPal;
         var ring = active ? "outline:2px solid var(--blue-500);outline-offset:2px;" : "";
@@ -28727,6 +29024,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       p.innerHTML =
         "<div class=\"card\"><div class=\"card-h\"><h3>Personalización</h3></div><div class=\"card-b\">" +
         "<p class=\"page-desc\" style=\"margin:0 0 1rem\"><strong>Lima</strong> (verde institucional <code>#74BD20</code>) es la paleta oficial. Las demás son alternativas secundarias. Afecta a la pantalla de acceso, conserjería, Residentes, Departamentos (mapa), reportes HTML y fichas.</p>" +
+        themeRow +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.65rem;font-weight:600\">Paleta de color</p>" +
         "<div style=\"max-width:28rem\">" +
         palCards +
         "</div></div></div>";
@@ -29432,6 +29731,19 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     if (typeof G.setPersonalization === "function") G.setPersonalization({ palette: palId });
     A.renderAdmin("personalizacion");
     G.toast("Paleta aplicada");
+  };
+
+  A.adminApplyTheme = function (themeId) {
+    var cuTh = G.currentUser();
+    if (!cuTh || cuTh.role !== "admin") {
+      G.toast("Solo el administrador puede cambiar el modo desde administración.", "error");
+      return;
+    }
+    var t = themeId === "dark" ? "dark" : "light";
+    if (typeof G.setPersonalization === "function") G.setPersonalization({ theme: t });
+    A.renderAdmin("personalizacion");
+    if (UI && typeof UI.renderNav === "function") UI.renderNav();
+    G.toast(t === "dark" ? "Modo noche aplicado" : "Modo día aplicado");
   };
 
   window.CG_ACTIONS = A;
