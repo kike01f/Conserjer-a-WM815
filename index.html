@@ -8085,6 +8085,7 @@
       { id: "proveedores", label: "Proveedores", icon: "fa-truck" },
       { id: "reservas", label: "Reservas", icon: "fa-calendar-check" },
       { id: "manual", label: "Manual de usuario", icon: "fa-book-open", skipShiftLock: true },
+      { id: "ausenciaAlertas", label: "Alertas de ausencia", icon: "fa-bullhorn" },
       { id: "admin", label: "Administración", icon: "fa-user-shield", adminOnly: true }
     ];
 
@@ -8985,7 +8986,13 @@
       get dashScheduledAlerts() { return load("dashScheduledAlerts", []); },
       set dashScheduledAlerts(v) { save("dashScheduledAlerts", v); },
       get festiveAmbience() { return load("festiveAmbience", { globalEnabled: true, rules: [] }); },
-      set festiveAmbience(v) { save("festiveAmbience", v); }
+      set festiveAmbience(v) { save("festiveAmbience", v); },
+      get absenceAlertPhrases() {
+        return normalizeAbsenceAlertPhrasesArray(load("absenceAlertPhrases", []));
+      },
+      set absenceAlertPhrases(v) {
+        save("absenceAlertPhrases", normalizeAbsenceAlertPhrasesArray(v));
+      }
     };
 
     /* ┌─ 7. Sesión, permisos por módulo, bloqueo turno conserje ──────────────────────── */
@@ -10123,7 +10130,8 @@
         ["festiveAmbience", migrateFestiveAmbience],
         ["festiveAmorAmistadFeb12", migrateFestiveAmorAmistadFeb12],
         ["festiveAmorAmistadThemePack", migrateFestiveAmorAmistadThemePack],
-        ["personalizationThemeSession", migratePersonalizationThemeSessionV1]
+        ["personalizationThemeSession", migratePersonalizationThemeSessionV1],
+        ["ausenciaAlertas", migrateAusenciaAlertasModule]
       ];
       var si;
       for (si = 0; si < steps.length; si++) {
@@ -10175,6 +10183,31 @@
         save("personalization", d);
       }
       save("migrated_personalization_theme_session_v1", true);
+    }
+
+    /** Añade módulo «Alertas de ausencia» a permisos conserje/admin y semilla de frases vacía. */
+    function migrateAusenciaAlertasModule() {
+      if (load("migrated_ausencia_alertas_v1", false)) return;
+      var mid = "ausenciaAlertas";
+      var rm = load("roleModules", { admin: [], conserje: [] });
+      var ch = false;
+      if (!Array.isArray(rm.conserje)) rm.conserje = [];
+      if (!Array.isArray(rm.admin)) rm.admin = [];
+      if (rm.conserje.indexOf(mid) < 0) {
+        rm.conserje.push(mid);
+        ch = true;
+      }
+      if (rm.admin.indexOf(mid) < 0) {
+        rm.admin.push(mid);
+        ch = true;
+      }
+      if (ch) save("roleModules", rm);
+      if (P.localGetRaw(LS + "absenceAlertPhrases") == null || P.localGetRaw(LS + "absenceAlertPhrases") === "") {
+        try {
+          save("absenceAlertPhrases", []);
+        } catch (eS) {}
+      }
+      save("migrated_ausencia_alertas_v1", true);
     }
 
     function defaultFestiveAmbienceObject() {
@@ -10717,6 +10750,41 @@
         .replace(/\s+/g, " ");
       if (s.length > CG_STAFF_CHAT_VOICE_PHRASE_MAX) s = s.slice(0, CG_STAFF_CHAT_VOICE_PHRASE_MAX);
       return s;
+    }
+
+    var CG_ABSENCE_ALERT_LABEL_MAX = 80;
+    var CG_ABSENCE_ALERT_TEXT_MAX = 400;
+    var CG_ABSENCE_ALERT_MAX_ITEMS = 24;
+    /** Intervalo de repetición del aviso sonoro (módulo Alertas de ausencia). */
+    var CG_ABSENCE_ALERT_REPEAT_MS = 15000;
+
+    function normalizeAbsenceAlertPhrasesArray(raw) {
+      if (!Array.isArray(raw)) return [];
+      var out = [];
+      var seen = Object.create(null);
+      var i;
+      for (i = 0; i < raw.length && out.length < CG_ABSENCE_ALERT_MAX_ITEMS; i++) {
+        var it = raw[i];
+        if (!it || typeof it !== "object" || Array.isArray(it)) continue;
+        var text = String(it.text == null ? "" : it.text)
+          .replace(/\u0000/g, "")
+          .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "")
+          .trim()
+          .replace(/\s+/g, " ");
+        if (!text) continue;
+        if (text.length > CG_ABSENCE_ALERT_TEXT_MAX) text = text.slice(0, CG_ABSENCE_ALERT_TEXT_MAX);
+        var label = String(it.label == null ? "" : it.label)
+          .replace(/\u0000/g, "")
+          .trim()
+          .slice(0, CG_ABSENCE_ALERT_LABEL_MAX);
+        if (!label) label = text.slice(0, Math.min(48, text.length));
+        var id = it.id != null ? String(it.id).replace(/\u0000/g, "").slice(0, 64) : "";
+        if (!id) id = "aa_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 9);
+        if (seen[id]) continue;
+        seen[id] = true;
+        out.push({ id: id, label: label, text: text });
+      }
+      return out;
     }
 
     function cgSanitizeDashboardQuickLinkHref(raw) {
@@ -11735,7 +11803,8 @@
     /* ┌─ 11. API pública (único objeto global del core) ─────────────────────────────── */
     window.CG = {
       APP_BRAND_NAME, MANUFACTURER_LOGO_URL,
-      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureCloudInstallBaseline, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateManualUsuarioModule, migrateProveedoresModule, migrateProveedoresContactosV1, migrateMapaEdificioModule, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept, migrateVisitVehAlertLog, migrateVisitPlatesUppercase, migrateDeptRegistroPrefijosEbbBc, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
+      ADMIN_UNIT_ID, MODULES, NOVEDAD_CATS, state, ensureInit, ensureCloudInstallBaseline, ensureBuildingKeys, runStartupLocalMigrations, migrateNovedadesSeq, migrateEncomiendasModule, migrateManualUsuarioModule, migrateProveedoresModule, migrateProveedoresContactosV1, migrateMapaEdificioModule, migrateVisitorParkingCodes, migrateShiftLogs, migrateStaffChat, migrateProveedorVisitAdminDept,       migrateVisitVehAlertLog, migrateVisitPlatesUppercase, migrateDeptRegistroPrefijosEbbBc, migrateConserjeActivityLog, logConserjeActivity, seedBuildingFromDepartments,
+      migrateAusenciaAlertasModule, normalizeAbsenceAlertPhrasesArray,
       attachVirtualAdminDepartment,
       authEnsureReady, authValidateDeptGateNewPassword, authVerifyLoginPassword, authCreatePasswordVerifier, authDeptGateExists, authVerifyDeptGate, authSetDeptGateFromPasswords, authSetDeptGateInitial,
       shiftLogTramoIsOpen,
@@ -11749,6 +11818,7 @@
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
       CG_DASH_QUICKLINKS_MAX,
       CG_STAFF_CHAT_VOICE_PHRASE_MAX, CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE, normalizeStaffChatVoicePhrase,
+      CG_ABSENCE_ALERT_MAX_ITEMS, CG_ABSENCE_ALERT_REPEAT_MS,
       getPersonalization, setPersonalization, applyPersonalizationToDom,
       CG_FESTIVE_PRESET_META, getFestiveAmbienceNormalized, resolveFestiveAmbienceRule, resolveFestiveAmbienceRuleFromParts, applyFestiveAmbienceToDom,
       CG_APP_TIMEZONE, cgChileYmdParts, cgChileShiftCalendarDays, cgChileFormatYmdWeekdayShort, cgChileYesterdayYmd, isSameChileYmd, isoInChileCalendarMonth, shiftSegmentOverlapChileMonth,
@@ -18272,6 +18342,41 @@ function __deptUnitsStorageKey() {
     var STAFF_PRESENCE_STALE_MS = 52000;
     var STAFF_PRESENCE_HEARTBEAT_MS = 12000;
 
+    var __cgAbsenceAlertIntervalId = null;
+
+    function cgAbsenceAlertStop() {
+      if (__cgAbsenceAlertIntervalId != null) {
+        clearInterval(__cgAbsenceAlertIntervalId);
+        __cgAbsenceAlertIntervalId = null;
+      }
+    }
+
+    function cgAbsenceAlertRuntimeStorageKey() {
+      return (G.LS || "") + "absenceAlertRuntime";
+    }
+
+    function cgReadAbsenceAlertRuntime() {
+      try {
+        var raw = sessionStorage.getItem(cgAbsenceAlertRuntimeStorageKey());
+        if (!raw) return { enabled: false, mode: "rotate", phraseId: "", idx: 0 };
+        var o = JSON.parse(raw);
+        return {
+          enabled: !!o.enabled,
+          mode: o.mode === "one" ? "one" : "rotate",
+          phraseId: o.phraseId != null ? String(o.phraseId) : "",
+          idx: typeof o.idx === "number" && o.idx === o.idx ? Math.max(0, Math.floor(o.idx)) : 0
+        };
+      } catch (eR) {
+        return { enabled: false, mode: "rotate", phraseId: "", idx: 0 };
+      }
+    }
+
+    function cgWriteAbsenceAlertRuntime(st) {
+      try {
+        sessionStorage.setItem(cgAbsenceAlertRuntimeStorageKey(), JSON.stringify(st));
+      } catch (eW) {}
+    }
+
     function staffPresenceGetClientId() {
       try {
         var k = "cg_staff_presence_tab";
@@ -19698,6 +19803,7 @@ function __deptUnitsStorageKey() {
       app.setAttribute("aria-hidden", "true");
       staffPresenceStop();
       staffChatSetDockVisible(false);
+      cgAbsenceAlertStop();
       if (window.CG && typeof window.CG.applyFestiveAmbienceToDom === "function") window.CG.applyFestiveAmbienceToDom();
       if (window.CG && typeof window.CG.syncLoginFirstAdminPanel === "function") window.CG.syncLoginFirstAdminPanel();
     }
@@ -19945,6 +20051,187 @@ function __deptUnitsStorageKey() {
       return view;
     }
 
+    function pageAusenciaAlertas() {
+      var cu = G.currentUser();
+      if (!cu) return "<p class=\"page-desc\">Inicie sesión.</p>";
+      if (cu.role === "admin") {
+        var secAdm = Math.round((G.CG_ABSENCE_ALERT_REPEAT_MS || 15000) / 1000);
+        return (
+          "<h1 class=\"page-title\">Alertas de ausencia</h1>" +
+          "<p class=\"page-desc\" style=\"max-width:42rem\">Defina las frases en <strong>Administración</strong> → <strong>Alertas de ausencia</strong>. Los conserjes solo encienden o apagan el aviso sonoro desde su módulo; la repetición es cada <strong>" +
+          String(secAdm) +
+          " segundos</strong> mientras el aviso esté activo.</p>"
+        );
+      }
+      if (cu.role !== "conserje") {
+        return "<p class=\"page-desc\">No autorizado.</p>";
+      }
+      var phrases = Array.isArray(G.state.absenceAlertPhrases) ? G.state.absenceAlertPhrases : [];
+      var rt = cgReadAbsenceAlertRuntime();
+      var modeOne = rt.mode === "one";
+      var optsOne = "";
+      var pi;
+      for (pi = 0; pi < phrases.length; pi++) {
+        var ph = phrases[pi];
+        optsOne +=
+          "<option value=\"" +
+          G.escapeAttr(ph.id) +
+          "\"" +
+          (rt.phraseId === ph.id ? " selected" : "") +
+          ">" +
+          G.escapeHtml(ph.label || ph.text.slice(0, 48)) +
+          "</option>";
+      }
+      var secCs = Math.round((G.CG_ABSENCE_ALERT_REPEAT_MS || 15000) / 1000);
+      var emptyHint =
+        phrases.length === 0
+          ? "<div class=\"card\" style=\"margin-top:1rem;border-color:#f59e0b;background:#fffbeb\"><div class=\"card-b\"><strong>Sin frases.</strong> El administrador debe añadir estados en <strong>Administración → Alertas de ausencia</strong>.</div></div>"
+          : "";
+      var dis = phrases.length === 0 ? "disabled " : "";
+      return (
+        "<h1 class=\"page-title\">Alertas de ausencia</h1>" +
+        "<p class=\"page-desc\" style=\"max-width:42rem\">Aviso sonoro para recordar estados (ausencias, cubiertos, etc.). Solo el administrador edita las frases; usted <strong>activa o desactiva</strong> el aviso. Con el aviso encendido, la frase o frases se repiten cada <strong>" +
+        String(secCs) +
+        " segundos</strong>. La preferencia de encendido/apagado y modo vale solo en <strong>esta pestaña</strong> del navegador.</p>" +
+        emptyHint +
+        "<div class=\"card\" style=\"margin-top:1rem\"><div class=\"card-h\"><h3>Su control</h3></div><div class=\"card-b\">" +
+        "<div class=\"form-group\" style=\"max-width:28rem\">" +
+        "<label for=\"cg-aus-mode\">Modo de reproducción</label>" +
+        "<select id=\"cg-aus-mode\" class=\"form-input\" " +
+        dis +
+        ">" +
+        "<option value=\"rotate\"" +
+        (!modeOne ? " selected" : "") +
+        ">Rotar todas las frases (cada " +
+        String(secCs) +
+        " s pasa a la siguiente)</option>" +
+        "<option value=\"one\"" +
+        (modeOne ? " selected" : "") +
+        ">Una sola frase (la elige abajo)</option></select></div>" +
+        "<div class=\"form-group\" style=\"max-width:28rem\" id=\"cg-aus-one-wrap\">" +
+        "<label for=\"cg-aus-phrase\">Frase fija</label>" +
+        "<select id=\"cg-aus-phrase\" class=\"form-input\" " +
+        dis +
+        ">" +
+        optsOne +
+        "</select></div>" +
+        "<div class=\"form-group\" style=\"margin-top:1rem\">" +
+        "<label style=\"display:flex;gap:0.65rem;align-items:center;font-weight:700;cursor:pointer\">" +
+        "<input type=\"checkbox\" id=\"cg-aus-enabled\" " +
+        (rt.enabled ? "checked " : "") +
+        dis +
+        "/><span>Aviso activo (repetir cada " + String(secCs) + " s)</span></label></div>" +
+        "<p id=\"cg-aus-status\" class=\"page-desc\" style=\"margin:0.75rem 0 0\" aria-live=\"polite\"></p>" +
+        "</div></div>"
+      );
+    }
+
+    function cgBindAusenciaAlertasView() {
+      cgAbsenceAlertStop();
+      var cu = G.currentUser();
+      if (!cu || cu.role !== "conserje") return;
+      var phrases = Array.isArray(G.state.absenceAlertPhrases) ? G.state.absenceAlertPhrases : [];
+      var modeEl = document.getElementById("cg-aus-mode");
+      var phraseEl = document.getElementById("cg-aus-phrase");
+      var wrapOne = document.getElementById("cg-aus-one-wrap");
+      var enEl = document.getElementById("cg-aus-enabled");
+      var stEl = document.getElementById("cg-aus-status");
+      if (!enEl || !modeEl) return;
+
+      function syncOneWrap() {
+        if (wrapOne) wrapOne.style.display = modeEl.value === "one" ? "" : "none";
+      }
+
+      function persistFromForm() {
+        var rt = {
+          enabled: !!enEl.checked,
+          mode: modeEl.value === "one" ? "one" : "rotate",
+          phraseId: phraseEl && phraseEl.value ? String(phraseEl.value) : "",
+          idx: cgReadAbsenceAlertRuntime().idx
+        };
+        if (phrases.length) rt.idx = rt.idx % phrases.length;
+        cgWriteAbsenceAlertRuntime(rt);
+      }
+
+      function speakTick() {
+        if (!enEl.checked || !phrases.length) return;
+        var mode = modeEl.value === "one" ? "one" : "rotate";
+        var rt = cgReadAbsenceAlertRuntime();
+        var t = "";
+        if (mode === "one") {
+          var pid = phraseEl && phraseEl.value ? phraseEl.value : "";
+          var j;
+          for (j = 0; j < phrases.length; j++) {
+            if (phrases[j].id === pid) {
+              t = phrases[j].text;
+              break;
+            }
+          }
+          if (!t && phrases[0]) t = phrases[0].text;
+        } else {
+          var idx = rt.idx % phrases.length;
+          t = phrases[idx].text;
+          rt.idx = (idx + 1) % phrases.length;
+          cgWriteAbsenceAlertRuntime(rt);
+        }
+        if (t && typeof G.staffChatSpeakAnnouncementText === "function") G.staffChatSpeakAnnouncementText(t);
+      }
+
+      function startAlarm() {
+        cgAbsenceAlertStop();
+        if (!phrases.length || !enEl.checked) return;
+        window.setTimeout(function () {
+          speakTick();
+        }, 450);
+        __cgAbsenceAlertIntervalId = setInterval(speakTick, G.CG_ABSENCE_ALERT_REPEAT_MS || 15000);
+      }
+
+      function updateStatus() {
+        if (!stEl) return;
+        if (!phrases.length) {
+          stEl.textContent = "";
+          return;
+        }
+        stEl.textContent = enEl.checked
+          ? "Aviso encendido: se repetirá cada " + String(Math.round((G.CG_ABSENCE_ALERT_REPEAT_MS || 15000) / 1000)) + " s."
+          : "Aviso apagado.";
+      }
+
+      if (phraseEl && phrases.length && modeEl.value === "one" && !phraseEl.value) {
+        phraseEl.selectedIndex = 0;
+        persistFromForm();
+      }
+
+      syncOneWrap();
+      modeEl.addEventListener("change", function () {
+        persistFromForm();
+        syncOneWrap();
+        if (enEl.checked) startAlarm();
+        updateStatus();
+      });
+      if (phraseEl) {
+        phraseEl.addEventListener("change", function () {
+          persistFromForm();
+          if (enEl.checked) startAlarm();
+        });
+      }
+      enEl.addEventListener("change", function () {
+        persistFromForm();
+        if (enEl.checked) startAlarm();
+        else cgAbsenceAlertStop();
+        updateStatus();
+        try {
+          G.logConserjeActivity(
+            "ausencia_alert_toggle",
+            enEl.checked ? "Activó alerta de ausencia (15 s)" : "Desactivó alerta de ausencia"
+          );
+        } catch (eLog) {}
+      });
+
+      if (enEl.checked && phrases.length) startAlarm();
+      updateStatus();
+    }
+
     /** Solo generación de HTML por vista (sin tocar DOM ni estado de ruta). */
     function cgMainContentHtmlForView(view) {
       if (view === "dashboard") return pageDashboard();
@@ -19959,6 +20246,7 @@ function __deptUnitsStorageKey() {
       if (view === "novedades") return pageNovedades();
       if (view === "admin") return pageAdmin();
       if (view === "manual") return pageManual();
+      if (view === "ausenciaAlertas") return pageAusenciaAlertas();
       return "";
     }
 
@@ -19968,6 +20256,7 @@ function __deptUnitsStorageKey() {
         staffChatSetDockVisible(false);
         return;
       }
+      cgAbsenceAlertStop();
       view = cgNavigateEffectiveView(view, silentShiftRedirect);
       destroyDashboardCharts();
       currentView = view;
@@ -21407,6 +21696,7 @@ function __deptUnitsStorageKey() {
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"personalizacion\" aria-pressed=\"false\">Personalización</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"rrhh\" aria-pressed=\"false\">RRHH</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"dashAlerts\" aria-pressed=\"false\">Alertas panel de control</button>" +
+        "<button type=\"button\" class=\"admin-tab\" data-adm=\"ausAusencia\" aria-pressed=\"false\">Alertas de ausencia</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"festive\" aria-pressed=\"false\">Ambientación festiva</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"cfg\" aria-pressed=\"false\">Configuración</button></div>" +
         "<div id=\"adm-panel\" role=\"region\" aria-label=\"Contenido de administración\"></div>"
@@ -21526,6 +21816,7 @@ function __deptUnitsStorageKey() {
         var mroot = mc ? mc.querySelector("#cg-manual-root") : null;
         if (mroot) cgBindUserManualWizard(mroot);
       }
+      if (view === "ausenciaAlertas") cgBindAusenciaAlertasView();
     }
 
     /**
@@ -21702,6 +21993,24 @@ function __deptUnitsStorageKey() {
             var tabDa = document.querySelector(".admin-tab[data-adm=\"dashAlerts\"].active");
             if (tabDa) A.renderAdmin("dashAlerts");
           } catch (eDa) {}
+        }
+      }
+
+      if (k === "absenceAlertPhrases") {
+        if (view === "ausenciaAlertas") {
+          try {
+            var mainAus = document.getElementById("main-content");
+            if (mainAus) {
+              mainAus.innerHTML = pageAusenciaAlertas();
+              cgBindAusenciaAlertasView();
+            }
+          } catch (eAusV) {}
+        }
+        if (A && typeof A.renderAdmin === "function") {
+          try {
+            var tabAus = document.querySelector(".admin-tab[data-adm=\"ausAusencia\"].active");
+            if (tabAus) A.renderAdmin("ausAusencia");
+          } catch (eAusAd) {}
         }
       }
 
@@ -30860,7 +31169,7 @@ function __deptUnitsStorageKey() {
     { id: "proveedores", label: "Proveedores", hint: "" },
     { id: "estacionamientos", label: "Estacionamientos", hint: "plazas y rango E-" },
     { id: "bodegas", label: "Bodegas", hint: "" },
-    { id: "config_app", label: "Configuración y apariencia", hint: "espacios comunes, visitas, paleta, festividades, mes dashboard" },
+    { id: "config_app", label: "Configuración y apariencia", hint: "espacios comunes, visitas, paleta, festividades, mes dashboard, alertas de ausencia" },
     { id: "turnos_chat", label: "Turnos y chat de personal", hint: "tramos, mensajes, presencia, cumpleaños RR.HH." },
     { id: "panel_bitacora", label: "Panel y bitácora", hint: "actividad conserje, alertas programadas" },
     { id: "tecnicos", label: "Metadatos técnicos", hint: "banderas migrated_*, cola borrados nube, recordatorio respaldos" },
@@ -30900,6 +31209,7 @@ function __deptUnitsStorageKey() {
       parkingConfig: "estacionamientos",
       bodegas: "bodegas",
       config: "config_app",
+      absenceAlertPhrases: "config_app",
       personalization: "config_app",
       festiveAmbience: "config_app",
       dashActMonth: "config_app",
@@ -31435,6 +31745,51 @@ function __deptUnitsStorageKey() {
         voiceCard;
     } else if (tab === "dashAlerts") {
       p.innerHTML = buildRenderAdminDashAlertsHtml();
+    } else if (tab === "ausAusencia") {
+      var ausList = Array.isArray(G.state.absenceAlertPhrases) ? G.state.absenceAlertPhrases : [];
+      var ausMax = typeof G.CG_ABSENCE_ALERT_MAX_ITEMS === "number" ? G.CG_ABSENCE_ALERT_MAX_ITEMS : 24;
+      var ausRows = ausList
+        .map(function (x, idx) {
+          var rid = x && x.id ? String(x.id) : "aa_" + idx;
+          return (
+            "<tr class=\"cg-admin-aus-row\" data-cg-aus-row-id=\"" +
+            G.escapeAttr(rid) +
+            "\">" +
+            "<td style=\"padding:0.4rem 0.5rem\"><input type=\"text\" class=\"form-input cg-admin-aus-label\" value=\"" +
+            G.escapeAttr(x.label || "") +
+            "\" placeholder=\"Ej: Cubierto salida\" aria-label=\"Etiqueta frase\" /></td>" +
+            "<td style=\"padding:0.4rem 0.5rem\"><input type=\"text\" class=\"form-input cg-admin-aus-text\" value=\"" +
+            G.escapeAttr(x.text || "") +
+            "\" placeholder=\"Texto que leerá la voz\" aria-label=\"Texto voz\" style=\"min-width:14rem;width:100%;max-width:32rem\" /></td>" +
+            "<td style=\"padding:0.4rem 0.5rem;white-space:nowrap\">" +
+            "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"adminAbsenceAlertMove\" data-cg-id=\"" +
+            G.escapeAttr(rid) +
+            "\" data-cg-param=\"up\" title=\"Subir\">↑</button> " +
+            "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"adminAbsenceAlertMove\" data-cg-id=\"" +
+            G.escapeAttr(rid) +
+            "\" data-cg-param=\"down\" title=\"Bajar\">↓</button> " +
+            "<button type=\"button\" class=\"btn btn-danger btn-sm\" data-cg-act=\"adminAbsenceAlertRemove\" data-cg-id=\"" +
+            G.escapeAttr(rid) +
+            "\">Quitar</button></td></tr>"
+          );
+        })
+        .join("");
+      p.innerHTML =
+        "<div class=\"card\"><div class=\"card-h\" style=\"flex-wrap:wrap;gap:0.5rem;align-items:center\"><h3>Alertas de ausencia (frases)</h3>" +
+        "<div class=\"toolbar\" style=\"margin-left:auto;flex-wrap:wrap;gap:0.45rem\">" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"adminAbsenceAlertAdd\" data-cg-empty=\"1\"><i class=\"fa-solid fa-plus\" aria-hidden=\"true\"></i> Añadir frase</button> " +
+        "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"adminAbsenceAlertSave\" data-cg-empty=\"1\"><i class=\"fa-solid fa-floppy-disk\" aria-hidden=\"true\"></i> Guardar</button></div></div>" +
+        "<div class=\"card-b\">" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Los conserjes solo <strong>encienden o apagan</strong> el aviso en el módulo homónimo. Con el aviso activo, la voz repite cada <strong>" +
+        String(Math.round((G.CG_ABSENCE_ALERT_REPEAT_MS || 15000) / 1000)) +
+        " segundos</strong>. Puede rotar todas las frases o una sola. Máximo " +
+        String(ausMax) +
+        " frases; se sincronizan en la nube con el resto de la configuración.</p>" +
+        "<div style=\"overflow-x:auto\"><table class=\"data-table\" style=\"min-width:min(100%,640px)\"><thead><tr><th>Etiqueta (menú del conserje)</th><th>Texto a pronunciar</th><th style=\"width:1%\">Orden</th></tr></thead><tbody id=\"cg-admin-aus-tbody\">" +
+        ausRows +
+        "</tbody></table></div>" +
+        (ausRows ? "" : "<p class=\"page-desc\" style=\"margin:0.5rem 0 0\">Sin frases. Use <strong>Añadir frase</strong>.</p>") +
+        "</div></div>";
     } else if (tab === "festive") {
       p.innerHTML = buildRenderAdminFestiveHtml();
     } else if (tab === "rrhh") {
@@ -32137,6 +32492,108 @@ function __deptUnitsStorageKey() {
     }
     return null;
   }
+
+  function cgAdminFindAusRow(rowId) {
+    var ridA = String(rowId || "");
+    var tbA = document.getElementById("cg-admin-aus-tbody");
+    if (!tbA || !ridA) return null;
+    var rowsA = tbA.querySelectorAll("tr.cg-admin-aus-row");
+    var ia;
+    for (ia = 0; ia < rowsA.length; ia++) {
+      if (rowsA[ia].getAttribute("data-cg-aus-row-id") === ridA) return rowsA[ia];
+    }
+    return null;
+  }
+
+  A.adminAbsenceAlertAdd = function () {
+    var cuAa = G.currentUser();
+    if (!cuAa || cuAa.role !== "admin") {
+      G.toast("Solo el administrador puede editar las frases.", "error");
+      return;
+    }
+    var maxA = typeof G.CG_ABSENCE_ALERT_MAX_ITEMS === "number" ? G.CG_ABSENCE_ALERT_MAX_ITEMS : 24;
+    var tbA = document.getElementById("cg-admin-aus-tbody");
+    if (!tbA) return;
+    if (tbA.querySelectorAll("tr.cg-admin-aus-row").length >= maxA) {
+      G.toast("Máximo " + maxA + " frases.", "warn");
+      return;
+    }
+    var nidA = G.uid();
+    var trA = document.createElement("tr");
+    trA.className = "cg-admin-aus-row";
+    trA.setAttribute("data-cg-aus-row-id", nidA);
+    var idEscA = G.escapeAttr(nidA);
+    trA.innerHTML =
+      "<td style=\"padding:0.4rem 0.5rem\"><input type=\"text\" class=\"form-input cg-admin-aus-label\" value=\"\" placeholder=\"Etiqueta\" /></td>" +
+      "<td style=\"padding:0.4rem 0.5rem\"><input type=\"text\" class=\"form-input cg-admin-aus-text\" value=\"\" placeholder=\"Texto para la voz\" style=\"min-width:14rem;width:100%;max-width:32rem\" /></td>" +
+      "<td style=\"padding:0.4rem 0.5rem;white-space:nowrap\">" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"adminAbsenceAlertMove\" data-cg-id=\"" +
+      idEscA +
+      "\" data-cg-param=\"up\">↑</button> " +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"adminAbsenceAlertMove\" data-cg-id=\"" +
+      idEscA +
+      "\" data-cg-param=\"down\">↓</button> " +
+      "<button type=\"button\" class=\"btn btn-danger btn-sm\" data-cg-act=\"adminAbsenceAlertRemove\" data-cg-id=\"" +
+      idEscA +
+      "\">Quitar</button></td>";
+    tbA.appendChild(trA);
+    var cardAus = tbA.closest(".card-b");
+    if (cardAus) {
+      cardAus.querySelectorAll("p.page-desc").forEach(function (pAus) {
+        if (pAus.textContent.indexOf("Sin frases") !== -1) pAus.remove();
+      });
+    }
+  };
+
+  A.adminAbsenceAlertRemove = function (rowId) {
+    var cuAr = G.currentUser();
+    if (!cuAr || cuAr.role !== "admin") return;
+    var trR = cgAdminFindAusRow(rowId);
+    if (trR) trR.remove();
+  };
+
+  A.adminAbsenceAlertMove = function (rowId, dir) {
+    var cuAm = G.currentUser();
+    if (!cuAm || cuAm.role !== "admin") return;
+    var trM = cgAdminFindAusRow(rowId);
+    var tbM = document.getElementById("cg-admin-aus-tbody");
+    if (!trM || !tbM) return;
+    var prevM = trM.previousElementSibling;
+    var nextM = trM.nextElementSibling;
+    if (dir === "up" && prevM && prevM.classList.contains("cg-admin-aus-row")) {
+      tbM.insertBefore(trM, prevM);
+    } else if (dir === "down" && nextM && nextM.classList.contains("cg-admin-aus-row")) {
+      tbM.insertBefore(nextM, trM);
+    }
+  };
+
+  A.adminAbsenceAlertSave = function () {
+    var cuAs = G.currentUser();
+    if (!cuAs || cuAs.role !== "admin") {
+      G.toast("Solo el administrador puede guardar las frases.", "error");
+      return;
+    }
+    var tbS = document.getElementById("cg-admin-aus-tbody");
+    if (!tbS) return;
+    var rawS = [];
+    tbS.querySelectorAll("tr.cg-admin-aus-row").forEach(function (trS) {
+      var ridS = trS.getAttribute("data-cg-aus-row-id") || G.uid();
+      var lS = trS.querySelector(".cg-admin-aus-label");
+      var tS = trS.querySelector(".cg-admin-aus-text");
+      rawS.push({
+        id: ridS,
+        label: lS ? lS.value : "",
+        text: tS ? tS.value : ""
+      });
+    });
+    G.state.absenceAlertPhrases = G.normalizeAbsenceAlertPhrasesArray(rawS);
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("absenceAlertPhrases");
+    A.renderAdmin("ausAusencia");
+    try {
+      G.logConserjeActivity("admin_absence_phrases", "Guardó frases alertas de ausencia (" + (G.state.absenceAlertPhrases || []).length + ")");
+    } catch (eLg) {}
+    G.toast("Frases guardadas");
+  };
 
   A.adminDashQuickLinkAdd = function () {
     var cu = G.currentUser();
