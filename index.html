@@ -11861,7 +11861,7 @@
       return r;
     }
 
-    /** Elige voz en español priorizando calidad (neural / mejorada / Siri) sobre voces básicas. */
+    /** Elige voz en español: prioridad a neural/mejorada con acento latinoamericano (es-419, MX, CL, …). */
     function __cgSpeechSynthPickNaturalSpanishVoice(synth) {
       try {
         var voices = synth.getVoices();
@@ -11878,20 +11878,42 @@
         }
         var pool = esFirst.length ? esFirst : voices.slice();
 
+        function isNeuralVoice(v) {
+          var s = nameOf(v).toLowerCase();
+          return /neural|enhanced|premium|personal voice|\bsiri\b|wavenet|generative/.test(s) || /\bml\b|transformer/.test(s);
+        }
+
+        /** Acento latino (códigos BCP-47 y pistas en el nombre). */
+        function latinoScore(v) {
+          var s = nameOf(v).toLowerCase();
+          var lang = ((v && v.lang) || "").toLowerCase().replace(/_/g, "-");
+          var sc = 0;
+          if (lang.indexOf("es-419") === 0) sc += 95;
+          if (lang.indexOf("es-mx") === 0) sc += 92;
+          if (lang.indexOf("es-cl") === 0) sc += 90;
+          if (lang.indexOf("es-ar") === 0 || lang.indexOf("es-co") === 0) sc += 88;
+          if (lang.indexOf("es-pe") === 0 || lang.indexOf("es-ve") === 0 || lang.indexOf("es-ec") === 0) sc += 85;
+          if (lang.indexOf("es-us") === 0 || lang.indexOf("es-gt") === 0 || lang.indexOf("es-cr") === 0) sc += 82;
+          if (/latino|latin america|latam|méxico|mexico|colombia|argentina|chile|perú|peru|venezuela/.test(s)) sc += 35;
+          if (lang.indexOf("es-es") === 0 || lang.indexOf("es_es") === 0) sc -= 45;
+          if (/españa|spain|castilian|castellano|iberia/.test(s)) sc -= 25;
+          return sc;
+        }
+
         function naturalnessScore(v) {
           var s = nameOf(v).toLowerCase();
-          var lang = ((v && v.lang) || "").toLowerCase();
           var sc = 0;
           if (/neural|enhanced|premium|personal voice|\bsiri\b|wavenet|generative/.test(s)) sc += 140;
           if (/\bml\b|transformer|natural/.test(s)) sc += 70;
           if (/\bgoogle\b/.test(s)) sc += 55;
           if (/\bmicrosoft\b/.test(s)) sc += 50;
-          if (lang.indexOf("es-cl") === 0 || lang.indexOf("es_cl") >= 0) sc += 22;
-          if (lang.indexOf("es-419") === 0) sc += 16;
-          if (lang.indexOf("es-mx") === 0 || lang.indexOf("es_mx") >= 0) sc += 14;
-          if (lang.indexOf("es-es") === 0 || lang.indexOf("es_es") >= 0) sc += 10;
+          if (isNeuralVoice(v) && latinoScore(v) > 0) sc += 100;
           if (/compact|sintet|síntesis básica|basic/.test(s)) sc -= 40;
           return sc;
+        }
+
+        function totalScore(v) {
+          return naturalnessScore(v) + latinoScore(v);
         }
 
         function femaleTieBreak(v) {
@@ -11902,15 +11924,15 @@
         }
 
         var best = pool[0];
-        var bestNat = naturalnessScore(best);
+        var bestTot = totalScore(best);
         var bestFem = femaleTieBreak(best);
         for (i = 1; i < pool.length; i++) {
           var vv = pool[i];
-          var n = naturalnessScore(vv);
+          var n = totalScore(vv);
           var f = femaleTieBreak(vv);
-          if (n > bestNat || (n === bestNat && f > bestFem)) {
+          if (n > bestTot || (n === bestTot && f > bestFem)) {
             best = vv;
-            bestNat = n;
+            bestTot = n;
             bestFem = f;
           }
         }
@@ -11920,7 +11942,7 @@
       }
     }
 
-    /** Lee `text` con Web Speech API; voz español lo más natural disponible en el dispositivo. */
+    /** Lee `text` con Web Speech API; prioriza voz neural con acento latino si el SO la ofrece. */
     function staffChatSpeakAnnouncementText(text) {
       var synth = window.speechSynthesis;
       if (!synth || typeof SpeechSynthesisUtterance === "undefined") return false;
@@ -11934,7 +11956,7 @@
       var speakNow = function () {
         var u = new SpeechSynthesisUtterance(t);
         var voice = __cgSpeechSynthPickNaturalSpanishVoice(synth);
-        u.lang = voice && voice.lang ? voice.lang : "es-ES";
+        u.lang = voice && voice.lang ? voice.lang : "es-419";
         u.rate = 0.95;
         u.pitch = 1;
         u.volume = 1;
