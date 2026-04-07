@@ -10705,6 +10705,19 @@
 
     const PERSONALIZATION_PALETTE_IDS = ["lima", "azul", "bosque", "indigo", "vino", "pizarra", "aurora"];
     var CG_DASH_QUICKLINKS_MAX = 24;
+    var CG_STAFF_CHAT_VOICE_PHRASE_MAX = 280;
+    var CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE = "Tienes un nuevo mensaje en el canal con administración.";
+
+    /** Texto para síntesis de voz del chat: sin caracteres de control, longitud acotada. */
+    function normalizeStaffChatVoicePhrase(raw) {
+      var s = String(raw == null ? "" : raw)
+        .replace(/\u0000/g, "")
+        .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "")
+        .trim()
+        .replace(/\s+/g, " ");
+      if (s.length > CG_STAFF_CHAT_VOICE_PHRASE_MAX) s = s.slice(0, CG_STAFF_CHAT_VOICE_PHRASE_MAX);
+      return s;
+    }
 
     function cgSanitizeDashboardQuickLinkHref(raw) {
       var s = String(raw == null ? "" : raw).trim().replace(/\u0000/g, "");
@@ -10788,10 +10801,14 @@
       var pal = PERSONALIZATION_PALETTE_IDS.indexOf(d.palette) >= 0 ? d.palette : "lima";
       var sess = readUiThemeFromSession();
       var theme = sess === "dark" ? "dark" : "light";
+      var voicePhraseRaw = normalizeStaffChatVoicePhrase(d.staffChatVoicePhrase);
+      var voicePhrase = voicePhraseRaw || CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE;
       return {
         palette: pal,
         theme: theme,
-        dashQuickLinks: normalizeDashQuickLinksArray(d.dashQuickLinks)
+        dashQuickLinks: normalizeDashQuickLinksArray(d.dashQuickLinks),
+        staffChatVoiceEnabled: !!d.staffChatVoiceEnabled,
+        staffChatVoicePhrase: voicePhrase
       };
     }
 
@@ -10810,6 +10827,13 @@
       delete stored.theme;
       if (partial && partial.dashQuickLinks != null) {
         stored.dashQuickLinks = normalizeDashQuickLinksArray(partial.dashQuickLinks);
+      }
+      if (partial && partial.staffChatVoiceEnabled != null) {
+        stored.staffChatVoiceEnabled = !!partial.staffChatVoiceEnabled;
+      }
+      if (partial && partial.staffChatVoicePhrase != null) {
+        var nPhrase = normalizeStaffChatVoicePhrase(partial.staffChatVoicePhrase);
+        stored.staffChatVoicePhrase = nPhrase || CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE;
       }
       save("personalization", stored);
       applyPersonalizationToDom();
@@ -11624,6 +11648,90 @@
       return r;
     }
 
+    /** Elige una voz en español con heurística femenina (depende del navegador / SO). */
+    function __cgSpeechSynthPickFemaleSpanishVoice(synth) {
+      try {
+        var voices = synth.getVoices();
+        if (!voices || !voices.length) return null;
+        var nameOf = function (v) {
+          return ((v && v.name) || "") + " " + ((v && v.lang) || "");
+        };
+        var lower = function (v) {
+          return nameOf(v).toLowerCase();
+        };
+        var esFirst = [];
+        var i;
+        for (i = 0; i < voices.length; i++) {
+          var v = voices[i];
+          var lang = (v.lang || "").toLowerCase();
+          if (lang.indexOf("es") === 0 || lang.indexOf("spa") >= 0) esFirst.push(v);
+        }
+        var pool = esFirst.length ? esFirst : voices.slice();
+        var avoid = /male|hombre|masculino|\bdiego\b|\bjorge\b|\bantonio\b|\bdaniel\b|\balberto\b|\bpablo\b|\bjuan\b|\bjosé\b|\bjose\b|\benrique\b|\bcarlos\b|\bandrés\b|\bandres\b|\bthomas\b|\bfred\b|\bdavid\b|\bmark\b/;
+        var prefer = /female|femenino|mujer|woman|maria|maría|paulina|monica|mónica|isabela|lola|sabina|fernanda|luciana|carolina|samantha|victoria|sofia|natalia|ellie|\bflo\b|zira|es-es|es_es|es-mx|es_mx|es-cl|es_cl|es-419|mexico|méxico|españa/;
+        var cand = [];
+        for (i = 0; i < pool.length; i++) {
+          if (!avoid.test(lower(pool[i]))) cand.push(pool[i]);
+        }
+        if (!cand.length) cand = pool.slice();
+        for (i = 0; i < cand.length; i++) {
+          if (prefer.test(lower(cand[i]))) return cand[i];
+        }
+        return cand[0] || null;
+      } catch (eV) {
+        return null;
+      }
+    }
+
+    /** Lee `text` con Web Speech API; voz español / femenina si el sistema la ofrece. */
+    function staffChatSpeakAnnouncementText(text) {
+      var synth = window.speechSynthesis;
+      if (!synth || typeof SpeechSynthesisUtterance === "undefined") return false;
+      var t = String(text || "")
+        .trim()
+        .replace(/\s+/g, " ");
+      if (!t) return false;
+      try {
+        synth.cancel();
+      } catch (eC) {}
+      var speakNow = function () {
+        var u = new SpeechSynthesisUtterance(t);
+        u.lang = "es-ES";
+        u.rate = 0.97;
+        u.pitch = 1.06;
+        var voice = __cgSpeechSynthPickFemaleSpanishVoice(synth);
+        if (voice) u.voice = voice;
+        try {
+          synth.speak(u);
+        } catch (eS) {}
+      };
+      try {
+        if (synth.getVoices().length) {
+          speakNow();
+          return true;
+        }
+      } catch (eG) {}
+      var done = false;
+      var onceVoices = function () {
+        if (done) return;
+        done = true;
+        try {
+          synth.removeEventListener("voiceschanged", onceVoices);
+        } catch (eR) {}
+        speakNow();
+      };
+      try {
+        synth.addEventListener("voiceschanged", onceVoices);
+      } catch (eA) {
+        speakNow();
+        return true;
+      }
+      window.setTimeout(function () {
+        onceVoices();
+      }, 600);
+      return true;
+    }
+
     /* ┌─ 11. API pública (único objeto global del core) ─────────────────────────────── */
     window.CG = {
       APP_BRAND_NAME, MANUFACTURER_LOGO_URL,
@@ -11640,6 +11748,7 @@
       uid, load, save, LS, persist: P,
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
       CG_DASH_QUICKLINKS_MAX,
+      CG_STAFF_CHAT_VOICE_PHRASE_MAX, CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE, normalizeStaffChatVoicePhrase,
       getPersonalization, setPersonalization, applyPersonalizationToDom,
       CG_FESTIVE_PRESET_META, getFestiveAmbienceNormalized, resolveFestiveAmbienceRule, resolveFestiveAmbienceRuleFromParts, applyFestiveAmbienceToDom,
       CG_APP_TIMEZONE, cgChileYmdParts, cgChileShiftCalendarDays, cgChileFormatYmdWeekdayShort, cgChileYesterdayYmd, isSameChileYmd, isoInChileCalendarMonth, shiftSegmentOverlapChileMonth,
@@ -11659,7 +11768,8 @@
       stripLegacyLocalStorageIfCloudOnly: __cgStripLegacyLocalStorageIfCloudOnly,
       __cgHydrateMemLsFromLocalStorageBackup: __cgHydrateMemLsFromLocalStorageBackup,
       normalizeVisitPlateString: __cgNormalizeVisitPlateString,
-      validate: CG_VALIDATE
+      validate: CG_VALIDATE,
+      staffChatSpeakAnnouncementText: staffChatSpeakAnnouncementText
     };
     applyPersonalizationToDom();
     (function cgFestiveReapplyTick() {
@@ -18842,6 +18952,7 @@ function __deptUnitsStorageKey() {
         } catch (eRm) {}
       }, 600);
     }
+
     function staffChatMaybePlayIncomingSound(prevJsonStr) {
       if (staffChatPanelOpen()) return;
       var u = G.currentUser();
@@ -18877,6 +18988,15 @@ function __deptUnitsStorageKey() {
       }
       if (!hasNewFromOther) return;
       staffChatLastSoundAtMs = now;
+      var persVoice = typeof G.getPersonalization === "function" ? G.getPersonalization() : {};
+      if (
+        persVoice.staffChatVoiceEnabled &&
+        persVoice.staffChatVoicePhrase &&
+        typeof G.staffChatSpeakAnnouncementText === "function"
+      ) {
+        G.staffChatSpeakAnnouncementText(persVoice.staffChatVoicePhrase);
+        return;
+      }
       staffChatPlayIncomingSound();
     }
 
@@ -31266,6 +31386,34 @@ function __deptUnitsStorageKey() {
         "</tbody></table></div>" +
         (dashQlRows ? "" : "<p class=\"page-desc\" style=\"margin:0.5rem 0 0\">Sin enlaces. Use <strong>Añadir enlace</strong>.</p>") +
         "</div></div>";
+      var voiceEn = !!G.getPersonalization().staffChatVoiceEnabled;
+      var voicePhraseDisp = G.getPersonalization().staffChatVoicePhrase || "";
+      var vocMax = G.CG_STAFF_CHAT_VOICE_PHRASE_MAX != null ? G.CG_STAFF_CHAT_VOICE_PHRASE_MAX : 280;
+      var voiceCard =
+        "<div class=\"card\" style=\"margin-top:1rem\"><div class=\"card-h\"><h3 style=\"margin:0;font-size:0.98rem\">Voz del chat con administración</h3></div><div class=\"card-b\">" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Aviso por <strong>síntesis de voz</strong> cuando llega un mensaje nuevo y el panel del chat está cerrado. Se usa una voz en español con preferencia por tono femenino si el sistema la ofrece (cada navegador ofrece voces distintas). El texto se guarda aquí y se sincroniza en la nube con el resto de la personalización.</p>" +
+        "<div class=\"form-group\" style=\"max-width:40rem\">" +
+        "<label style=\"display:flex;gap:0.5rem;align-items:flex-start;font-weight:600;cursor:pointer\">" +
+        "<input type=\"checkbox\" id=\"cg-admin-chat-voice-en\" " +
+        (voiceEn ? "checked " : "") +
+        "style=\"margin-top:0.2rem\" />" +
+        "<span>Activar voz al recibir mensaje nuevo (panel cerrado)</span></label></div>" +
+        "<div class=\"form-group\" style=\"max-width:40rem\">" +
+        "<label for=\"cg-admin-chat-voice-phrase\">Frase a pronunciar</label>" +
+        "<textarea id=\"cg-admin-chat-voice-phrase\" class=\"form-input\" rows=\"3\" style=\"width:100%;resize:vertical\" maxlength=\"" +
+        String(vocMax) +
+        "\" placeholder=\"" +
+        G.escapeAttr(G.CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE) +
+        "\">" +
+        G.escapeHtml(voicePhraseDisp) +
+        "</textarea>" +
+        "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;font-size:0.78rem\">Máximo " +
+        String(vocMax) +
+        " caracteres. Puede personalizar el mensaje a su criterio.</p></div>" +
+        "<div class=\"toolbar\" style=\"gap:0.45rem;flex-wrap:wrap;margin-top:0.25rem\">" +
+        "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"adminStaffChatVoiceSave\" data-cg-empty=\"1\"><i class=\"fa-solid fa-floppy-disk\" aria-hidden=\"true\"></i> Guardar voz</button> " +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"adminStaffChatVoiceTest\" data-cg-empty=\"1\"><i class=\"fa-solid fa-volume-high\" aria-hidden=\"true\"></i> Probar frase</button></div>" +
+        "</div></div>";
       p.innerHTML =
         "<div class=\"card\"><div class=\"card-h\"><h3>Personalización</h3></div><div class=\"card-b\">" +
         "<p class=\"page-desc\" style=\"margin:0 0 1rem\"><strong>Lima</strong> (verde institucional <code>#74BD20</code>) es la paleta oficial. Las demás son alternativas secundarias. Afecta a la pantalla de acceso, conserjería, Residentes, Departamentos (mapa), reportes HTML y fichas.</p>" +
@@ -31274,7 +31422,8 @@ function __deptUnitsStorageKey() {
         "<div style=\"max-width:28rem\">" +
         palCards +
         "</div></div></div>" +
-        dashQlCard;
+        dashQlCard +
+        voiceCard;
     } else if (tab === "dashAlerts") {
       p.innerHTML = buildRenderAdminDashAlertsHtml();
     } else if (tab === "festive") {
@@ -32093,6 +32242,45 @@ function __deptUnitsStorageKey() {
     A.renderAdmin("personalizacion");
     if (UI && typeof UI.renderNav === "function") UI.renderNav();
     G.toast(t === "dark" ? "Modo noche aplicado" : "Modo día aplicado");
+  };
+
+  A.adminStaffChatVoiceSave = function () {
+    var cuVs = G.currentUser();
+    if (!cuVs || cuVs.role !== "admin") {
+      G.toast("Solo el administrador puede guardar la voz del chat.", "error");
+      return;
+    }
+    var enEl = document.getElementById("cg-admin-chat-voice-en");
+    var taVs = document.getElementById("cg-admin-chat-voice-phrase");
+    var enabledVs = !!(enEl && enEl.checked);
+    var phraseVs =
+      G.normalizeStaffChatVoicePhrase(taVs ? taVs.value : "") || G.CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE;
+    if (typeof G.setPersonalization === "function") {
+      G.setPersonalization({
+        staffChatVoiceEnabled: enabledVs,
+        staffChatVoicePhrase: phraseVs
+      });
+    }
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("personalization");
+    A.renderAdmin("personalizacion");
+    G.toast("Voz del chat guardada");
+  };
+
+  A.adminStaffChatVoiceTest = function () {
+    var cuVt = G.currentUser();
+    if (!cuVt || cuVt.role !== "admin") {
+      G.toast("Solo el administrador puede probar la voz.", "error");
+      return;
+    }
+    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === "undefined") {
+      G.toast("Este navegador no admite lectura por voz.", "warn");
+      return;
+    }
+    var taVt = document.getElementById("cg-admin-chat-voice-phrase");
+    var phraseVt =
+      G.normalizeStaffChatVoicePhrase(taVt ? taVt.value : "") || G.CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE;
+    if (typeof G.staffChatSpeakAnnouncementText === "function") G.staffChatSpeakAnnouncementText(phraseVt);
+    G.toast("Reproduciendo prueba de voz…", "info");
   };
 
   window.CG_ACTIONS = A;
