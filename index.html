@@ -11195,6 +11195,86 @@
       );
     }
 
+    /**
+     * Diagnóstico rápido (soporte / depuración): nube, volúmenes de datos y presencia de CG_ACTIONS.
+     * Consola: CG.runAppDiagnostics() — revisar .issues / .warnings y .dataCounts.
+     */
+    function runAppDiagnostics() {
+      var r = {
+        at: new Date().toISOString(),
+        cloudSyncEnabled: window.CG_CLOUD_SYNC_ENABLED === true,
+        firestoreBridgeActive: !!(window.cgFsBridge && typeof window.cgFsBridge.active === "function" && window.cgFsBridge.active()),
+        cloudInit: typeof getCloudSyncLastInitResult === "function" ? getCloudSyncLastInitResult() : null,
+        loggedIn: !!currentUser(),
+        dataCounts: {},
+        issues: [],
+        warnings: []
+      };
+      var keys = [
+        "users",
+        "visits",
+        "novedades",
+        "encomiendas",
+        "reservas",
+        "proveedores",
+        "staffChatMessages",
+        "shiftLogs",
+        "departments"
+      ];
+      var arrayish = {
+        users: true,
+        visits: true,
+        novedades: true,
+        encomiendas: true,
+        reservas: true,
+        proveedores: true,
+        staffChatMessages: true,
+        shiftLogs: true,
+        departments: true
+      };
+      var ki;
+      for (ki = 0; ki < keys.length; ki++) {
+        var key = keys[ki];
+        try {
+          var v = load(key, []);
+          if (Array.isArray(v)) r.dataCounts[key] = v.length;
+          else if (v && typeof v === "object") r.dataCounts[key] = Object.keys(v).length;
+          else r.dataCounts[key] = v == null ? 0 : typeof v;
+          if (arrayish[key] && v != null && !Array.isArray(v)) {
+            r.warnings.push("La clave \"" + key + "\" debería ser un array; tipo: " + typeof v);
+          }
+        } catch (eK) {
+          r.issues.push("load(\"" + key + "\"): " + (eK && eK.message ? eK.message : String(eK)));
+        }
+      }
+      if (!window.CG_ACTIONS) {
+        r.issues.push("window.CG_ACTIONS no definido (acciones de UI no cargadas).");
+      } else {
+        var need = [
+          "renderVisitas",
+          "renderNovedades",
+          "bindNovedades",
+          "renderEncomiendas",
+          "renderAdmin",
+          "renderParkingGrid",
+          "renderReservas"
+        ];
+        var ni;
+        for (ni = 0; ni < need.length; ni++) {
+          var nm = need[ni];
+          if (typeof window.CG_ACTIONS[nm] !== "function") r.warnings.push("CG_ACTIONS." + nm + " no es una función");
+        }
+      }
+      try {
+        if (window.__cgFsLastError) {
+          var fe = window.__cgFsLastError;
+          r.warnings.push("Último error escritura Firestore: " + (fe && fe.message ? fe.message : String(fe)));
+        }
+      } catch (eFe) {}
+      r.ok = r.issues.length === 0;
+      return r;
+    }
+
     /* ┌─ 11. API pública (único objeto global del core) ─────────────────────────────── */
     window.CG = {
       APP_BRAND_NAME, MANUFACTURER_LOGO_URL,
@@ -11218,6 +11298,7 @@
       hexToRgb, snapshotThemeForExport, buildExportThemeRootCss, getExportAccentHex, getEmailShellThemeColors,
       initCloudSync, stopCloudSyncListener, attachStaffChatRemoteSync, detachStaffChatRemoteSync, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPullSingleLsKey, cloudPushAllKeysOnce,
       flushPendingCloudWritesNow, cloudPushKeyImmediate, cloudPushLsKeyPromise, armLsKeyPullQuiet, getCloudSyncLastInitResult,
+      runAppDiagnostics,
       registerPendingDeletedLsKey: __cgRegisterPendingDeletedLsKey,
       clearPendingDeletedBucket: __cgClearPendingDeletedLsKey,
       staffChatDedupeKeyForSync: __cgStaffChatDedupeKey,
@@ -18592,7 +18673,16 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       staffChatRefreshTypingIndicator();
     }
     function staffChatRefreshFromStore() {
-      var json = JSON.stringify(staffChatMessagesSafe());
+      var json;
+      try {
+        json = JSON.stringify(staffChatMessagesSafe());
+      } catch (eStr) {
+        console.warn("[CG][chat] No se pudo serializar mensajes (¿datos corruptos?):", eStr);
+        try {
+          staffChatUpdateBadge();
+        } catch (eBd) {}
+        return;
+      }
       if (json !== staffChatLastMsgs) {
         var prevSnap = staffChatLastMsgs;
         if (staffChatSoundInited) {
@@ -21091,30 +21181,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         if (dash) updateDashboardActivityAndNovBodiesOnly();
       }
 
-      if (k === "staffPresence") {
-        try {
-          staffChatSyncPanelSub();
-        } catch (eSpr) {}
-        try {
-          staffChatRefreshTypingIndicator();
-        } catch (eTy2) {}
-        return;
-      }
-
-      if (k === "staffChatMessages") {
-        if (typeof staffChatRefreshFromStore === "function") {
-          try {
-            staffChatRefreshFromStore();
-          } catch (eSc) {}
-        }
-        return;
-      }
-
-      if (k === "chatLastReadByUser") {
-        try {
-          if (staffChatPanelOpen()) staffChatRenderThread();
-        } catch (eCr) {}
-      }
+      /* staffPresence, chatLastReadByUser y staffChatMessages: listener dedicado en el bloque del chat (no duplicar aquí). */
 
       if (dash && k === "users") {
         try {
