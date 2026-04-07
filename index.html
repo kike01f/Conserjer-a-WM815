@@ -8629,6 +8629,13 @@
       return "id_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 9);
     }
 
+    /** Mismo usuario / id de sesión aunque uno venga como número y otro como string (JSON, Firestore). */
+    function sameUserId(a, b) {
+      if (a == null && b == null) return true;
+      if (a == null || b == null) return false;
+      return String(a) === String(b);
+    }
+
     /* ┌─ 4. Autenticación (PBKDF2, verificadores, puerta módulo Estadística) ──────────── */
     /* =============================================================================
      * Auth Config — Sin contraseñas en texto plano en el código ni en localStorage.
@@ -9148,7 +9155,7 @@
       var uid = state.session.userId;
       var i;
       for (i = 0; i < users.length; i++) {
-        if (users[i] && users[i].id === uid) return users[i];
+        if (users[i] && sameUserId(users[i].id, uid)) return users[i];
       }
       return null;
     }
@@ -9220,7 +9227,7 @@
       for (i = 0; i < list.length; i++) {
         var s = list[i];
         if (!openShiftSegmentIsConserjeLock(s, byId)) continue;
-        if (s.userId === candidateUserId) continue;
+        if (sameUserId(s.userId, candidateUserId)) continue;
         return {
           blockerName: String(s.userName || (byId[s.userId] && byId[s.userId].name) || "otro conserje").trim() || "otro conserje",
           blockerUserId: s.userId
@@ -12006,7 +12013,7 @@
       canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, reservaOcurreEnDiaChile, reservaEnCursoAhora, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, proveedorServicioIconClass, proveedorServicioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
       proveedorSelectOptionsHtml,
-      uid, load, save, LS, persist: P,
+      uid, sameUserId, load, save, LS, persist: P,
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
       CG_DASH_QUICKLINKS_MAX,
       CG_STAFF_CHAT_VOICE_PHRASE_MAX, CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE, normalizeStaffChatVoicePhrase,
@@ -13876,7 +13883,11 @@ function __deptUnitsStorageKey() {
                 const raw = window.CG_PERSIST.localGetRaw(__deptFormerStorageKey());
                 if (!raw) return;
                 const parsed = window.CG_PERSIST.parseJson(raw, []);
-                const list = Array.isArray(parsed) ? parsed.filter(r => r.id !== residentId) : [];
+                const list = Array.isArray(parsed)
+                  ? parsed.filter(function (r) {
+                      return !__deptSameUnitId(r.id, residentId);
+                    })
+                  : [];
                 var strL = window.CG_PERSIST.stringifyForStorage(list);
                 if (!strL || !window.CG_PERSIST.localSetRaw(__deptFormerStorageKey(), strL)) return;
                 if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
@@ -18444,6 +18455,7 @@ function __deptUnitsStorageKey() {
       });
     });
   }
+  window.CG.syncDeptModuleAdminVisibility = cgDeptSyncImportExportVisibility;
   window.CG.mountDepartamentosModule = async function (opts) {
     opts = opts || {};
     var hostId = opts.hostId || "dept-module-host";
@@ -18503,7 +18515,7 @@ function __deptUnitsStorageKey() {
       var list = G.state.shiftLogs || [];
       var i;
       for (i = 0; i < list.length; i++) {
-        if (list[i].userId === userId && G.shiftLogTramoIsOpen(list[i])) return true;
+        if (G.sameUserId(list[i].userId, userId) && G.shiftLogTramoIsOpen(list[i])) return true;
       }
       return false;
     }
@@ -18849,7 +18861,7 @@ function __deptUnitsStorageKey() {
       var i;
       for (i = 0; i < users.length; i++) {
         var su = users[i];
-        if (su && su.id === uid && su.role === "admin") return true;
+        if (su && G.sameUserId(su.id, uid) && su.role === "admin") return true;
       }
       return false;
     }
@@ -18872,7 +18884,7 @@ function __deptUnitsStorageKey() {
           if (!isFinite(mMs) || mMs <= afterMs) return false;
         }
         if (u.role === "admin") {
-          if (m.userId === u.id) return false;
+          if (G.sameUserId(m.userId, u.id)) return false;
           if (m.role === "conserje") return true;
           if (!m.role && m.userId) return true;
           return false;
@@ -19065,7 +19077,7 @@ function __deptUnitsStorageKey() {
       for (i = 0; i < nextV.length; i++) {
         var nm = nextV[i];
         if (!nm || nm.kind !== "buzz") continue;
-        if (nm.userId === u.id) continue;
+        if (G.sameUserId(nm.userId, u.id)) continue;
         var nk = staffChatMessageDedupeKey(nm);
         if (nk && !prevBuzzKeys[nk]) {
           staffChatRunBuzzRecipientFx();
@@ -19162,7 +19174,7 @@ function __deptUnitsStorageKey() {
       return sorted.filter(function (m) {
         if (!m || typeof m !== "object") return false;
         if (staffChatMessageIsFromAdminParty(m)) return true;
-        if (m.userId === u.id) return true;
+        if (G.sameUserId(m.userId, u.id)) return true;
         return false;
       });
     }
@@ -19283,7 +19295,7 @@ function __deptUnitsStorageKey() {
       for (i = 0; i < nextV.length; i++) {
         var m = nextV[i];
         if (!m || typeof m !== "object") continue;
-        if (m.userId === u.id) continue;
+        if (G.sameUserId(m.userId, u.id)) continue;
         if (m.kind === "buzz") continue;
         var nk = staffChatMessageDedupeKey(m);
         if (nk && !prevKeys[nk]) {
@@ -19446,7 +19458,7 @@ function __deptUnitsStorageKey() {
       } else {
         list.forEach(function (m) {
           if (!m || typeof m !== "object") return;
-          var mine = m.userId === uid;
+          var mine = G.sameUserId(m.userId, uid);
           var fromAdm = staffChatMessageIsFromAdminParty(m);
           var roleCls = fromAdm ? "cg-chat-bubble--admin" : "cg-chat-bubble--conserje";
           var bubbleCls = "cg-chat-bubble " + (mine ? "cg-chat-bubble--me" : "cg-chat-bubble--other") + " " + roleCls;
@@ -20028,6 +20040,11 @@ function __deptUnitsStorageKey() {
         }
       }
       renderTopUser();
+      if (typeof G.syncDeptModuleAdminVisibility === "function") {
+        try {
+          G.syncDeptModuleAdminVisibility();
+        } catch (eDeptVis) {}
+      }
       navigate(currentView, true);
       staffChatSetDockVisible(true);
       staffPresenceStart();
@@ -20947,7 +20964,7 @@ function __deptUnitsStorageKey() {
         });
         nov.forEach(function (n) {
           if (!G.isInCalendarMonth(n.at, y, monthIdx)) return;
-          if (n.userId === u.id || norm(n.userName) === key) cNov++;
+          if (G.sameUserId(n.userId, u.id) || norm(n.userName) === key) cNov++;
         });
         return { user: u, cUn: cUn, cVis: cVis, cEnc: cEnc, cNov: cNov, tot: cUn + cVis + cEnc + cNov };
       });
@@ -22089,6 +22106,9 @@ function __deptUnitsStorageKey() {
             A.renderShiftPanelNovedades();
           } catch (eSp) {}
         }
+        try {
+          renderNav();
+        } catch (eRnSh) {}
       }
 
       var deptKeys = [
@@ -28803,7 +28823,7 @@ function __deptUnitsStorageKey() {
   function shiftFindOpen(list, userId) {
     var i;
     for (i = 0; i < list.length; i++) {
-      if (list[i].userId === userId && shiftTramoAbiertoSeg(list[i])) return list[i];
+      if (G.sameUserId(list[i].userId, userId) && shiftTramoAbiertoSeg(list[i])) return list[i];
     }
     return null;
   }
@@ -28815,7 +28835,7 @@ function __deptUnitsStorageKey() {
   function novedadConserjeMayEdit(n, user) {
     if (!user || user.role === "admin") return true;
     if (!n || n.category === "Turno") return false;
-    if (!n.userId || n.userId !== user.id) return false;
+    if (!n.userId || !G.sameUserId(n.userId, user.id)) return false;
     var open = shiftFindOpen(G.state.shiftLogs || [], user.id);
     if (!open) return false;
     return new Date(n.at).getTime() >= new Date(open.startAt).getTime();
@@ -29411,7 +29431,7 @@ function __deptUnitsStorageKey() {
           "<option value=\"" +
           G.escapeAttr(usr.id) +
           "\"" +
-          (usr.id === uid ? " selected" : "") +
+          (G.sameUserId(usr.id, uid) ? " selected" : "") +
           ">" +
           G.escapeHtml(usr.name) +
           " (" +
@@ -29548,7 +29568,7 @@ function __deptUnitsStorageKey() {
       var usersArr = Array.isArray(G.state.users) ? G.state.users : [];
       var uidSel = n.userId != null && n.userId !== "" ? n.userId : uNov && uNov.id ? uNov.id : "";
       var hasSel = usersArr.some(function (usr) {
-        return usr && usr.id === uidSel;
+        return usr && G.sameUserId(usr.id, uidSel);
       });
       var userOpts = usersArr
         .filter(function (usr) {
@@ -29559,7 +29579,7 @@ function __deptUnitsStorageKey() {
             "<option value=\"" +
             G.escapeAttr(usr.id) +
             "\"" +
-            (usr.id === uidSel ? " selected" : "") +
+            (G.sameUserId(usr.id, uidSel) ? " selected" : "") +
             ">" +
             G.escapeHtml(usr.name || usr.id) +
             " (" +
@@ -29670,12 +29690,12 @@ function __deptUnitsStorageKey() {
       patch.at = vAtN.iso;
       var uidPick = f.userId.value;
       var usrPick = (Array.isArray(G.state.users) ? G.state.users : []).find(function (x) {
-        return x && x.id === uidPick;
+        return x && G.sameUserId(x.id, uidPick);
       });
       if (usrPick) {
         patch.userId = usrPick.id;
         patch.userName = usrPick.name;
-      } else if (prev && prev.userId === uidPick) {
+      } else if (prev && G.sameUserId(prev.userId, uidPick)) {
         patch.userId = prev.userId;
         patch.userName = prev.userName;
       } else {
