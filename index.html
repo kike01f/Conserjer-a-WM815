@@ -4859,6 +4859,18 @@
       margin-bottom: 0.08rem;
       letter-spacing: -0.02em;
     }
+    .cg-dash-quicklinks-mount:not(:empty) {
+      margin-bottom: 0.45rem;
+    }
+    .cg-dash-quicklinks-card .cg-dash-quicklinks-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      align-items: center;
+    }
+    .cg-dash-quicklink {
+      text-decoration: none;
+    }
     .cg-dash-page .card {
       margin-bottom: 0.55rem;
     }
@@ -10632,6 +10644,46 @@
     }
 
     const PERSONALIZATION_PALETTE_IDS = ["lima", "azul", "bosque", "indigo", "vino", "pizarra", "aurora"];
+    var CG_DASH_QUICKLINKS_MAX = 24;
+
+    function cgSanitizeDashboardQuickLinkHref(raw) {
+      var s = String(raw == null ? "" : raw).trim().replace(/\u0000/g, "");
+      if (!s) return "";
+      if (s.length > 2000) s = s.slice(0, 2000);
+      var low22 = s.slice(0, 22).toLowerCase();
+      if (low22.indexOf("javascript:") === 0) return "";
+      if (low22.indexOf("data:") === 0) return "";
+      if (low22.indexOf("vbscript:") === 0) return "";
+      if (/^https?:\/\//i.test(s)) return s;
+      if (/^mailto:/i.test(s)) return s;
+      if (/^tel:/i.test(s)) return s;
+      if (/^\/\/[a-zA-Z0-9]/.test(s)) return "https:" + s;
+      if (s.charAt(0) === "/" || s.charAt(0) === "#" || s.charAt(0) === "?") return s;
+      if (/^\.{0,2}\//.test(s)) return s;
+      if (/^[a-zA-Z0-9][a-zA-Z0-9._~\-/]*$/.test(s)) return s;
+      return "";
+    }
+
+    function normalizeDashQuickLinksArray(raw) {
+      if (!Array.isArray(raw)) return [];
+      var out = [];
+      var seen = Object.create(null);
+      var i;
+      for (i = 0; i < raw.length && out.length < CG_DASH_QUICKLINKS_MAX; i++) {
+        var it = raw[i];
+        if (!it || typeof it !== "object" || Array.isArray(it)) continue;
+        var label = String(it.label == null ? "" : it.label).trim().replace(/\u0000/g, "").slice(0, 80);
+        var href = cgSanitizeDashboardQuickLinkHref(it.href);
+        if (!label || !href) continue;
+        var id = it.id != null ? String(it.id).replace(/\u0000/g, "").slice(0, 64) : "";
+        if (!id) id = "dql_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 9);
+        if (seen[id]) continue;
+        seen[id] = true;
+        out.push({ id: id, label: label, href: href });
+      }
+      return out;
+    }
+
     const PERSONALIZATION_PALETTES = [
       {
         id: "lima",
@@ -10676,7 +10728,11 @@
       var pal = PERSONALIZATION_PALETTE_IDS.indexOf(d.palette) >= 0 ? d.palette : "lima";
       var sess = readUiThemeFromSession();
       var theme = sess === "dark" ? "dark" : "light";
-      return { palette: pal, theme: theme };
+      return {
+        palette: pal,
+        theme: theme,
+        dashQuickLinks: normalizeDashQuickLinksArray(d.dashQuickLinks)
+      };
     }
 
     function setPersonalization(partial) {
@@ -10692,6 +10748,9 @@
       if (!stored || typeof stored !== "object") stored = {};
       stored.palette = nextPalette;
       delete stored.theme;
+      if (partial && partial.dashQuickLinks != null) {
+        stored.dashQuickLinks = normalizeDashQuickLinksArray(partial.dashQuickLinks);
+      }
       save("personalization", stored);
       applyPersonalizationToDom();
     }
@@ -11520,6 +11579,7 @@
       proveedorSelectOptionsHtml,
       uid, load, save, LS, persist: P,
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
+      CG_DASH_QUICKLINKS_MAX,
       getPersonalization, setPersonalization, applyPersonalizationToDom,
       CG_FESTIVE_PRESET_META, getFestiveAmbienceNormalized, resolveFestiveAmbienceRule, resolveFestiveAmbienceRuleFromParts, applyFestiveAmbienceToDom,
       CG_APP_TIMEZONE, cgChileYmdParts, cgChileShiftCalendarDays, cgChileFormatYmdWeekdayShort, cgChileYesterdayYmd, isSameChileYmd, isoInChileCalendarMonth, shiftSegmentOverlapChileMonth,
@@ -18034,6 +18094,8 @@ function __deptUnitsStorageKey() {
     var staffChatReplyDraft = null;
     var staffChatTypingUiInterval = null;
     var staffChatTypingPushThrottleTimer = null;
+    var staffChatIdleMinimizeTimerId = null;
+    var STAFF_CHAT_IDLE_MINIMIZE_MS = 60000;
     var staffPresenceIntervalId = null;
     var STAFF_PRESENCE_STALE_MS = 52000;
     var STAFF_PRESENCE_HEARTBEAT_MS = 12000;
@@ -18344,6 +18406,43 @@ function __deptUnitsStorageKey() {
     function staffChatPanelOpen() {
       var p = document.getElementById("cg-chat-panel");
       return p && !p.classList.contains("hidden");
+    }
+
+    function staffChatClearIdleMinimizeTimer() {
+      if (staffChatIdleMinimizeTimerId != null) {
+        window.clearTimeout(staffChatIdleMinimizeTimerId);
+        staffChatIdleMinimizeTimerId = null;
+      }
+    }
+
+    function staffChatClosePanel() {
+      var panel = document.getElementById("cg-chat-panel");
+      var toggle = document.getElementById("cg-chat-toggle");
+      staffChatClearIdleMinimizeTimer();
+      if (!panel || panel.classList.contains("hidden")) return;
+      panel.classList.add("hidden");
+      if (toggle) toggle.setAttribute("aria-expanded", "false");
+      staffChatSetEmojiPopover(false);
+      staffChatClearTypingBroadcast();
+      staffChatStopTypingUiTick();
+      staffChatRefreshTypingIndicator();
+      staffChatFabUpdatePanelPlacement();
+      staffChatUpdateBadge();
+    }
+
+    function staffChatArmIdleMinimizeTimer() {
+      staffChatClearIdleMinimizeTimer();
+      if (!staffChatPanelOpen()) return;
+      staffChatIdleMinimizeTimerId = window.setTimeout(function () {
+        staffChatIdleMinimizeTimerId = null;
+        if (!staffChatPanelOpen()) return;
+        staffChatClosePanel();
+      }, STAFF_CHAT_IDLE_MINIMIZE_MS);
+    }
+
+    function staffChatBumpIdleMinimizeTimer() {
+      if (!staffChatPanelOpen()) return;
+      staffChatArmIdleMinimizeTimer();
     }
 
     function staffChatGetAudioContext() {
@@ -19096,6 +19195,16 @@ function __deptUnitsStorageKey() {
       var input = document.getElementById("cg-chat-input");
       if (!toggle || !panel) return;
       staffChatBound = true;
+      if (!panel.__cgStaffChatIdleActivityBound) {
+        panel.__cgStaffChatIdleActivityBound = true;
+        var bumpIdle = function () {
+          staffChatBumpIdleMinimizeTimer();
+        };
+        panel.addEventListener("mousedown", bumpIdle, true);
+        panel.addEventListener("keydown", bumpIdle, true);
+        panel.addEventListener("touchstart", bumpIdle, { passive: true, capture: true });
+        panel.addEventListener("wheel", bumpIdle, { passive: true, capture: true });
+      }
       var threadEl = document.getElementById("cg-chat-thread");
       if (threadEl && !threadEl.__cgStaffReplyNavBound) {
         threadEl.__cgStaffReplyNavBound = true;
@@ -19126,6 +19235,16 @@ function __deptUnitsStorageKey() {
           }
         });
       }
+      if (threadEl && !threadEl.__cgStaffChatIdleScrollBound) {
+        threadEl.__cgStaffChatIdleScrollBound = true;
+        threadEl.addEventListener(
+          "scroll",
+          function () {
+            staffChatBumpIdleMinimizeTimer();
+          },
+          { passive: true }
+        );
+      }
       var replyCancelBtn = document.getElementById("cg-chat-reply-cancel");
       if (replyCancelBtn && !replyCancelBtn.__cgStaffReplyCancelBound) {
         replyCancelBtn.__cgStaffReplyCancelBound = true;
@@ -19155,6 +19274,7 @@ function __deptUnitsStorageKey() {
             staffChatStartTypingUiTick();
             staffChatRefreshTypingIndicator();
             if (input) setTimeout(function () { input.focus(); }, 80);
+            staffChatArmIdleMinimizeTimer();
           };
           if (typeof G.cloudPullSingleLsKey === "function") {
             var pulls = [G.cloudPullSingleLsKey("staffChatMessages"), G.cloudPullSingleLsKey("staffPresence")];
@@ -19163,26 +19283,12 @@ function __deptUnitsStorageKey() {
             finishOpen();
           }
         } else {
-          panel.classList.add("hidden");
-          toggle.setAttribute("aria-expanded", "false");
-          staffChatSetEmojiPopover(false);
-          staffChatClearTypingBroadcast();
-          staffChatStopTypingUiTick();
-          staffChatRefreshTypingIndicator();
-          staffChatFabUpdatePanelPlacement();
-          staffChatUpdateBadge();
+          staffChatClosePanel();
         }
       });
       if (closeBtn) {
         closeBtn.addEventListener("click", function () {
-          panel.classList.add("hidden");
-          toggle.setAttribute("aria-expanded", "false");
-          staffChatSetEmojiPopover(false);
-          staffChatClearTypingBroadcast();
-          staffChatStopTypingUiTick();
-          staffChatRefreshTypingIndicator();
-          staffChatFabUpdatePanelPlacement();
-          staffChatUpdateBadge();
+          staffChatClosePanel();
         });
       }
       if (form) {
@@ -19244,6 +19350,7 @@ function __deptUnitsStorageKey() {
           input.__cgStaffChatTypingBound = true;
           input.addEventListener("input", function () {
             staffChatNotifyTypingActivity();
+            staffChatBumpIdleMinimizeTimer();
           });
           input.addEventListener("blur", function () {
             staffChatClearTypingBroadcast();
@@ -19333,6 +19440,7 @@ function __deptUnitsStorageKey() {
         staffChatFabResetDockPosition();
         staffChatFabUpdatePanelPlacement();
       } else {
+        staffChatClearIdleMinimizeTimer();
         root.classList.add("hidden");
         root.setAttribute("aria-hidden", "true");
         var panel = document.getElementById("cg-chat-panel");
@@ -20601,6 +20709,7 @@ function __deptUnitsStorageKey() {
       return (
         "<div class=\"cg-dash-page\">" +
         "<h1 class=\"page-title\">Panel de control</h1>" +
+        "<div id=\"cg-dash-quicklinks-mount\" class=\"cg-dash-quicklinks-mount\" aria-live=\"polite\"></div>" +
         "<div id=\"dash-festive-mount\" class=\"cg-dash-festive-mount\" aria-live=\"polite\"></div>" +
         "<div class=\"card cg-dash-bday-card\" id=\"dash-staff-bday-card\" style=\"display:none;border-left:3px solid #db2777\">" +
         "<div class=\"cg-dash-bday-confetti\" aria-hidden=\"true\">" +
@@ -21071,6 +21180,43 @@ function __deptUnitsStorageKey() {
       );
     }
 
+    function renderDashboardQuickLinksMount() {
+      var mount = document.getElementById("cg-dash-quicklinks-mount");
+      if (!mount) return;
+      var links =
+        typeof G.getPersonalization === "function" ? G.getPersonalization().dashQuickLinks || [] : [];
+      if (!links.length) {
+        mount.innerHTML = "";
+        return;
+      }
+      var parts = links
+        .map(function (x) {
+          if (!x || !x.href) return "";
+          var ext = /^https?:\/\//i.test(x.href);
+          var tgt = ext ? " target=\"_blank\" rel=\"noopener noreferrer\"" : "";
+          return (
+            "<a class=\"btn btn-secondary btn-sm cg-dash-quicklink\" href=\"" +
+            G.escapeAttr(x.href) +
+            "\"" +
+            tgt +
+            ">" +
+            G.escapeHtml(x.label || "Enlace") +
+            "</a>"
+          );
+        })
+        .filter(Boolean);
+      if (!parts.length) {
+        mount.innerHTML = "";
+        return;
+      }
+      mount.innerHTML =
+        "<div class=\"card cg-dash-quicklinks-card\">" +
+        "<div class=\"card-h\"><h3><i class=\"fa-solid fa-link\" aria-hidden=\"true\"></i> Accesos rápidos</h3></div>" +
+        "<div class=\"card-b\"><div class=\"cg-dash-quicklinks-bar\" role=\"toolbar\" aria-label=\"Accesos rápidos\">" +
+        parts.join("") +
+        "</div></div></div>";
+    }
+
     function cgBindSyncDepartamentosForView(view) {
       if (!window.CG_ACTIONS || !CG_ACTIONS.syncDepartamentosModuleFromLocal) return;
       if (
@@ -21097,6 +21243,7 @@ function __deptUnitsStorageKey() {
       if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardStaffBirthdays) CG_ACTIONS.renderDashboardStaffBirthdays();
       if (window.CG_ACTIONS && CG_ACTIONS.renderDashboardScheduledAlerts) CG_ACTIONS.renderDashboardScheduledAlerts();
       if (window.CG && typeof window.CG.applyFestiveAmbienceToDom === "function") window.CG.applyFestiveAmbienceToDom();
+      renderDashboardQuickLinksMount();
       renderDashboardCharts();
     }
 
@@ -21290,6 +21437,11 @@ function __deptUnitsStorageKey() {
             if (tabPer) A.renderAdmin("personalizacion");
           } catch (ePe) {}
         }
+        if (dash && typeof renderDashboardQuickLinksMount === "function") {
+          try {
+            renderDashboardQuickLinksMount();
+          } catch (eQl) {}
+        }
       }
 
       if (k === "staffBirthdays") {
@@ -21465,7 +21617,7 @@ function __deptUnitsStorageKey() {
     window.CG_UI = {
       showLogin, showApp, navigate, renderNav, openModal, closeModal, getCurrentView, openUserManualOverlay,
       pageDepartamentos, pageMapaEdificio, pageEstacionamientos, pageBodegas, pageProveedores, pageVisitas, pageEncomiendas, pageReservas, pageNovedades, pageAdmin, pageManual,
-      bindPageEvents, checkVehicularVisitWarnings, renderDashboardCharts,
+      bindPageEvents, checkVehicularVisitWarnings, renderDashboardCharts, renderDashboardQuickLinksMount,
       refreshAfterRemoteLsKey
     };
     window.addEventListener("cg-theme-change", function () {
@@ -30965,6 +31117,51 @@ function __deptUnitsStorageKey() {
           "</span></span></button>"
         );
       }).join("");
+      var dashQl = G.getPersonalization().dashQuickLinks || [];
+      var dashQlRows = dashQl
+        .map(function (x, idx) {
+          var rid = x && x.id ? String(x.id) : "dql_" + idx;
+          return (
+            "<tr class=\"cg-admin-ql-row\" data-cg-ql-row-id=\"" +
+            G.escapeAttr(rid) +
+            "\">" +
+            "<td style=\"padding:0.4rem 0.5rem\"><input type=\"text\" class=\"form-input cg-admin-ql-label\" value=\"" +
+            G.escapeAttr(x.label || "") +
+            "\" placeholder=\"Ej: Manual interno\" aria-label=\"Texto del botón " +
+            (idx + 1) +
+            "\" style=\"min-width:11rem;width:100%;max-width:22rem\" /></td>" +
+            "<td style=\"padding:0.4rem 0.5rem\"><input type=\"text\" class=\"form-input cg-admin-ql-href\" value=\"" +
+            G.escapeAttr(x.href || "") +
+            "\" placeholder=\"https://… · mailto:… · /ruta\" aria-label=\"URL " +
+            (idx + 1) +
+            "\" style=\"min-width:14rem;width:100%;max-width:36rem\" /></td>" +
+            "<td style=\"padding:0.4rem 0.5rem;white-space:nowrap\">" +
+            "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"adminDashQuickLinkMove\" data-cg-id=\"" +
+            G.escapeAttr(rid) +
+            "\" data-cg-param=\"up\" title=\"Subir\">↑</button> " +
+            "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"adminDashQuickLinkMove\" data-cg-id=\"" +
+            G.escapeAttr(rid) +
+            "\" data-cg-param=\"down\" title=\"Bajar\">↓</button> " +
+            "<button type=\"button\" class=\"btn btn-danger btn-sm\" data-cg-act=\"adminDashQuickLinkRemove\" data-cg-id=\"" +
+            G.escapeAttr(rid) +
+            "\">Quitar</button></td></tr>"
+          );
+        })
+        .join("");
+      var dashQlCard =
+        "<div class=\"card\" style=\"margin-top:1rem\"><div class=\"card-h\" style=\"flex-wrap:wrap;gap:0.5rem;align-items:center\"><h3 style=\"margin:0;font-size:0.98rem\">Accesos rápidos (panel de control)</h3>" +
+        "<div class=\"toolbar\" style=\"margin-left:auto;flex-wrap:wrap;gap:0.45rem\">" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"adminDashQuickLinkAdd\" data-cg-empty=\"1\"><i class=\"fa-solid fa-plus\" aria-hidden=\"true\"></i> Añadir enlace</button> " +
+        "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"adminDashQuickLinksSave\" data-cg-empty=\"1\"><i class=\"fa-solid fa-floppy-disk\" aria-hidden=\"true\"></i> Guardar enlaces</button></div></div>" +
+        "<div class=\"card-b\">" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Botones opcionales bajo el título del panel de control, visibles para <strong>todos los usuarios</strong> según sus módulos. Use <code>https://</code>, <code>mailto:</code>, <code>tel:</code>, rutas que empiecen por <code>/</code> o archivos relativos (ej. <code>manual.pdf</code>). Pulse <strong>Guardar enlaces</strong> para aplicar. Máximo " +
+        String(G.CG_DASH_QUICKLINKS_MAX != null ? G.CG_DASH_QUICKLINKS_MAX : 24) +
+        ".</p>" +
+        "<div style=\"overflow-x:auto\"><table class=\"data-table\" style=\"min-width:min(100%,520px)\"><thead><tr><th>Texto del botón</th><th>Enlace (URL o ruta)</th><th style=\"width:1%\">Orden</th></tr></thead><tbody id=\"cg-admin-dash-ql-tbody\">" +
+        dashQlRows +
+        "</tbody></table></div>" +
+        (dashQlRows ? "" : "<p class=\"page-desc\" style=\"margin:0.5rem 0 0\">Sin enlaces. Use <strong>Añadir enlace</strong>.</p>") +
+        "</div></div>";
       p.innerHTML =
         "<div class=\"card\"><div class=\"card-h\"><h3>Personalización</h3></div><div class=\"card-b\">" +
         "<p class=\"page-desc\" style=\"margin:0 0 1rem\"><strong>Lima</strong> (verde institucional <code>#74BD20</code>) es la paleta oficial. Las demás son alternativas secundarias. Afecta a la pantalla de acceso, conserjería, Residentes, Departamentos (mapa), reportes HTML y fichas.</p>" +
@@ -30972,7 +31169,8 @@ function __deptUnitsStorageKey() {
         "<p class=\"page-desc\" style=\"margin:0 0 0.65rem;font-weight:600\">Paleta de color</p>" +
         "<div style=\"max-width:28rem\">" +
         palCards +
-        "</div></div></div>";
+        "</div></div></div>" +
+        dashQlCard;
     } else if (tab === "dashAlerts") {
       p.innerHTML = buildRenderAdminDashAlertsHtml();
     } else if (tab === "festive") {
@@ -31664,6 +31862,106 @@ function __deptUnitsStorageKey() {
     } catch (eCB) {
       G.toast("No se pudo copiar", "warn");
     }
+  };
+
+  function cgAdminFindDashQlRow(rowId) {
+    var rid = String(rowId || "");
+    var tb = document.getElementById("cg-admin-dash-ql-tbody");
+    if (!tb || !rid) return null;
+    var rows = tb.querySelectorAll("tr.cg-admin-ql-row");
+    var i;
+    for (i = 0; i < rows.length; i++) {
+      if (rows[i].getAttribute("data-cg-ql-row-id") === rid) return rows[i];
+    }
+    return null;
+  }
+
+  A.adminDashQuickLinkAdd = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede editar los accesos.", "error");
+      return;
+    }
+    var maxQ = typeof G.CG_DASH_QUICKLINKS_MAX === "number" ? G.CG_DASH_QUICKLINKS_MAX : 24;
+    var tb = document.getElementById("cg-admin-dash-ql-tbody");
+    if (!tb) return;
+    var n = tb.querySelectorAll("tr.cg-admin-ql-row").length;
+    if (n >= maxQ) {
+      G.toast("Máximo " + maxQ + " enlaces.", "warn");
+      return;
+    }
+    var nid = G.uid();
+    var tr = document.createElement("tr");
+    tr.className = "cg-admin-ql-row";
+    tr.setAttribute("data-cg-ql-row-id", nid);
+    var idEsc = G.escapeAttr(nid);
+    tr.innerHTML =
+      "<td style=\"padding:0.4rem 0.5rem\"><input type=\"text\" class=\"form-input cg-admin-ql-label\" value=\"\" placeholder=\"Ej: Manual interno\" aria-label=\"Texto del nuevo botón\" style=\"min-width:11rem;width:100%;max-width:22rem\" /></td>" +
+      "<td style=\"padding:0.4rem 0.5rem\"><input type=\"text\" class=\"form-input cg-admin-ql-href\" value=\"\" placeholder=\"https://…\" aria-label=\"URL del nuevo enlace\" style=\"min-width:14rem;width:100%;max-width:36rem\" /></td>" +
+      "<td style=\"padding:0.4rem 0.5rem;white-space:nowrap\">" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"adminDashQuickLinkMove\" data-cg-id=\"" +
+      idEsc +
+      "\" data-cg-param=\"up\" title=\"Subir\">↑</button> " +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"adminDashQuickLinkMove\" data-cg-id=\"" +
+      idEsc +
+      "\" data-cg-param=\"down\" title=\"Bajar\">↓</button> " +
+      "<button type=\"button\" class=\"btn btn-danger btn-sm\" data-cg-act=\"adminDashQuickLinkRemove\" data-cg-id=\"" +
+      idEsc +
+      "\">Quitar</button></td>";
+    tb.appendChild(tr);
+    var cardB = tb.closest(".card-b");
+    if (cardB) {
+      cardB.querySelectorAll("p.page-desc").forEach(function (pEl) {
+        if (pEl.textContent.indexOf("Sin enlaces") !== -1) pEl.remove();
+      });
+    }
+  };
+
+  A.adminDashQuickLinkRemove = function (rowId) {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") return;
+    var tr = cgAdminFindDashQlRow(rowId);
+    if (tr) tr.remove();
+  };
+
+  A.adminDashQuickLinkMove = function (rowId, dir) {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") return;
+    var tr = cgAdminFindDashQlRow(rowId);
+    var tb = document.getElementById("cg-admin-dash-ql-tbody");
+    if (!tr || !tb) return;
+    var prev = tr.previousElementSibling;
+    var next = tr.nextElementSibling;
+    if (dir === "up" && prev && prev.classList.contains("cg-admin-ql-row")) {
+      tb.insertBefore(tr, prev);
+    } else if (dir === "down" && next && next.classList.contains("cg-admin-ql-row")) {
+      tb.insertBefore(next, tr);
+    }
+  };
+
+  A.adminDashQuickLinksSave = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede guardar los accesos.", "error");
+      return;
+    }
+    var tb = document.getElementById("cg-admin-dash-ql-tbody");
+    if (!tb) return;
+    var raw = [];
+    tb.querySelectorAll("tr.cg-admin-ql-row").forEach(function (tr) {
+      var rid = tr.getAttribute("data-cg-ql-row-id") || G.uid();
+      var lIn = tr.querySelector(".cg-admin-ql-label");
+      var hIn = tr.querySelector(".cg-admin-ql-href");
+      raw.push({
+        id: rid,
+        label: lIn ? lIn.value : "",
+        href: hIn ? hIn.value : ""
+      });
+    });
+    if (typeof G.setPersonalization === "function") G.setPersonalization({ dashQuickLinks: raw });
+    A.renderAdmin("personalizacion");
+    G.toast("Accesos del panel guardados");
+    if (UI && typeof UI.renderDashboardQuickLinksMount === "function") UI.renderDashboardQuickLinksMount();
   };
 
   A.adminApplyPalette = function (palId) {
