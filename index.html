@@ -31959,6 +31959,7 @@ function __deptUnitsStorageKey() {
       });
     });
     if (typeof G.setPersonalization === "function") G.setPersonalization({ dashQuickLinks: raw });
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("personalization");
     A.renderAdmin("personalizacion");
     G.toast("Accesos del panel guardados");
     if (UI && typeof UI.renderDashboardQuickLinksMount === "function") UI.renderDashboardQuickLinksMount();
@@ -31971,6 +31972,7 @@ function __deptUnitsStorageKey() {
       return;
     }
     if (typeof G.setPersonalization === "function") G.setPersonalization({ palette: palId });
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("personalization");
     A.renderAdmin("personalizacion");
     G.toast("Paleta aplicada");
   };
@@ -31983,6 +31985,7 @@ function __deptUnitsStorageKey() {
     }
     var t = themeId === "dark" ? "dark" : "light";
     if (typeof G.setPersonalization === "function") G.setPersonalization({ theme: t });
+    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("personalization");
     A.renderAdmin("personalizacion");
     if (UI && typeof UI.renderNav === "function") UI.renderNav();
     G.toast(t === "dark" ? "Modo noche aplicado" : "Modo día aplicado");
