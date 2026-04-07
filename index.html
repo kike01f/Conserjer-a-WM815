@@ -7,6 +7,7 @@
   • No importa automáticamente claves legacy vinculacion_wm815_* de otras instalaciones.
   • Con CG_FIREBASE_CONFIG rellenado (apiKey, projectId, siteId, …): Firestore es la fuente de verdad;
     localStorage solo como caché opcional (cgSites/{siteId}/kv/{clave} → campo json).
+  • Residentes / estadística KPI: CG_FABRICA_DEPT_SOURCE (claves kv y totales obra) junto a CG_FIREBASE_CONFIG.
   ═══════════════════════════════════════════════════════════════════════════
   index.html — mapa interno (un solo archivo ejecutable)
 
@@ -258,6 +259,46 @@
       useLocalStorageCache: true,
       connectFirestoreEmulator: null
     };
+
+    /**
+     * Fuentes de datos del módulo Residentes / Estadística (fábrica).
+     * - unitsKvKey / formerResidentsKvKey: id del documento en Firestore cgSites/{siteId}/kv/{id}
+     *   y sufijo de clave local (tras CG_PERSIST.LS). Cambiar solo si necesita otro «bucket» en la misma instalación.
+     * - kpiTotalUnidadesEdificio / kpiTotalEstacionamientosDefault: denominadores de la pestaña Estadística y del resumen de panel.
+     */
+    window.CG_FABRICA_DEPT_SOURCE = {
+      unitsKvKey: "wm815_units",
+      formerResidentsKvKey: "wm815_former_residents",
+      kpiTotalUnidadesEdificio: 259,
+      kpiTotalEstacionamientosDefault: 165
+    };
+    (function cgFabricaDeptSourceHelpers() {
+      function trimDocId(k, fallback) {
+        if (k == null) return fallback;
+        var s = String(k).trim();
+        if (!s || s.indexOf("/") >= 0 || s.indexOf("\\") >= 0) return fallback;
+        return s;
+      }
+      window.__cgFabricaDeptKvUnits = function () {
+        var c = window.CG_FABRICA_DEPT_SOURCE || {};
+        return trimDocId(c.unitsKvKey, "wm815_units");
+      };
+      window.__cgFabricaDeptKvFormer = function () {
+        var c = window.CG_FABRICA_DEPT_SOURCE || {};
+        return trimDocId(c.formerResidentsKvKey, "wm815_former_residents");
+      };
+      window.__cgFabricaDeptKpiUnidades = function () {
+        var c = window.CG_FABRICA_DEPT_SOURCE || {};
+        var n = Number(c.kpiTotalUnidadesEdificio);
+        return n > 0 && n === n ? Math.floor(n) : 259;
+      };
+      window.__cgFabricaDeptKpiEstDefault = function () {
+        var c = window.CG_FABRICA_DEPT_SOURCE || {};
+        var n = Number(c.kpiTotalEstacionamientosDefault);
+        return n > 0 && n === n ? Math.floor(n) : 165;
+      };
+    })();
+
     (function cgFirebaseHeadBridge() {
       window.cgApp = null;
       window.cgDb = null;
@@ -271,7 +312,7 @@
       window.__cgFsLastError = null;
       window.__cgFsListenerUnsub = null;
       window.__cgFsWriteTimers = Object.create(null);
-      window.__cgFsSkipFirestoreKey = { session: true, __cgPendingDeleted: true };
+      window.__cgFsSkipFirestoreKey = { session: true, __cgPendingDeleted: true, staffChatRev: true };
       window.__cgCloudSyncLastInitResult = null;
       window.__cgFsPullGeneration = 0;
 
@@ -507,6 +548,62 @@
         return out;
       }
 
+      /** Metadato numérico en el doc Firestore `staffChatMessages` (no es una clave KV aparte). */
+      function __cgParseFirestoreStaffChatRev(docData) {
+        if (!docData || typeof docData !== "object") return { n: 0, known: false };
+        if (!Object.prototype.hasOwnProperty.call(docData, "staffChatRev")) return { n: 0, known: false };
+        var r = docData.staffChatRev;
+        var n = 0;
+        if (typeof r === "number" && r === r) n = Math.floor(r);
+        else if (r && typeof r.toNumber === "function") {
+          var tn = r.toNumber();
+          n = typeof tn === "number" && tn === tn ? Math.floor(tn) : 0;
+        } else {
+          n = parseInt(String(r), 10);
+          n = n === n ? Math.floor(n) : 0;
+        }
+        if (n < 0) n = 0;
+        return { n: n, known: true };
+      }
+
+      function __cgReadLocalStaffChatRevFromLs(lsPrefix) {
+        try {
+          if (!lsPrefix) return 0;
+          var full = lsPrefix + "staffChatRev";
+          var P = window.CG_PERSIST;
+          var raw = P && typeof P.localGetRaw === "function" ? P.localGetRaw(full) : null;
+          if ((raw == null || raw === "") && window.__cgFsMem && typeof window.__cgFsMem.staffChatRev === "string") {
+            raw = window.__cgFsMem.staffChatRev;
+          }
+          if (raw == null || raw === "") return 0;
+          var v = JSON.parse(raw);
+          if (typeof v === "number" && v === v) return Math.max(0, Math.floor(v));
+          var p = parseInt(v, 10);
+          return p === p ? Math.max(0, Math.floor(p)) : 0;
+        } catch (eR) {
+          return 0;
+        }
+      }
+
+      function __cgWriteLocalStaffChatRev(fullKeyRev, n) {
+        try {
+          var k = Math.floor(Number(n));
+          if (k !== k || k < 0) k = 0;
+          var str = JSON.stringify(k);
+          var P = window.CG_PERSIST;
+          if (P && typeof P.localSetRaw === "function") {
+            P.localSetRaw(fullKeyRev, str);
+          } else {
+            tryLocalStorageSet(fullKeyRev, str);
+          }
+        } catch (eW) {}
+      }
+
+      window.__cgStaffChatRevPullMeta = function (docData) {
+        var pr = __cgParseFirestoreStaffChatRev(docData);
+        return { staffChatRev: pr.n, staffChatRevKnown: pr.known };
+      };
+
       window.cgFsBridge = {
         active: fsActive,
         kvCol: kvCol,
@@ -551,15 +648,17 @@
             if (infl[shortKey] <= 0) delete infl[shortKey];
           };
           var ref = kvCol().doc(shortKey);
+          var payload = {
+            json: jsonString,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            key: shortKey
+          };
+          if (shortKey === "staffChatMessages") {
+            var LSpr = window.CG_PERSIST && window.CG_PERSIST.LS ? window.CG_PERSIST.LS : "";
+            payload.staffChatRev = __cgReadLocalStaffChatRevFromLs(LSpr);
+          }
           return ref
-            .set(
-              {
-                json: jsonString,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                key: shortKey
-              },
-              { merge: true }
-            )
+            .set(payload, { merge: true })
             .then(function () {
               decInflight();
               return { ok: true, shortKey: shortKey };
@@ -579,7 +678,7 @@
             delete t[k];
           }
         },
-        applyRemoteDoc: function (shortKey, jsonString, changeType) {
+        applyRemoteDoc: function (shortKey, jsonString, changeType, meta) {
           var LS = window.CG_PERSIST.LS;
           var full = LS + shortKey;
           if (changeType === "removed" || jsonString == null) {
@@ -591,7 +690,14 @@
           }
           var next = String(jsonString);
           if (window.__cgFsMem[shortKey] === next) {
-            return;
+            if (shortKey !== "staffChatMessages") return;
+            var revMetaOk =
+              meta &&
+              meta.staffChatRevKnown &&
+              typeof meta.staffChatRev === "number" &&
+              meta.staffChatRev === meta.staffChatRev;
+            if (!revMetaOk) return;
+            if (Math.floor(meta.staffChatRev) <= __cgReadLocalStaffChatRevFromLs(LS)) return;
           }
           var inflC = window.__cgFsPushInFlightCount && window.__cgFsPushInFlightCount[shortKey];
           if (inflC > 0) {
@@ -624,16 +730,46 @@
 
           if (shortKey === "staffChatMessages") {
             try {
+              var remChat = JSON.parse(remoteSnapshot);
+              if (!Array.isArray(remChat)) remChat = [];
               var prevStrChat = window.__cgFsMem[shortKey];
               if (typeof prevStrChat !== "string" || !prevStrChat) {
                 prevStrChat = tryLocalStorageGet(full);
               }
+              var locChat = [];
               if (typeof prevStrChat === "string" && prevStrChat) {
-                var locChat = JSON.parse(prevStrChat);
-                var remChat = JSON.parse(remoteSnapshot);
-                if (Array.isArray(locChat) && Array.isArray(remChat)) {
-                  next = JSON.stringify(mergeStaffChatMessages(remChat, locChat));
-                }
+                var locParsedChat = JSON.parse(prevStrChat);
+                if (Array.isArray(locParsedChat)) locChat = locParsedChat;
+              }
+              var remoteRevKnown = !!(meta && meta.staffChatRevKnown);
+              var metaRev = meta && meta.staffChatRev;
+              var remoteRev =
+                remoteRevKnown && typeof metaRev === "number" && metaRev === metaRev ? Math.floor(metaRev) : 0;
+              var localRev = __cgReadLocalStaffChatRevFromLs(LS);
+
+              if (remoteRevKnown && remoteRev < localRev) {
+                return;
+              }
+
+              if (remoteRevKnown && remoteRev > localRev) {
+                next = remoteSnapshot;
+                __cgWriteLocalStaffChatRev(LS + "staffChatRev", remoteRev);
+                try {
+                  if (window.CG && typeof window.CG.clearPendingDeletedBucket === "function") {
+                    window.CG.clearPendingDeletedBucket("staffChatMessages");
+                  }
+                } catch (eChatAuth) {}
+              } else if (remChat.length === 0 && locChat.length > 0) {
+                next = "[]";
+                try {
+                  if (window.CG && typeof window.CG.clearPendingDeletedBucket === "function") {
+                    window.CG.clearPendingDeletedBucket("staffChatMessages");
+                  }
+                } catch (eChatEmpty) {}
+              } else if (locChat.length > 0) {
+                next = JSON.stringify(mergeStaffChatMessages(remChat, locChat));
+              } else {
+                next = remoteSnapshot;
               }
             } catch (eChatMerge) {}
             if (window.__cgFsMem[shortKey] === next) {
@@ -8023,7 +8159,11 @@
               var id = chg.doc.id;
               var d = chg.doc.data();
               var js = d && d.json != null ? String(d.json) : null;
-              window.cgFsBridge.applyRemoteDoc(id, js, chg.type);
+              var meta =
+                id === "staffChatMessages" && d && typeof window.__cgStaffChatRevPullMeta === "function"
+                  ? window.__cgStaffChatRevPullMeta(d)
+                  : null;
+              window.cgFsBridge.applyRemoteDoc(id, js, chg.type, meta);
             });
             window.__cgFsRemoteReady = true;
           },
@@ -8084,7 +8224,14 @@
         if (g !== window.__cgFsPullGeneration) return;
         qs.forEach(function (doc) {
           var d = doc.data();
-          if (d && d.json != null) window.cgFsBridge.applyRemoteDoc(doc.id, String(d.json), "added");
+          if (d && d.json != null) {
+            var id = doc.id;
+            var meta =
+              id === "staffChatMessages" && typeof window.__cgStaffChatRevPullMeta === "function"
+                ? window.__cgStaffChatRevPullMeta(d)
+                : null;
+            window.cgFsBridge.applyRemoteDoc(id, String(d.json), "added", meta);
+          }
         });
         window.__cgFsRemoteReady = true;
       }).catch(function (err) {
@@ -8100,7 +8247,13 @@
       }).then(function (snap) {
         if (!snap.exists) return;
         var d = snap.data();
-        if (d && d.json != null) window.cgFsBridge.applyRemoteDoc(shortKey, String(d.json), "added");
+        if (d && d.json != null) {
+          var meta =
+            shortKey === "staffChatMessages" && typeof window.__cgStaffChatRevPullMeta === "function"
+              ? window.__cgStaffChatRevPullMeta(d)
+              : null;
+          window.cgFsBridge.applyRemoteDoc(shortKey, String(d.json), "added", meta);
+        }
       }).catch(function (err) {
         window.__cgFsLastError = err;
       });
@@ -8675,6 +8828,23 @@
       set shiftLogs(v) { save("shiftLogs", v); },
       get staffChatMessages() { return load("staffChatMessages", []); },
       set staffChatMessages(v) { save("staffChatMessages", v); },
+      get staffChatRev() {
+        var v = load("staffChatRev", 0);
+        if (typeof v === "number" && v === v) return Math.max(0, Math.floor(v));
+        var p = parseInt(v, 10);
+        return p === p ? Math.max(0, Math.floor(p)) : 0;
+      },
+      set staffChatRev(v) {
+        var n = typeof v === "number" ? v : parseInt(String(v), 10);
+        if (n !== n) n = 0;
+        n = Math.max(0, Math.floor(n));
+        try {
+          var str = P.stringifyForStorage(n);
+          if (str != null && !P.localSetRaw(LS + "staffChatRev", str)) {
+            console.warn("[CG] staffChatRev: localSetRaw falló");
+          }
+        } catch (eRev) {}
+      },
       get visitVehAlertLog() { return load("visitVehAlertLog", {}); },
       set visitVehAlertLog(v) { save("visitVehAlertLog", v); },
       get conserjeActivityLog() { return load("conserjeActivityLog", []); },
@@ -9645,7 +9815,7 @@
         return raw;
       }
 
-      var wmKey = LS + "wm815_units";
+      var wmKey = LS + (typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units");
       var rawU = P.localGetRaw(wmKey);
       var wmChanged = false;
       if (rawU != null && rawU !== "") {
@@ -9699,7 +9869,7 @@
           if (wmChanged) {
             var str = P.stringifyForStorage(units);
             if (str && P.localSetRaw(wmKey, str) && window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
-              window.CG.cloudSyncAfterDirectLocalStorageWrite("wm815_units");
+              window.CG.cloudSyncAfterDirectLocalStorageWrite(typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units");
             }
           }
         }
@@ -10355,6 +10525,7 @@
 
     function migrateStaffChat() {
       if (P.localGetRaw(LS + "staffChatMessages") === null) save("staffChatMessages", []);
+      if (P.localGetRaw(LS + "staffChatRev") === null) state.staffChatRev = 0;
       if (P.localGetRaw(LS + "staffPresence") === null) save("staffPresence", { c: {} });
       if (load("migrated_staff_chat_unified_v1", false)) return;
       var oldMap = load("chatReadByUser", null);
@@ -11394,19 +11565,21 @@
     if (window.__CG_FACTORY_DISTRIB__) return;
     try {
       var p = window.CG.LS;
-      var nu = p + "wm815_units";
-      var nf = p + "wm815_former_residents";
+      var ku = typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units";
+      var kf = typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "wm815_former_residents";
+      var nu = p + ku;
+      var nf = p + kf;
       var ou = "vinculacion_wm815_units_local";
       var of = "vinculacion_wm815_former_residents_local";
       var Pers = window.CG_PERSIST;
       if (Pers.copyLocalRawIfMissing(nu, ou)) {
         if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
-          window.CG.cloudSyncAfterDirectLocalStorageWrite("wm815_units");
+          window.CG.cloudSyncAfterDirectLocalStorageWrite(ku);
         }
       }
       if (Pers.copyLocalRawIfMissing(nf, of)) {
         if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
-          window.CG.cloudSyncAfterDirectLocalStorageWrite("wm815_former_residents");
+          window.CG.cloudSyncAfterDirectLocalStorageWrite(kf);
         }
       }
     } catch (e1) {}
@@ -11671,7 +11844,7 @@
                     </div>
                 </div>
                 <div id="statsProgressContainer" style="margin: 30px 0 10px 0;">
-                    <p style="text-align: center; margin: 0 0 8px; font-size: 0.8rem; color: var(--secondary-text); font-weight: 600;">Ocupación efectiva · KPI obra (259 unidades)</p>
+                    <p id="deptStatsKpiOcupacionTitulo" style="text-align: center; margin: 0 0 8px; font-size: 0.8rem; color: var(--secondary-text); font-weight: 600;">Ocupación efectiva · KPI obra (259 unidades)</p>
                     <div class="cg-dept-stats-track" style="background: var(--border-color); border-radius: 10px; height: 32px; width: 100%; max-width: 500px; min-width: 260px; margin: 0 auto; overflow: hidden; position: relative; box-sizing: border-box;">
                         <div id="statsProgressBar" style="display: block; height: 100%; width: 0%; max-width: 100%; box-sizing: border-box; min-width: 0; background-color: #059669; background-image: linear-gradient(90deg, var(--success-color), var(--accent-color)); transition: width 0.45s ease-out; border-radius: 10px;"></div>
                     </div>
@@ -11688,14 +11861,14 @@
                     <div id="statsParkingDetailLine" style="text-align: center; margin-top: 6px; color: var(--secondary-text); font-size: 0.88rem;"></div>
                 </div>
                 <div id="statsDeliveryContainer" style="margin: 30px 0 10px 0;">
-                    <p style="text-align: center; margin: 0 0 8px; font-size: 0.8rem; color: var(--secondary-text); font-weight: 600;">Entregas con propietario · KPI obra (259 unidades)</p>
+                    <p id="deptStatsKpiEntregasTitulo" style="text-align: center; margin: 0 0 8px; font-size: 0.8rem; color: var(--secondary-text); font-weight: 600;">Entregas con propietario · KPI obra (259 unidades)</p>
                     <div class="cg-dept-stats-track" style="background: var(--border-color); border-radius: 10px; height: 32px; width: 100%; max-width: 500px; min-width: 260px; margin: 0 auto; overflow: hidden; position: relative; box-sizing: border-box;">
                         <div id="statsDeliveryBar" style="display: block; height: 100%; width: 0%; max-width: 100%; box-sizing: border-box; min-width: 0; background-color: var(--blue-500); background-image: linear-gradient(90deg, var(--primary-color, var(--blue-500)), #4ecdc4); transition: width 0.45s ease-out; border-radius: 10px;"></div>
                     </div>
                     <div id="statsDeliveryText" style="text-align: center; margin-top: 12px; color: var(--primary-text); font-size: 1.1em;"></div>
                     <div id="statsDeliveryRegistryLine" style="text-align: center; margin-top: 6px; color: var(--secondary-text); font-size: 0.88rem;"></div>
                 </div>
-                <p id="statsSummaryLine" style="text-align:center; color: var(--secondary-text); margin-top: 18px;">Total de unidades: <b>259</b> &nbsp;|&nbsp; Propietarios registrados: <span id="statsOwnersCount">0</span> &nbsp;|&nbsp; E- no disponibles: <span id="statsParkingCount">0</span>/<span id="statsParkingTotal">165</span> &nbsp;|&nbsp; Bodegas: <b>0</b> &nbsp;|&nbsp; Bicicletas: <b>0</b></p>
+                <p id="statsSummaryLine" style="text-align:center; color: var(--secondary-text); margin-top: 18px;">Total de unidades: <b id="deptStatsSummaryKpiUnidades">259</b> &nbsp;|&nbsp; Propietarios registrados: <span id="statsOwnersCount">0</span> &nbsp;|&nbsp; E- no disponibles: <span id="statsParkingCount">0</span>/<span id="statsParkingTotal">165</span> &nbsp;|&nbsp; Bodegas: <b>0</b> &nbsp;|&nbsp; Bicicletas: <b>0</b></p>
                 <p id="statsDetailBreakdown" style="text-align:center; color: var(--secondary-text); margin-top: 8px; font-size: 0.92rem; line-height: 1.45;"></p>
                 
                 <!-- Estadísticas Detalladas -->
@@ -11745,12 +11918,12 @@
                         </div>
                         <div style="background: var(--surface-color); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
                             <div style="font-size: 1.5rem; font-weight: bold; color: var(--warning-color);" id="statsOccupancyRate">0%</div>
-                            <div style="color: var(--secondary-text); font-size: 0.9rem;">Ocupación efectiva (obra 259)</div>
+                            <div id="deptStatsCardOccLabel" style="color: var(--secondary-text); font-size: 0.9rem;">Ocupación efectiva (obra 259)</div>
                             <div style="color: var(--secondary-text); font-size: 0.75rem; margin-top: 4px;" id="statsOccupancyRateRegistro">—</div>
                         </div>
                         <div style="background: var(--surface-color); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
                             <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent-color);" id="statsDeliveryRate">0%</div>
-                            <div style="color: var(--secondary-text); font-size: 0.9rem;">Entregas c/ propietario (obra 259)</div>
+                            <div id="deptStatsCardDelLabel" style="color: var(--secondary-text); font-size: 0.9rem;">Entregas c/ propietario (obra 259)</div>
                             <div style="color: var(--secondary-text); font-size: 0.75rem; margin-top: 4px;" id="statsDeliveryRateRegistro">—</div>
                         </div>
                     </div>
@@ -12899,8 +13072,12 @@
     document.head.appendChild(st);
   }
 
-function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
-        function __deptFormerStorageKey() { return window.CG.LS + "wm815_former_residents"; }
+function __deptUnitsStorageKey() {
+          return window.CG.LS + (typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units");
+        }
+        function __deptFormerStorageKey() {
+          return window.CG.LS + (typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "wm815_former_residents");
+        }
 
         if (typeof window.cgApp === "undefined") window.cgApp = null;
         if (typeof window.cgDb === "undefined") window.cgDb = null;
@@ -12951,7 +13128,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
               return false;
             }
             if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
-              window.CG.cloudSyncAfterDirectLocalStorageWrite("wm815_units");
+              window.CG.cloudSyncAfterDirectLocalStorageWrite(typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units");
             }
             if (window.CG_ACTIONS && typeof window.CG_ACTIONS.syncDepartamentosModuleFromLocal === "function") {
               try { window.CG_ACTIONS.syncDepartamentosModuleFromLocal(); } catch (eSync) {}
@@ -13025,7 +13202,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         window.deleteUnitFromCloud = async function(unitId) {
             try {
                 if (window.CG && typeof window.CG.registerPendingDeletedLsKey === "function") {
-                  window.CG.registerPendingDeletedLsKey("wm815_units", unitId);
+                  window.CG.registerPendingDeletedLsKey(typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units", unitId);
                 }
                 const raw = window.CG_PERSIST.localGetRaw(__deptUnitsStorageKey());
                 if (!raw) return;
@@ -13075,7 +13252,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                   return;
                 }
                 if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
-                  window.CG.cloudSyncAfterDirectLocalStorageWrite("wm815_former_residents");
+                  window.CG.cloudSyncAfterDirectLocalStorageWrite(typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "wm815_former_residents");
                 }
                 console.log('✅ Residentes anteriores guardados localmente');
             } catch (error) {
@@ -13143,7 +13320,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
         window.deleteFormerResidentFromCloud = async function(residentId) {
             try {
                 if (window.CG && typeof window.CG.registerPendingDeletedLsKey === "function") {
-                  window.CG.registerPendingDeletedLsKey("wm815_former_residents", residentId);
+                  window.CG.registerPendingDeletedLsKey(typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "wm815_former_residents", residentId);
                 }
                 const raw = window.CG_PERSIST.localGetRaw(__deptFormerStorageKey());
                 if (!raw) return;
@@ -13152,7 +13329,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 var strL = window.CG_PERSIST.stringifyForStorage(list);
                 if (!strL || !window.CG_PERSIST.localSetRaw(__deptFormerStorageKey(), strL)) return;
                 if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
-                  window.CG.cloudSyncAfterDirectLocalStorageWrite("wm815_former_residents");
+                  window.CG.cloudSyncAfterDirectLocalStorageWrite(typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "wm815_former_residents");
                 }
                 console.log('✅ Residente anterior eliminado del almacenamiento local');
             } catch (error) {
@@ -17122,8 +17299,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
         function updateStatsTab() {
             try {
-                const TOTAL_UNIDADES_EDIFICIO = 259;
-                let totalEstacionamientos = 165;
+                const TOTAL_UNIDADES_EDIFICIO = typeof window.__cgFabricaDeptKpiUnidades === "function" ? window.__cgFabricaDeptKpiUnidades() : 259;
+                let totalEstacionamientos = typeof window.__cgFabricaDeptKpiEstDefault === "function" ? window.__cgFabricaDeptKpiEstDefault() : 165;
 
                 const units = (appState && Array.isArray(appState.units)) ? appState.units : [];
                 const n = units.length;
@@ -17240,7 +17417,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                 }
             }
             
-            // Ocupación / entregas: KPI obra (259) para barras principales; registro (n) en línea auxiliar
+            // Ocupación / entregas: KPI obra (config CG_FABRICA_DEPT_SOURCE) para barras principales; registro (n) en línea auxiliar
             const porcentajeOcupacionObra = TOTAL_UNIDADES_EDIFICIO > 0
                 ? Math.min(100, Math.round((unidadesEfectivamenteOcupadas / TOTAL_UNIDADES_EDIFICIO) * 100))
                 : 0;
@@ -17441,6 +17618,18 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
                     ? `Registro (${n}): ${porcentajeEntregasRegistro}% · ${unidadesConPropietarioAsignado}/${n} con propietario`
                     : 'Registro: 0 filas';
             }
+
+            var kpiU = typeof window.__cgFabricaDeptKpiUnidades === "function" ? window.__cgFabricaDeptKpiUnidades() : TOTAL_UNIDADES_EDIFICIO;
+            var tOccTit = document.getElementById("deptStatsKpiOcupacionTitulo");
+            if (tOccTit) tOccTit.textContent = "Ocupación efectiva · KPI obra (" + kpiU + " unidades)";
+            var tEntTit = document.getElementById("deptStatsKpiEntregasTitulo");
+            if (tEntTit) tEntTit.textContent = "Entregas con propietario · KPI obra (" + kpiU + " unidades)";
+            var sumKpi = document.getElementById("deptStatsSummaryKpiUnidades");
+            if (sumKpi) sumKpi.textContent = String(kpiU);
+            var cOcc = document.getElementById("deptStatsCardOccLabel");
+            if (cOcc) cOcc.textContent = "Ocupación efectiva (obra " + kpiU + ")";
+            var cDel = document.getElementById("deptStatsCardDelLabel");
+            if (cDel) cDel.textContent = "Entregas c/ propietario (obra " + kpiU + ")";
             
             // Actualizar elementos de la nueva sección de relación propietarios vs unidades
             const unitsWithOwnersElement = document.getElementById('statsUnitsWithOwners');
@@ -18463,6 +18652,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
       if (!confirm("¿Eliminar todos los mensajes del chat en todos los equipos? Esta acción no se puede deshacer.")) return;
       if (typeof G.cloudSyncAbortInFlight === "function") G.cloudSyncAbortInFlight();
+      G.state.staffChatRev = (Number(G.state.staffChatRev) || 0) + 1;
       var dedupe = G.staffChatDedupeKeyForSync;
       (G.state.staffChatMessages || []).forEach(function (m) {
         if (typeof G.registerPendingDeletedLsKey !== "function") return;
@@ -18519,9 +18709,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
             (preview || "(sin texto)") +
             "»\n\nEsta acción no se puede deshacer."
         )
-      )
+        )
         return;
       if (typeof G.cloudSyncAbortInFlight === "function") G.cloudSyncAbortInFlight();
+      G.state.staffChatRev = (Number(G.state.staffChatRev) || 0) + 1;
       var dedupe = G.staffChatDedupeKeyForSync;
       if (typeof G.registerPendingDeletedLsKey === "function") {
         var dk = typeof dedupe === "function" ? dedupe(target) : "";
@@ -19791,7 +19982,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
 
     function wm815UnitsRaw() {
       try {
-        var raw = G.persist.localGetRaw(G.LS + "wm815_units");
+        var ku = typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units";
+        var raw = G.persist.localGetRaw(G.LS + ku);
         if (!raw) return [];
         var arr = G.persist.parseJson(raw, []);
         return Array.isArray(arr) ? arr : [];
@@ -20952,8 +21144,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       }
 
       var deptKeys = [
-        "wm815_units",
-        "wm815_former_residents",
+        typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units",
+        typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "wm815_former_residents",
         "departments",
         "buildingUnits",
         "buildingResidents",
@@ -22032,7 +22224,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       G.toast("No hay unidades para importar.", "warn");
       return;
     }
-    var LS_U = G.LS + "wm815_units";
+    var kuImp = typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units";
+    var LS_U = G.LS + kuImp;
     var rawAll = G.persist.localGetRaw(LS_U);
     var existingAll = G.persist.parseJson(rawAll || "[]", []);
     if (!Array.isArray(existingAll)) existingAll = [];
@@ -22050,7 +22243,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       return;
     }
     if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
-      window.CG.cloudSyncAfterDirectLocalStorageWrite("wm815_units");
+      window.CG.cloudSyncAfterDirectLocalStorageWrite(kuImp);
     }
     A.syncDepartamentosModuleFromLocal();
     if (window.CG && typeof window.CG.mountDepartamentosModule === "function") {
@@ -22093,7 +22286,8 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
     var ix = col.ix;
     var grouped = __deptImportGroupRowsByUnit(matrix, ix);
     if (grouped.error) return { error: grouped.error };
-    var LS_U = G.LS + "wm815_units";
+    var kuX = typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units";
+    var LS_U = G.LS + kuX;
     var rawAll = G.persist.localGetRaw(LS_U);
     var existingAll = G.persist.parseJson(rawAll || "[]", []);
     if (!Array.isArray(existingAll)) existingAll = [];
@@ -22242,8 +22436,10 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
    * La primera vez copia datos desde vinculacion_wm815_* si existían (migrateDeptStorageKeysOnce).
    */
   A.syncDepartamentosModuleFromLocal = function () {
-    var LS_U = G.LS + "wm815_units";
-    var LS_F = G.LS + "wm815_former_residents";
+    var kuS = typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units";
+    var kfS = typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "wm815_former_residents";
+    var LS_U = G.LS + kuS;
+    var LS_F = G.LS + kfS;
     var raw = G.persist.localGetRaw(LS_U);
     if (raw == null || raw === "") {
       if (typeof G.attachVirtualAdminDepartment === "function") G.attachVirtualAdminDepartment();
@@ -22885,7 +23081,7 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
    * Ocupación efectiva: habitacional con propietario; arriendo con arrendatario o familiar (sin contar solo visita).
    */
   A.getEdificioResumenForDashboard = function () {
-    var TOTAL_PROYECTO = 259;
+    var TOTAL_PROYECTO = typeof window.__cgFabricaDeptKpiUnidades === "function" ? window.__cgFabricaDeptKpiUnidades() : 259;
     var units = G.state.buildingUnits || [];
     var resAll = G.state.buildingResidents || [];
     var n = units.length;
@@ -30268,6 +30464,12 @@ function __deptUnitsStorageKey() { return window.CG.LS + "wm815_units"; }
       conserjeActivityLog: "panel_bitacora",
       dashScheduledAlerts: "panel_bitacora"
     };
+    try {
+      var kuB = typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "";
+      var kfB = typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "";
+      if (kuB) map[kuB] = "departamentos";
+      if (kfB) map[kfB] = "departamentos";
+    } catch (eBk) {}
     if (map[k]) return map[k];
     if (k.indexOf("migrated_") === 0 || k === "__cgPendingDeleted") return "tecnicos";
     if (k === "backupReminder") return "tecnicos";
