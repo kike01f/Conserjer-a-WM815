@@ -1317,9 +1317,6 @@
       gap: 0.65rem;
       pointer-events: none;
     }
-    .cg-staff-chat-root.cg-staff-chat-root--panel-up {
-      flex-direction: column-reverse;
-    }
     .cg-staff-chat-root > * {
       pointer-events: auto;
     }
@@ -1360,6 +1357,16 @@
       transform: translateY(-1px) scale(1.01);
       filter: brightness(0.97);
     }
+    .cg-chat-fab.cg-chat-fab--active {
+      transform: translateY(-2px) scale(0.94);
+      box-shadow:
+        0 0 0 2px rgba(116, 189, 32, 0.35),
+        0 3px 12px rgba(95, 160, 24, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+    .cg-chat-fab.cg-chat-fab--active:hover {
+      transform: translateY(-4px) scale(0.96);
+    }
     .cg-chat-fab:focus-visible {
       outline: 3px solid #fbbf24;
       outline-offset: 4px;
@@ -1370,6 +1377,10 @@
       }
       .cg-chat-fab:hover,
       .cg-chat-fab:active {
+        transform: none;
+      }
+      .cg-chat-fab.cg-chat-fab--active,
+      .cg-chat-fab.cg-chat-fab--active:hover {
         transform: none;
       }
     }
@@ -1391,6 +1402,8 @@
       border: 2px solid #fff;
     }
     .cg-chat-panel {
+      position: absolute;
+      right: 0;
       width: min(22rem, calc(100vw - 2rem));
       max-height: min(70vh, 520px);
       background: var(--white);
@@ -1400,7 +1413,54 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      animation: fadeUp 0.28s ease;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translateY(14px) scale(0.92);
+      transform-origin: bottom right;
+      transition:
+        opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+        visibility 0s linear 0.34s,
+        box-shadow 0.3s ease;
+    }
+    .cg-staff-chat-root:not(.cg-staff-chat-root--panel-up) .cg-chat-panel {
+      top: 100%;
+      bottom: auto;
+      margin-top: 0.65rem;
+      transform: translateY(-12px) scale(0.92);
+      transform-origin: top right;
+    }
+    .cg-staff-chat-root:not(.cg-staff-chat-root--panel-up) .cg-chat-panel.cg-chat-panel--open {
+      transform: translateY(0) scale(1);
+    }
+    .cg-staff-chat-root.cg-staff-chat-root--panel-up .cg-chat-panel {
+      bottom: 100%;
+      top: auto;
+      margin-bottom: 0.65rem;
+      transform: translateY(12px) scale(0.92);
+      transform-origin: bottom right;
+    }
+    .cg-staff-chat-root.cg-staff-chat-root--panel-up .cg-chat-panel.cg-chat-panel--open {
+      transform: translateY(0) scale(1);
+    }
+    .cg-chat-panel.cg-chat-panel--open {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transition:
+        opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+        visibility 0s,
+        box-shadow 0.3s ease;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cg-chat-panel,
+      .cg-staff-chat-root:not(.cg-staff-chat-root--panel-up) .cg-chat-panel,
+      .cg-staff-chat-root.cg-staff-chat-root--panel-up .cg-chat-panel {
+        transition-duration: 0.01ms !important;
+        transition-delay: 0s !important;
+      }
     }
     .cg-chat-panel-head {
       display: flex;
@@ -1694,7 +1754,7 @@
     }
     .cg-chat-panel,
     .cg-chat-fab {
-      will-change: transform;
+      will-change: transform, opacity;
     }
     .cg-chat-bubble--buzz {
       background: linear-gradient(135deg, #fef3c7, #fde68a) !important;
@@ -7876,7 +7936,7 @@
         <i class="fa-solid fa-headset" aria-hidden="true"></i>
         <span id="cg-chat-badge" class="cg-chat-badge hidden" aria-live="polite">0</span>
       </button>
-      <div id="cg-chat-panel" class="cg-chat-panel hidden" role="dialog" aria-modal="false" aria-label="Canal con administración">
+      <div id="cg-chat-panel" class="cg-chat-panel" role="dialog" aria-modal="false" aria-hidden="true" aria-label="Canal con administración">
         <div class="cg-chat-panel-head">
           <div>
             <strong class="cg-chat-panel-title">Canal con administración</strong>
@@ -18095,7 +18155,9 @@ function __deptUnitsStorageKey() {
     var staffChatTypingUiInterval = null;
     var staffChatTypingPushThrottleTimer = null;
     var staffChatIdleMinimizeTimerId = null;
-    var STAFF_CHAT_IDLE_MINIMIZE_MS = 60000;
+    var STAFF_CHAT_IDLE_MINIMIZE_MS = 30000;
+    /** Invalida finalizadores de cierre si el usuario vuelve a abrir el panel a mitad de la animación. */
+    var staffChatCloseAnimGen = 0;
     var staffPresenceIntervalId = null;
     var STAFF_PRESENCE_STALE_MS = 52000;
     var STAFF_PRESENCE_HEARTBEAT_MS = 12000;
@@ -18405,7 +18467,7 @@ function __deptUnitsStorageKey() {
     }
     function staffChatPanelOpen() {
       var p = document.getElementById("cg-chat-panel");
-      return p && !p.classList.contains("hidden");
+      return p && p.classList.contains("cg-chat-panel--open");
     }
 
     function staffChatClearIdleMinimizeTimer() {
@@ -18415,19 +18477,51 @@ function __deptUnitsStorageKey() {
       }
     }
 
-    function staffChatClosePanel() {
+    function staffChatClosePanel(instant) {
       var panel = document.getElementById("cg-chat-panel");
       var toggle = document.getElementById("cg-chat-toggle");
+      var myGen = staffChatCloseAnimGen;
       staffChatClearIdleMinimizeTimer();
-      if (!panel || panel.classList.contains("hidden")) return;
-      panel.classList.add("hidden");
-      if (toggle) toggle.setAttribute("aria-expanded", "false");
+      if (!panel || !panel.classList.contains("cg-chat-panel--open")) return;
       staffChatSetEmojiPopover(false);
       staffChatClearTypingBroadcast();
       staffChatStopTypingUiTick();
       staffChatRefreshTypingIndicator();
-      staffChatFabUpdatePanelPlacement();
-      staffChatUpdateBadge();
+      try {
+        var inpClose = document.getElementById("cg-chat-input");
+        if (inpClose && document.activeElement === inpClose) inpClose.blur();
+      } catch (eBlCh) {}
+      panel.setAttribute("aria-hidden", "true");
+      if (toggle) {
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.classList.remove("cg-chat-fab--active");
+      }
+      var closeDone = false;
+      function finalizeClose() {
+        panel.removeEventListener("transitionend", onTransitionEnd);
+        if (closeDone) return;
+        if (myGen !== staffChatCloseAnimGen) return;
+        closeDone = true;
+        staffChatFabUpdatePanelPlacement();
+        staffChatUpdateBadge();
+      }
+      function onTransitionEnd(e) {
+        if (e.target !== panel) return;
+        if (e.propertyName !== "opacity" && e.propertyName !== "transform") return;
+        finalizeClose();
+      }
+      var reduceMotion =
+        instant ||
+        (typeof window.matchMedia === "function" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      if (reduceMotion) {
+        panel.classList.remove("cg-chat-panel--open");
+        finalizeClose();
+        return;
+      }
+      panel.addEventListener("transitionend", onTransitionEnd);
+      panel.classList.remove("cg-chat-panel--open");
+      window.setTimeout(finalizeClose, 420);
     }
 
     function staffChatArmIdleMinimizeTimer() {
@@ -19170,12 +19264,7 @@ function __deptUnitsStorageKey() {
     }
     function staffChatFabUpdatePanelPlacement() {
       var root = document.getElementById("cg-staff-chat-root");
-      var panel = document.getElementById("cg-chat-panel");
-      if (!root || !panel) return;
-      if (panel.classList.contains("hidden")) {
-        root.classList.remove("cg-staff-chat-root--panel-up");
-        return;
-      }
+      if (!root) return;
       var estPanelH = Math.min(520, window.innerHeight * 0.72);
       var r = root.getBoundingClientRect();
       var spaceBelow = window.innerHeight - r.bottom - 10;
@@ -19259,10 +19348,18 @@ function __deptUnitsStorageKey() {
         });
       }
       toggle.addEventListener("click", function () {
-        var open = panel.classList.contains("hidden");
+        var open = !panel.classList.contains("cg-chat-panel--open");
         if (open) {
-          panel.classList.remove("hidden");
+          staffChatCloseAnimGen++;
+          staffChatFabUpdatePanelPlacement();
+          panel.setAttribute("aria-hidden", "false");
           toggle.setAttribute("aria-expanded", "true");
+          toggle.classList.add("cg-chat-fab--active");
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              panel.classList.add("cg-chat-panel--open");
+            });
+          });
           staffChatSyncClearButton();
           staffChatSyncPanelSub();
           var finishOpen = function () {
@@ -19441,12 +19538,19 @@ function __deptUnitsStorageKey() {
         staffChatFabUpdatePanelPlacement();
       } else {
         staffChatClearIdleMinimizeTimer();
+        staffChatCloseAnimGen++;
         root.classList.add("hidden");
         root.setAttribute("aria-hidden", "true");
         var panel = document.getElementById("cg-chat-panel");
         var tgl = document.getElementById("cg-chat-toggle");
-        if (panel) panel.classList.add("hidden");
-        if (tgl) tgl.setAttribute("aria-expanded", "false");
+        if (panel) {
+          panel.classList.remove("cg-chat-panel--open");
+          panel.setAttribute("aria-hidden", "true");
+        }
+        if (tgl) {
+          tgl.setAttribute("aria-expanded", "false");
+          tgl.classList.remove("cg-chat-fab--active");
+        }
         staffChatStopPoll();
       }
     }
