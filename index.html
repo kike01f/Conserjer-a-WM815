@@ -10706,7 +10706,7 @@
     const PERSONALIZATION_PALETTE_IDS = ["lima", "azul", "bosque", "indigo", "vino", "pizarra", "aurora"];
     var CG_DASH_QUICKLINKS_MAX = 24;
     var CG_STAFF_CHAT_VOICE_PHRASE_MAX = 280;
-    var CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE = "Tienes un nuevo mensaje en el canal con administración.";
+    var CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE = "Nuevo mensaje en el canal con administración.";
 
     /** Texto para síntesis de voz del chat: sin caracteres de control, longitud acotada. */
     function normalizeStaffChatVoicePhrase(raw) {
@@ -18538,23 +18538,31 @@ function __deptUnitsStorageKey() {
       return Array.isArray(G.state.staffChatMessages) ? G.state.staffChatMessages : [];
     }
     /**
+     * Mensaje emitido por cuenta administrador (por rol en el registro o por userId en usuarios).
+     * Así el conserje sigue viendo (y oyendo avisos de) mensajes del admin aunque falte m.role en datos viejos.
+     */
+    function staffChatMessageIsFromAdminParty(m) {
+      if (!m || typeof m !== "object") return false;
+      var r = m.role;
+      if (r === "admin" || String(r).toLowerCase() === "admin") return true;
+      var uid = m.userId;
+      if (uid == null || uid === "") return false;
+      var users = G.state.users;
+      if (!Array.isArray(users)) return false;
+      var i;
+      for (i = 0; i < users.length; i++) {
+        var su = users[i];
+        if (su && su.id === uid && su.role === "admin") return true;
+      }
+      return false;
+    }
+
+    /**
      * Canal conserje ↔ admin: el hilo se guarda en este navegador; cada conserje solo ve
      * sus envíos y los mensajes del administrador (no lee a otros conserjes). El admin ve todo.
      */
     function staffChatMessagesForViewer() {
-      var u = G.currentUser();
-      var all = staffChatMessagesSafe();
-      if (!u) return [];
-      var sorted = all.slice().sort(function (a, b) {
-        return new Date((a && a.at) || 0) - new Date((b && b.at) || 0);
-      });
-      if (u.role === "admin") return sorted;
-      return sorted.filter(function (m) {
-        if (!m || typeof m !== "object") return false;
-        if (m.role === "admin") return true;
-        if (m.userId === u.id) return true;
-        return false;
-      });
+      return staffChatFilterListForViewer(staffChatMessagesSafe(), G.currentUser());
     }
     function staffChatUnreadCount() {
       var u = G.currentUser();
@@ -18856,7 +18864,7 @@ function __deptUnitsStorageKey() {
       if (u.role === "admin") return sorted;
       return sorted.filter(function (m) {
         if (!m || typeof m !== "object") return false;
-        if (m.role === "admin") return true;
+        if (staffChatMessageIsFromAdminParty(m)) return true;
         if (m.userId === u.id) return true;
         return false;
       });
@@ -18891,7 +18899,7 @@ function __deptUnitsStorageKey() {
       return {
         id: String(m.id),
         userName: String(m.userName || "Usuario").replace(/\u0000/g, "").slice(0, 120),
-        role: m.role === "admin" ? "admin" : "conserje",
+        role: staffChatMessageIsFromAdminParty(m) ? "admin" : "conserje",
         textPreview: staffChatReplyPreviewSnippet(m).slice(0, 200)
       };
     }
@@ -19142,9 +19150,10 @@ function __deptUnitsStorageKey() {
         list.forEach(function (m) {
           if (!m || typeof m !== "object") return;
           var mine = m.userId === uid;
-          var roleCls = m.role === "admin" ? "cg-chat-bubble--admin" : "cg-chat-bubble--conserje";
+          var fromAdm = staffChatMessageIsFromAdminParty(m);
+          var roleCls = fromAdm ? "cg-chat-bubble--admin" : "cg-chat-bubble--conserje";
           var bubbleCls = "cg-chat-bubble " + (mine ? "cg-chat-bubble--me" : "cg-chat-bubble--other") + " " + roleCls;
-          var roleLbl = m.role === "admin" ? "Admin" : "Conserje";
+          var roleLbl = fromAdm ? "Admin" : "Conserje";
           var div = document.createElement("div");
           div.className = bubbleCls;
           if (m.id) div.setAttribute("data-cg-msg-id", String(m.id));
@@ -31391,7 +31400,7 @@ function __deptUnitsStorageKey() {
       var vocMax = G.CG_STAFF_CHAT_VOICE_PHRASE_MAX != null ? G.CG_STAFF_CHAT_VOICE_PHRASE_MAX : 280;
       var voiceCard =
         "<div class=\"card\" style=\"margin-top:1rem\"><div class=\"card-h\"><h3 style=\"margin:0;font-size:0.98rem\">Voz del chat con administración</h3></div><div class=\"card-b\">" +
-        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Aviso por <strong>síntesis de voz</strong> cuando llega un mensaje nuevo y el panel del chat está cerrado. Se usa una voz en español con preferencia por tono femenino si el sistema la ofrece (cada navegador ofrece voces distintas). El texto se guarda aquí y se sincroniza en la nube con el resto de la personalización.</p>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Aviso por <strong>síntesis de voz</strong> en el equipo de quien recibe el mensaje (tanto <strong>conserjes</strong> como <strong>administración</strong>), cuando llega un mensaje del otro lado y el panel del chat está cerrado. La misma frase y el mismo activado se aplican a todos los usuarios vía personalización sincronizada. Voz en español con preferencia por tono femenino si el sistema la ofrece.</p>" +
         "<div class=\"form-group\" style=\"max-width:40rem\">" +
         "<label style=\"display:flex;gap:0.5rem;align-items:flex-start;font-weight:600;cursor:pointer\">" +
         "<input type=\"checkbox\" id=\"cg-admin-chat-voice-en\" " +
