@@ -5250,6 +5250,109 @@
     .cg-stat-chip--enc .cg-stat-chip-val { color: #b45309; }
     .cg-stat-chip--res { border-left: 4px solid #059669; }
     .cg-stat-chip--res .cg-stat-chip-val { color: #047857; }
+    .cg-stat-chip--aus { border-left: 4px solid #6366f1; }
+    .cg-stat-chip--aus .cg-stat-chip-val { color: #4338ca; }
+    .cg-stat-chip--aus-muted .cg-stat-chip-val { color: var(--gray-500); }
+    .cg-aus-page .cg-module-intro { align-items: center; }
+    .cg-aus-page .page-title {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      flex-wrap: wrap;
+    }
+    .cg-aus-page .cg-aus-title-ic {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.35rem;
+      height: 2.35rem;
+      border-radius: 12px;
+      background: linear-gradient(145deg, #eef2ff 0%, #e0e7ff 100%);
+      color: #4f46e5;
+      font-size: 1.05rem;
+      box-shadow: 0 2px 8px rgba(79, 70, 229, 0.12);
+    }
+    .card.cg-card-accent--aus {
+      border-top: 3px solid #818cf8;
+      box-shadow: 0 4px 18px rgba(99, 102, 241, 0.08);
+    }
+    .cg-aus-empty {
+      display: flex;
+      gap: 0.85rem;
+      align-items: flex-start;
+      padding: 1rem 1.15rem;
+      margin-bottom: 0.85rem;
+      border-radius: var(--radius);
+      border: 1px dashed #f59e0b;
+      background: linear-gradient(135deg, #fffbeb 0%, #fff 70%);
+      color: var(--gray-700);
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+    .cg-aus-empty > i {
+      flex-shrink: 0;
+      margin-top: 0.12rem;
+      font-size: 1.25rem;
+      color: #d97706;
+    }
+    .cg-aus-form-section {
+      margin-bottom: 1.1rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .cg-aus-form-section:last-of-type {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+    .cg-aus-toggle-panel {
+      margin-top: 0.25rem;
+      padding: 1rem 1.1rem;
+      border-radius: 12px;
+      border: 1px solid var(--gray-200);
+      background: var(--gray-50);
+      transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .cg-aus-toggle-panel:has(#cg-aus-enabled:checked) {
+      background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+      border-color: #6ee7b7;
+      box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.12);
+    }
+    .cg-aus-toggle-panel label[for="cg-aus-enabled"] {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      font-weight: 700;
+      font-size: 0.98rem;
+      color: var(--blue-900);
+      cursor: pointer;
+      margin: 0;
+    }
+    .cg-aus-toggle-panel input#cg-aus-enabled {
+      width: 1.2rem;
+      height: 1.2rem;
+      accent-color: #059669;
+      flex-shrink: 0;
+    }
+    .cg-aus-toggle-hint {
+      margin: 0.5rem 0 0 1.95rem;
+      font-size: 0.8rem;
+      color: var(--gray-600);
+      line-height: 1.4;
+    }
+    .cg-aus-status-msg {
+      margin: 0.85rem 0 0;
+      padding: 0.5rem 0.65rem;
+      border-radius: 8px;
+      font-size: 0.86rem;
+      line-height: 1.4;
+      color: var(--gray-600);
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+    }
+    .cg-aus-status-msg:not(:empty) {
+      color: var(--gray-700);
+    }
     .card.cg-card-accent--visit { border-top: 3px solid var(--blue-400); }
     .card.cg-card-accent--enc { border-top: 3px solid #f59e0b; }
     .card.cg-card-accent--res { border-top: 3px solid #10b981; }
@@ -7192,6 +7295,48 @@
     }
     html[data-cg-theme="dark"] .cg-stat-chip .cg-stat-chip-lbl {
       color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .cg-stat-chip--aus .cg-stat-chip-val {
+      color: #a5b4fc;
+    }
+    html[data-cg-theme="dark"] .cg-aus-page .cg-aus-title-ic {
+      background: linear-gradient(145deg, rgba(99, 102, 241, 0.22) 0%, rgba(79, 70, 229, 0.14) 100%);
+      color: #a5b4fc;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+    }
+    html[data-cg-theme="dark"] .card.cg-card-accent--aus {
+      box-shadow: 0 4px 22px rgba(0, 0, 0, 0.35);
+    }
+    html[data-cg-theme="dark"] .cg-aus-empty {
+      background: linear-gradient(135deg, rgba(234, 179, 8, 0.12) 0%, var(--card-color) 65%);
+      border-color: rgba(245, 158, 11, 0.45);
+      color: var(--gray-700);
+    }
+    html[data-cg-theme="dark"] .cg-aus-empty > i {
+      color: #fbbf24;
+    }
+    html[data-cg-theme="dark"] .cg-aus-form-section {
+      border-bottom-color: var(--gray-200);
+    }
+    html[data-cg-theme="dark"] .cg-aus-toggle-panel {
+      background: var(--gray-100);
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .cg-aus-toggle-panel:has(#cg-aus-enabled:checked) {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(52, 211, 153, 0.45);
+      box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.15);
+    }
+    html[data-cg-theme="dark"] .cg-aus-toggle-panel label[for="cg-aus-enabled"] {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .cg-aus-status-msg {
+      background: var(--gray-100);
+      border-color: var(--gray-300);
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .cg-aus-status-msg:not(:empty) {
+      color: var(--gray-700);
     }
     html[data-cg-theme="dark"] .cg-vis-open-card h4 {
       color: var(--blue-400);
@@ -11716,16 +11861,13 @@
       return r;
     }
 
-    /** Elige una voz en español con heurística femenina (depende del navegador / SO). */
-    function __cgSpeechSynthPickFemaleSpanishVoice(synth) {
+    /** Elige voz en español priorizando calidad (neural / mejorada / Siri) sobre voces básicas. */
+    function __cgSpeechSynthPickNaturalSpanishVoice(synth) {
       try {
         var voices = synth.getVoices();
         if (!voices || !voices.length) return null;
         var nameOf = function (v) {
           return ((v && v.name) || "") + " " + ((v && v.lang) || "");
-        };
-        var lower = function (v) {
-          return nameOf(v).toLowerCase();
         };
         var esFirst = [];
         var i;
@@ -11735,23 +11877,50 @@
           if (lang.indexOf("es") === 0 || lang.indexOf("spa") >= 0) esFirst.push(v);
         }
         var pool = esFirst.length ? esFirst : voices.slice();
-        var avoid = /male|hombre|masculino|\bdiego\b|\bjorge\b|\bantonio\b|\bdaniel\b|\balberto\b|\bpablo\b|\bjuan\b|\bjosé\b|\bjose\b|\benrique\b|\bcarlos\b|\bandrés\b|\bandres\b|\bthomas\b|\bfred\b|\bdavid\b|\bmark\b/;
-        var prefer = /female|femenino|mujer|woman|maria|maría|paulina|monica|mónica|isabela|lola|sabina|fernanda|luciana|carolina|samantha|victoria|sofia|natalia|ellie|\bflo\b|zira|es-es|es_es|es-mx|es_mx|es-cl|es_cl|es-419|mexico|méxico|españa/;
-        var cand = [];
-        for (i = 0; i < pool.length; i++) {
-          if (!avoid.test(lower(pool[i]))) cand.push(pool[i]);
+
+        function naturalnessScore(v) {
+          var s = nameOf(v).toLowerCase();
+          var lang = ((v && v.lang) || "").toLowerCase();
+          var sc = 0;
+          if (/neural|enhanced|premium|personal voice|\bsiri\b|wavenet|generative/.test(s)) sc += 140;
+          if (/\bml\b|transformer|natural/.test(s)) sc += 70;
+          if (/\bgoogle\b/.test(s)) sc += 55;
+          if (/\bmicrosoft\b/.test(s)) sc += 50;
+          if (lang.indexOf("es-cl") === 0 || lang.indexOf("es_cl") >= 0) sc += 22;
+          if (lang.indexOf("es-419") === 0) sc += 16;
+          if (lang.indexOf("es-mx") === 0 || lang.indexOf("es_mx") >= 0) sc += 14;
+          if (lang.indexOf("es-es") === 0 || lang.indexOf("es_es") >= 0) sc += 10;
+          if (/compact|sintet|síntesis básica|basic/.test(s)) sc -= 40;
+          return sc;
         }
-        if (!cand.length) cand = pool.slice();
-        for (i = 0; i < cand.length; i++) {
-          if (prefer.test(lower(cand[i]))) return cand[i];
+
+        function femaleTieBreak(v) {
+          var s = nameOf(v).toLowerCase();
+          return /female|femenino|mujer|woman|maria|maría|paulina|monica|mónica|isabela|lola|sabina|fernanda|luciana|carolina|sofia|natalia|ellie|zira/.test(s)
+            ? 1
+            : 0;
         }
-        return cand[0] || null;
+
+        var best = pool[0];
+        var bestNat = naturalnessScore(best);
+        var bestFem = femaleTieBreak(best);
+        for (i = 1; i < pool.length; i++) {
+          var vv = pool[i];
+          var n = naturalnessScore(vv);
+          var f = femaleTieBreak(vv);
+          if (n > bestNat || (n === bestNat && f > bestFem)) {
+            best = vv;
+            bestNat = n;
+            bestFem = f;
+          }
+        }
+        return best || null;
       } catch (eV) {
         return null;
       }
     }
 
-    /** Lee `text` con Web Speech API; voz español / femenina si el sistema la ofrece. */
+    /** Lee `text` con Web Speech API; voz español lo más natural disponible en el dispositivo. */
     function staffChatSpeakAnnouncementText(text) {
       var synth = window.speechSynthesis;
       if (!synth || typeof SpeechSynthesisUtterance === "undefined") return false;
@@ -11764,10 +11933,11 @@
       } catch (eC) {}
       var speakNow = function () {
         var u = new SpeechSynthesisUtterance(t);
-        u.lang = "es-ES";
-        u.rate = 0.97;
-        u.pitch = 1.06;
-        var voice = __cgSpeechSynthPickFemaleSpanishVoice(synth);
+        var voice = __cgSpeechSynthPickNaturalSpanishVoice(synth);
+        u.lang = voice && voice.lang ? voice.lang : "es-ES";
+        u.rate = 0.95;
+        u.pitch = 1;
+        u.volume = 1;
         if (voice) u.voice = voice;
         try {
           synth.speak(u);
@@ -20054,18 +20224,10 @@ function __deptUnitsStorageKey() {
     function pageAusenciaAlertas() {
       var cu = G.currentUser();
       if (!cu) return "<p class=\"page-desc\">Inicie sesión.</p>";
-      if (cu.role === "admin") {
-        var secAdm = Math.round((G.CG_ABSENCE_ALERT_REPEAT_MS || 15000) / 1000);
-        return (
-          "<h1 class=\"page-title\">Alertas de ausencia</h1>" +
-          "<p class=\"page-desc\" style=\"max-width:42rem\">Defina las frases en <strong>Administración</strong> → <strong>Alertas de ausencia</strong>. Los conserjes solo encienden o apagan el aviso sonoro desde su módulo; la repetición es cada <strong>" +
-          String(secAdm) +
-          " segundos</strong> mientras el aviso esté activo.</p>"
-        );
-      }
-      if (cu.role !== "conserje") {
+      if (cu.role !== "conserje" && cu.role !== "admin") {
         return "<p class=\"page-desc\">No autorizado.</p>";
       }
+      var isAdmin = cu.role === "admin";
       var phrases = Array.isArray(G.state.absenceAlertPhrases) ? G.state.absenceAlertPhrases : [];
       var rt = cgReadAbsenceAlertRuntime();
       var modeOne = rt.mode === "one";
@@ -20083,20 +20245,48 @@ function __deptUnitsStorageKey() {
           "</option>";
       }
       var secCs = Math.round((G.CG_ABSENCE_ALERT_REPEAT_MS || 15000) / 1000);
+      var nPh = phrases.length;
+      var chipPhClass = nPh === 0 ? " cg-stat-chip--aus-muted" : "";
       var emptyHint =
-        phrases.length === 0
-          ? "<div class=\"card\" style=\"margin-top:1rem;border-color:#f59e0b;background:#fffbeb\"><div class=\"card-b\"><strong>Sin frases.</strong> El administrador debe añadir estados en <strong>Administración → Alertas de ausencia</strong>.</div></div>"
+        nPh === 0
+          ? "<div class=\"cg-aus-empty\" role=\"status\"><i class=\"fa-solid fa-circle-exclamation\" aria-hidden=\"true\"></i><div><strong>Sin frases configuradas.</strong> " +
+            (isAdmin
+              ? "Añada estados en <strong>Administración</strong> → pestaña <strong>Alertas de ausencia</strong> para habilitar el aviso."
+              : "Pida al administrador que defina frases en <strong>Administración → Alertas de ausencia</strong>.") +
+            "</div></div>"
           : "";
-      var dis = phrases.length === 0 ? "disabled " : "";
+      var dis = nPh === 0 ? "disabled " : "";
+      var introText = isAdmin
+        ? "Edite los textos en <strong>Administración</strong> → <strong>Alertas de ausencia</strong>. Use este panel para <strong>probar</strong> el aviso en voz en <strong>esta pestaña</strong> del navegador."
+        : "Recordatorios sonoros para estados del turno. <strong>Usted enciende o apaga</strong> el aviso; solo administración modifica las frases. Todo queda en <strong>esta pestaña</strong> (no afecta a otros equipos).";
+      var cardHead = isAdmin ? "Probar aviso sonoro" : "Control del aviso";
       return (
-        "<h1 class=\"page-title\">Alertas de ausencia</h1>" +
-        "<p class=\"page-desc\" style=\"max-width:42rem\">Aviso sonoro para recordar estados (ausencias, cubiertos, etc.). Solo el administrador edita las frases; usted <strong>activa o desactiva</strong> el aviso. Con el aviso encendido, la frase o frases se repiten cada <strong>" +
+        "<div class=\"cg-page-compact cg-aus-page\">" +
+        "<h1 class=\"page-title\"><span class=\"cg-aus-title-ic\" aria-hidden=\"true\"><i class=\"fa-solid fa-bullhorn\"></i></span> Alertas de ausencia</h1>" +
+        "<div class=\"cg-module-intro\">" +
+        "<p class=\"page-desc\">" +
+        introText +
+        "</p>" +
+        "<div class=\"cg-module-stats\" aria-label=\"Resumen del aviso\">" +
+        "<div class=\"cg-stat-chip cg-stat-chip--aus\"><span class=\"cg-stat-chip-val\">" +
         String(secCs) +
-        " segundos</strong>. La preferencia de encendido/apagado y modo vale solo en <strong>esta pestaña</strong> del navegador.</p>" +
+        " s</span><span class=\"cg-stat-chip-lbl\">Intervalo</span></div>" +
+        "<div class=\"cg-stat-chip" +
+        chipPhClass +
+        "\"><span class=\"cg-stat-chip-val\">" +
+        String(nPh) +
+        "</span><span class=\"cg-stat-chip-lbl\">Frases listas</span></div>" +
+        "</div></div>" +
         emptyHint +
-        "<div class=\"card\" style=\"margin-top:1rem\"><div class=\"card-h\"><h3>Su control</h3></div><div class=\"card-b\">" +
-        "<div class=\"form-group\" style=\"max-width:28rem\">" +
-        "<label for=\"cg-aus-mode\">Modo de reproducción</label>" +
+        "<div class=\"card cg-card-accent--aus\">" +
+        "<div class=\"card-h\"><h3><i class=\"fa-solid fa-sliders\" aria-hidden=\"true\"></i> " +
+        cardHead +
+        "</h3></div>" +
+        "<div class=\"card-b\">" +
+        "<div class=\"cg-aus-form-section\">" +
+        "<p class=\"cg-form-block-title\">Qué se reproduce</p>" +
+        "<div class=\"form-group\" style=\"max-width:32rem\">" +
+        "<label for=\"cg-aus-mode\">Modo</label>" +
         "<select id=\"cg-aus-mode\" class=\"form-input\" " +
         dis +
         ">" +
@@ -20104,32 +20294,35 @@ function __deptUnitsStorageKey() {
         (!modeOne ? " selected" : "") +
         ">Rotar todas las frases (cada " +
         String(secCs) +
-        " s pasa a la siguiente)</option>" +
+        " s, siguiente mensaje)</option>" +
         "<option value=\"one\"" +
         (modeOne ? " selected" : "") +
-        ">Una sola frase (la elige abajo)</option></select></div>" +
-        "<div class=\"form-group\" style=\"max-width:28rem\" id=\"cg-aus-one-wrap\">" +
+        ">Una sola frase (elija abajo)</option></select></div>" +
+        "<div class=\"form-group\" style=\"max-width:32rem;margin-bottom:0\" id=\"cg-aus-one-wrap\">" +
         "<label for=\"cg-aus-phrase\">Frase fija</label>" +
         "<select id=\"cg-aus-phrase\" class=\"form-input\" " +
         dis +
         ">" +
         optsOne +
-        "</select></div>" +
-        "<div class=\"form-group\" style=\"margin-top:1rem\">" +
-        "<label style=\"display:flex;gap:0.65rem;align-items:center;font-weight:700;cursor:pointer\">" +
+        "</select></div></div>" +
+        "<div class=\"cg-aus-toggle-panel\">" +
+        "<label for=\"cg-aus-enabled\">" +
         "<input type=\"checkbox\" id=\"cg-aus-enabled\" " +
         (rt.enabled ? "checked " : "") +
         dis +
-        "/><span>Aviso activo (repetir cada " + String(secCs) + " s)</span></label></div>" +
-        "<p id=\"cg-aus-status\" class=\"page-desc\" style=\"margin:0.75rem 0 0\" aria-live=\"polite\"></p>" +
-        "</div></div>"
+        "/><span>Aviso sonoro activo</span></label>" +
+        "<p class=\"cg-aus-toggle-hint\">Si está marcado, el mensaje se repite cada <strong>" +
+        String(secCs) +
+        " s</strong> mientras esta pestaña siga abierta.</p></div>" +
+        "<p id=\"cg-aus-status\" class=\"cg-aus-status-msg\" aria-live=\"polite\"></p>" +
+        "</div></div></div>"
       );
     }
 
     function cgBindAusenciaAlertasView() {
       cgAbsenceAlertStop();
       var cu = G.currentUser();
-      if (!cu || cu.role !== "conserje") return;
+      if (!cu || (cu.role !== "conserje" && cu.role !== "admin")) return;
       var phrases = Array.isArray(G.state.absenceAlertPhrases) ? G.state.absenceAlertPhrases : [];
       var modeEl = document.getElementById("cg-aus-mode");
       var phraseEl = document.getElementById("cg-aus-phrase");
