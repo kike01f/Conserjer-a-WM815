@@ -319,8 +319,6 @@
       window.__cgFsLastError = null;
       window.__cgFsListenerUnsub = null;
       window.__cgFsWriteTimers = Object.create(null);
-      /** Cadena Promise: una escritura Firestore tras otra (evita resource-exhausted en el stream). */
-      window.__cgFsPushSerialChain = null;
       window.__cgFsSkipFirestoreKey = { session: true, __cgPendingDeleted: true, staffChatRev: true };
       window.__cgCloudSyncLastInitResult = null;
       window.__cgFsPullGeneration = 0;
@@ -660,6 +658,123 @@
         return { staffChatRev: pr.n, staffChatRevKnown: pr.known };
       };
 
+      /** Pausa entre escrituras al mismo stream (evita resource-exhausted del cliente Firestore). */
+      var CG_FS_INTER_WRITE_MS = 58;
+      window.__cgFsWritePumpQueue = [];
+      window.__cgFsPumpWriteInFlight = false;
+      window.__cgFsPumpGapTimer = null;
+      window.__cgFsPumpIdleWaiters = [];
+
+      function __cgFsEnqueueWriteJob(shortKey, resolve) {
+        var q = window.__cgFsWritePumpQueue;
+        var last = q[q.length - 1];
+        if (last && last.key === shortKey) last.resolvers.push(resolve);
+        else q.push({ key: shortKey, resolvers: [resolve] });
+      }
+
+      function __cgFsNotifyPumpIdle() {
+        var w = window.__cgFsPumpIdleWaiters;
+        if (!w || !w.length) return;
+        window.__cgFsPumpIdleWaiters = [];
+        var ii;
+        for (ii = 0; ii < w.length; ii++) {
+          try {
+            w[ii]();
+          } catch (eN) {}
+        }
+      }
+
+      function __cgFsPumpRunOne() {
+        if (window.__cgFsPumpWriteInFlight) return;
+        var q = window.__cgFsWritePumpQueue;
+        if (!q.length) {
+          __cgFsNotifyPumpIdle();
+          return;
+        }
+        var job = q.shift();
+        var shortKey = job.key;
+        var resolvers = job.resolvers;
+        var latest = window.__cgFsMem[shortKey];
+        if (typeof latest !== "string") {
+          var r0 = { ok: false, reason: "missing_mem", shortKey: shortKey };
+          var ri;
+          for (ri = 0; ri < resolvers.length; ri++) {
+            try {
+              resolvers[ri](r0);
+            } catch (eR0) {}
+          }
+          if (window.__cgFsWritePumpQueue.length) {
+            if (window.__cgFsPumpGapTimer) clearTimeout(window.__cgFsPumpGapTimer);
+            window.__cgFsPumpGapTimer = setTimeout(function () {
+              window.__cgFsPumpGapTimer = null;
+              __cgFsPumpRunOne();
+            }, CG_FS_INTER_WRITE_MS);
+          } else {
+            __cgFsNotifyPumpIdle();
+          }
+          return;
+        }
+        window.__cgFsPumpWriteInFlight = true;
+        var infl = window.__cgFsPushInFlightCount;
+        infl[shortKey] = (infl[shortKey] || 0) + 1;
+        var decInflight = function () {
+          infl[shortKey] = (infl[shortKey] || 1) - 1;
+          if (infl[shortKey] <= 0) delete infl[shortKey];
+        };
+        var ref = kvCol().doc(shortKey);
+        var payload = {
+          json: latest,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          key: shortKey
+        };
+        if (shortKey === "staffChatMessages") {
+          var LSpr2 = window.CG_PERSIST && window.CG_PERSIST.LS ? window.CG_PERSIST.LS : "";
+          payload.staffChatRev = __cgReadLocalStaffChatRevFromLs(LSpr2);
+        }
+        ref
+          .set(payload, { merge: true })
+          .then(function () {
+            decInflight();
+            var okr = { ok: true, shortKey: shortKey };
+            var rj;
+            for (rj = 0; rj < resolvers.length; rj++) {
+              try {
+                resolvers[rj](okr);
+              } catch (eOk) {}
+            }
+          })
+          .catch(function (err) {
+            decInflight();
+            window.__cgFsLastError = err;
+            console.warn("[CG][Firestore] escritura", shortKey, err);
+            var bad = { ok: false, err: err, shortKey: shortKey };
+            var rk;
+            for (rk = 0; rk < resolvers.length; rk++) {
+              try {
+                resolvers[rk](bad);
+              } catch (eBad) {}
+            }
+          })
+          .finally(function () {
+            window.__cgFsPumpWriteInFlight = false;
+            if (!window.__cgFsWritePumpQueue.length) {
+              __cgFsNotifyPumpIdle();
+              return;
+            }
+            if (window.__cgFsPumpGapTimer) clearTimeout(window.__cgFsPumpGapTimer);
+            window.__cgFsPumpGapTimer = setTimeout(function () {
+              window.__cgFsPumpGapTimer = null;
+              __cgFsPumpRunOne();
+            }, CG_FS_INTER_WRITE_MS);
+          });
+      }
+
+      function __cgFsKickWritePump() {
+        if (!window.__cgFsPumpWriteInFlight && !window.__cgFsPumpGapTimer) {
+          __cgFsPumpRunOne();
+        }
+      }
+
       window.cgFsBridge = {
         active: fsActive,
         kvCol: kvCol,
@@ -673,6 +788,19 @@
             var latest = window.__cgFsMem[shortKey];
             if (typeof latest === "string") window.cgFsBridge.pushImmediate(shortKey, latest);
           }, 0);
+        },
+        whenWritePumpIdle: function () {
+          return new Promise(function (resolve) {
+            if (
+              !window.__cgFsWritePumpQueue.length &&
+              !window.__cgFsPumpWriteInFlight &&
+              !window.__cgFsPumpGapTimer
+            ) {
+              resolve();
+              return;
+            }
+            window.__cgFsPumpIdleWaiters.push(resolve);
+          });
         },
         flushPending: function () {
           var t = window.__cgFsWriteTimers;
@@ -689,7 +817,7 @@
             var js = mem[k];
             if (typeof js === "string") window.cgFsBridge.pushImmediate(k, js);
           }
-          return window.__cgFsPushSerialChain || Promise.resolve();
+          return window.cgFsBridge.whenWritePumpIdle();
         },
         pushImmediate: function (shortKey, jsonString) {
           if (!fsActive() || !shortKey || window.__cgFsSkipFirestoreKey[shortKey]) {
@@ -698,62 +826,10 @@
           if (typeof jsonString !== "string") {
             return Promise.resolve({ ok: false, reason: "bad_payload" });
           }
-          if (!window.__cgFsPushSerialChain) window.__cgFsPushSerialChain = Promise.resolve();
-          var infl = window.__cgFsPushInFlightCount;
-          var settled = false;
-          var result = new Promise(function (resolve) {
-            function finish(r) {
-              if (settled) return;
-              settled = true;
-              resolve(r);
-            }
-            window.__cgFsPushSerialChain = window.__cgFsPushSerialChain
-              .then(function () {
-                try {
-                  var latest = window.__cgFsMem[shortKey];
-                  if (typeof latest !== "string") {
-                    finish({ ok: false, reason: "missing_mem", shortKey: shortKey });
-                    return;
-                  }
-                  infl[shortKey] = (infl[shortKey] || 0) + 1;
-                  var decInflight = function () {
-                    infl[shortKey] = (infl[shortKey] || 1) - 1;
-                    if (infl[shortKey] <= 0) delete infl[shortKey];
-                  };
-                  var ref = kvCol().doc(shortKey);
-                  var payload = {
-                    json: latest,
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    key: shortKey
-                  };
-                  if (shortKey === "staffChatMessages") {
-                    var LSpr = window.CG_PERSIST && window.CG_PERSIST.LS ? window.CG_PERSIST.LS : "";
-                    payload.staffChatRev = __cgReadLocalStaffChatRevFromLs(LSpr);
-                  }
-                  return ref
-                    .set(payload, { merge: true })
-                    .then(function () {
-                      decInflight();
-                      finish({ ok: true, shortKey: shortKey });
-                    })
-                    .catch(function (err) {
-                      decInflight();
-                      window.__cgFsLastError = err;
-                      console.warn("[CG][Firestore] escritura", shortKey, err);
-                      finish({ ok: false, err: err, shortKey: shortKey });
-                    });
-                } catch (eRun) {
-                  finish({ ok: false, err: eRun, shortKey: shortKey });
-                }
-              })
-              .catch(function (eQ) {
-                try {
-                  console.warn("[CG][Firestore] cola serial:", eQ);
-                } catch (eZ) {}
-                finish({ ok: false, err: eQ, shortKey: shortKey });
-              });
+          return new Promise(function (resolve) {
+            __cgFsEnqueueWriteJob(shortKey, resolve);
+            __cgFsKickWritePump();
           });
-          return result;
         },
         abortTimers: function () {
           var t = window.__cgFsWriteTimers;
@@ -8642,9 +8718,7 @@
 
     function cloudPushAllKeysOnce() {
       if (!__cgFsCoreActive()) return Promise.resolve({ ok: true, skipped: true });
-      window.cgFsBridge.flushPending();
-      /* Una sola cola serial: no duplicar pushImmediate por clave (antes: flush + Promise.all = 2× escrituras). */
-      return (window.__cgFsPushSerialChain || Promise.resolve()).then(function () {
+      return window.cgFsBridge.flushPending().then(function () {
         var mem = window.__cgFsMem;
         var n = 0;
         var k;
@@ -18660,7 +18734,7 @@ function __deptUnitsStorageKey() {
     var staffChatCloseAnimGen = 0;
     var staffPresenceIntervalId = null;
     var STAFF_PRESENCE_STALE_MS = 52000;
-    var STAFF_PRESENCE_HEARTBEAT_MS = 12000;
+    var STAFF_PRESENCE_HEARTBEAT_MS = 22000;
 
     var __cgAbsenceAlertIntervalId = null;
 
@@ -18724,7 +18798,6 @@ function __deptUnitsStorageKey() {
       var c = Object.assign({}, base);
       delete c[cid];
       G.save("staffPresence", { c: c });
-      if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffPresence");
     }
     function staffPresencePruneAndWriteSelf() {
       var u = G.currentUser();
@@ -18754,7 +18827,6 @@ function __deptUnitsStorageKey() {
         chatTypingUntil: typUntil
       };
       G.save("staffPresence", { c: c });
-      if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffPresence");
     }
     function staffPresenceStop() {
       staffPresenceStopInterval();
