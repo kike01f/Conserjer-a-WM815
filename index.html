@@ -913,6 +913,127 @@
         return out;
       }
 
+      /**
+       * Unidades wm815_*: fusión por id (evita que un snapshot remoto viejo borre ediciones del mapa / fichas).
+       * Usa _deptSyncMs si existe; si no, unitNoteUpdatedAt; desempate: gana la copia local en empate.
+       */
+      function mergeDeptWm815Units(kvShortKey, remoteArr, localArr) {
+        if (!Array.isArray(remoteArr)) remoteArr = [];
+        if (!Array.isArray(localArr)) localArr = [];
+        var pendDel = __cgReadPendingDeletedIdsForKey(kvShortKey);
+        function unitMs(u) {
+          if (!u) return 0;
+          var m = u._deptSyncMs;
+          if (typeof m === "number" && m === m) return m;
+          var iso = u.unitNoteUpdatedAt;
+          if (iso) {
+            var t = new Date(iso).getTime();
+            return t !== t ? 0 : t;
+          }
+          return 0;
+        }
+        function pickUnit(a, b) {
+          var ma = unitMs(a);
+          var mb = unitMs(b);
+          if (mb > ma) return b;
+          if (ma > mb) return a;
+          var sa = JSON.stringify(a || {}).length;
+          var sb = JSON.stringify(b || {}).length;
+          return sb >= sa ? b : a;
+        }
+        var byId = Object.create(null);
+        var i, u, id, ex;
+        for (i = 0; i < remoteArr.length; i++) {
+          u = remoteArr[i];
+          if (!u || u.id == null || String(u.id) === "") continue;
+          id = String(u.id);
+          if (pendDel[id]) continue;
+          ex = byId[id];
+          if (!ex) {
+            byId[id] = u;
+            continue;
+          }
+          byId[id] = pickUnit(ex, u);
+        }
+        for (i = 0; i < localArr.length; i++) {
+          u = localArr[i];
+          if (!u || u.id == null || String(u.id) === "") continue;
+          id = String(u.id);
+          if (pendDel[id]) continue;
+          ex = byId[id];
+          if (!ex) {
+            byId[id] = u;
+            continue;
+          }
+          byId[id] = pickUnit(ex, u);
+        }
+        var out = [];
+        var k;
+        for (k in byId) {
+          if (Object.prototype.hasOwnProperty.call(byId, k)) out.push(byId[k]);
+        }
+        return out;
+      }
+
+      /** Residentes anteriores: fusión por id (misma clave KV que wm815_former_*). */
+      function mergeDeptFormerResidents(kvShortKey, remoteArr, localArr) {
+        if (!Array.isArray(remoteArr)) remoteArr = [];
+        if (!Array.isArray(localArr)) localArr = [];
+        var pendDel = __cgReadPendingDeletedIdsForKey(kvShortKey);
+        function rowMs(r) {
+          if (!r) return 0;
+          var m = r._deptSyncMs;
+          if (typeof m === "number" && m === m) return m;
+          var iso = r.exitDate;
+          if (iso) {
+            var t = new Date(iso).getTime();
+            return t !== t ? 0 : t;
+          }
+          return 0;
+        }
+        function pickRow(a, b) {
+          var ma = rowMs(a);
+          var mb = rowMs(b);
+          if (mb > ma) return b;
+          if (ma > mb) return a;
+          var sa = JSON.stringify(a || {}).length;
+          var sb = JSON.stringify(b || {}).length;
+          return sb >= sa ? b : a;
+        }
+        var byId = Object.create(null);
+        var i, r, id, ex;
+        for (i = 0; i < remoteArr.length; i++) {
+          r = remoteArr[i];
+          if (!r || r.id == null || String(r.id) === "") continue;
+          id = String(r.id);
+          if (pendDel[id]) continue;
+          ex = byId[id];
+          if (!ex) {
+            byId[id] = r;
+            continue;
+          }
+          byId[id] = pickRow(ex, r);
+        }
+        for (i = 0; i < localArr.length; i++) {
+          r = localArr[i];
+          if (!r || r.id == null || String(r.id) === "") continue;
+          id = String(r.id);
+          if (pendDel[id]) continue;
+          ex = byId[id];
+          if (!ex) {
+            byId[id] = r;
+            continue;
+          }
+          byId[id] = pickRow(ex, r);
+        }
+        var out2 = [];
+        var k2;
+        for (k2 in byId) {
+          if (Object.prototype.hasOwnProperty.call(byId, k2)) out2.push(byId[k2]);
+        }
+        return out2;
+      }
+
       /** Metadato numérico en el doc Firestore `staffChatMessages` (no es una clave KV aparte). */
       function __cgParseFirestoreStaffChatRev(docData) {
         if (!docData || typeof docData !== "object") return { n: 0, known: false };
@@ -1271,13 +1392,19 @@
           var curMem0 = window.__cgFsMem[shortKey];
           var inflC = window.__cgFsPushInFlightCount && window.__cgFsPushInFlightCount[shortKey];
           var writeTimerPending = window.__cgFsWriteTimers && window.__cgFsWriteTimers[shortKey];
-          /* novedades, visits, shiftLogs: siempre pasar al merge aunque haya push en vuelo; si no, se pierden
+          var __cgDeptKvU =
+            typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units";
+          var __cgDeptKvF =
+            typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "wm815_former_residents";
+          var __cgDeptKvMerge = shortKey === __cgDeptKvU || shortKey === __cgDeptKvF;
+          /* novedades, visits, shiftLogs, wm815_*: siempre pasar al merge aunque haya push en vuelo; si no, se pierden
            * cambios remotos (otros equipos) o la fusión con memoria local durante la subida. */
           if (
             shortKey !== "staffChatMessages" &&
             shortKey !== "novedades" &&
             shortKey !== "visits" &&
             shortKey !== "shiftLogs" &&
+            !__cgDeptKvMerge &&
             typeof curMem0 === "string" &&
             curMem0 !== next &&
             (inflC > 0 || writeTimerPending)
@@ -1405,6 +1532,52 @@
             }
           }
 
+          if (shortKey === __cgDeptKvU) {
+            try {
+              var prevStrDu = window.__cgFsMem[shortKey];
+              if (typeof prevStrDu !== "string" || !prevStrDu) {
+                prevStrDu = tryLocalStorageGet(full);
+              }
+              var locDu = [];
+              if (typeof prevStrDu === "string" && prevStrDu) {
+                var locParsedDu = JSON.parse(prevStrDu);
+                if (Array.isArray(locParsedDu)) locDu = locParsedDu;
+              }
+              var remDu = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remDu)) {
+                next = JSON.stringify(mergeDeptWm815Units(shortKey, remDu, locDu));
+              }
+            } catch (eDuMerge) {
+              console.warn("[CG][Firestore] merge departamentos (unidades) falló:", eDuMerge && eDuMerge.message ? eDuMerge.message : eDuMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
+          if (shortKey === __cgDeptKvF) {
+            try {
+              var prevStrDf = window.__cgFsMem[shortKey];
+              if (typeof prevStrDf !== "string" || !prevStrDf) {
+                prevStrDf = tryLocalStorageGet(full);
+              }
+              var locDf = [];
+              if (typeof prevStrDf === "string" && prevStrDf) {
+                var locParsedDf = JSON.parse(prevStrDf);
+                if (Array.isArray(locParsedDf)) locDf = locParsedDf;
+              }
+              var remDf = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remDf)) {
+                next = JSON.stringify(mergeDeptFormerResidents(shortKey, remDf, locDf));
+              }
+            } catch (eDfMerge) {
+              console.warn("[CG][Firestore] merge departamentos (residentes anteriores) falló:", eDfMerge && eDfMerge.message ? eDfMerge.message : eDfMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
           window.__cgFsMem[shortKey] = next;
           /* Espejo en disco del valor fusionado: otras pestañas y F5 ven lo mismo que la nube sin depender solo de RAM. */
           tryLocalStorageSet(full, next);
@@ -1413,7 +1586,8 @@
             (shortKey === "visits" ||
               shortKey === "staffChatMessages" ||
               shortKey === "novedades" ||
-              shortKey === "shiftLogs") &&
+              shortKey === "shiftLogs" ||
+              __cgDeptKvMerge) &&
             next !== remoteSnapshot &&
             window.cgFsBridge &&
             typeof window.cgFsBridge.pushImmediate === "function"
@@ -14971,6 +15145,7 @@ function __deptUnitsStorageKey() {
                     if (unit.hasRentalContract !== undefined) {
                         appState.units[nIdx].hasRentalContract = unit.hasRentalContract;
                     }
+                    appState.units[nIdx]._deptSyncMs = Date.now();
                 }
                 if (!writeUnitsToStorage(appState.units)) {
                   throw new Error('No se pudo escribir el registro de unidades');
@@ -16365,6 +16540,7 @@ function __deptUnitsStorageKey() {
                 if (dupUnidadNumero) {
                     throw new Error('Ya existe otra unidad con ese número');
                 }
+                formData._deptSyncMs = Date.now();
                 // Persistir en localStorage antes de actualizar la UI
                 try {
                     // Actualizar el estado local temporalmente para el guardado
@@ -16702,6 +16878,8 @@ function __deptUnitsStorageKey() {
                                 throw new Error('Residente no encontrado en copia de trabajo');
                             }
                             nu.residents.splice(ixSnap, 1);
+                            nu._deptSyncMs = Date.now();
+                            formerResident._deptSyncMs = Date.now();
                             nextFormer.push(formerResident);
                             
                             loadingIndicator.querySelector('p').textContent = 'Guardando unidades localmente...';
