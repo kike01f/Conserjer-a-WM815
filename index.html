@@ -13166,7 +13166,7 @@
                         <button type="button" class="add-resident-btn">+</button>
                     </div>
 
-                    <button type="submit" class="btn btn-primary">✅ Registrar Unidad</button>
+                    <button type="submit" id="unitFormSubmitBtn" class="btn btn-primary">✅ Registrar Unidad</button>
                 </form>
             </section>
 
@@ -14702,6 +14702,11 @@ function __deptUnitsStorageKey() {
         };
 
         window.loadUnitsFromCloud = async function(silent) {
+            /* No recargar desde disco en segundo plano mientras se edita una unidad o hay guardado en curso:
+               evita sobrescribir appState y desincronizar el formulario abierto. */
+            if (silent && (appState.editingUnitId || isSaving)) {
+                return true;
+            }
             var hadLkg = Array.isArray(appState.lastKnownGoodUnits);
             try {
                 const raw = window.CG_PERSIST.localGetRaw(__deptUnitsStorageKey());
@@ -14834,7 +14839,10 @@ function __deptUnitsStorageKey() {
             }
         };
 
-        window.loadFormerResidentsFromCloud = async function() {
+        window.loadFormerResidentsFromCloud = async function(silent) {
+            if (silent && (appState.editingUnitId || isSaving)) {
+                return true;
+            }
             var hadLkgFr = Array.isArray(appState.lastKnownGoodFormerResidents);
             try {
                 if (!appState.formerResidents) {
@@ -14947,6 +14955,22 @@ function __deptUnitsStorageKey() {
             try {
                 if (!appState || !appState.units) {
                     throw new Error('Estado de la aplicación no disponible');
+                }
+                if (!unit || unit.id == null) {
+                    throw new Error('Unidad no válida');
+                }
+                var nIdx = appState.units.findIndex(function (u) {
+                    return __deptSameUnitId(u.id, unit.id);
+                });
+                if (nIdx !== -1) {
+                    appState.units[nIdx].unitNote = unit.unitNote;
+                    appState.units[nIdx].unitNoteUpdatedAt = unit.unitNoteUpdatedAt;
+                    if (unit.rentalParkingNumber !== undefined) {
+                        appState.units[nIdx].rentalParkingNumber = unit.rentalParkingNumber;
+                    }
+                    if (unit.hasRentalContract !== undefined) {
+                        appState.units[nIdx].hasRentalContract = unit.hasRentalContract;
+                    }
                 }
                 if (!writeUnitsToStorage(appState.units)) {
                   throw new Error('No se pudo escribir el registro de unidades');
@@ -15072,6 +15096,21 @@ function __deptUnitsStorageKey() {
                     unit.residents = [];
                     hasChanges = true;
                 }
+                // ID estable por fila (mapa, salida, edición); sin esto el DOM y los datos se desalinean
+                if (Array.isArray(unit.residents) && unit.residents.length) {
+                    unit.residents.forEach(function (resident, rmi) {
+                        if (!resident.cgResLineId || !String(resident.cgResLineId).trim()) {
+                            resident.cgResLineId =
+                                'cgRes_' +
+                                String(unit.id || 'unit') +
+                                '_' +
+                                rmi +
+                                '_' +
+                                Math.random().toString(36).slice(2, 11);
+                            hasChanges = true;
+                        }
+                    });
+                }
                 
                 // Asegurar que createdAt existe
                 if (!unit.createdAt) {
@@ -15107,6 +15146,18 @@ function __deptUnitsStorageKey() {
                 .split(' ')
                 .map(word => word.charAt(0).toUpperCase() + word.slice(1))
                 .join(' ');
+        }
+
+        /** Correo: solo normalizar (formatText rompe direcciones con @ y puntos). */
+        function formatResidentEmail(email) {
+            return String(email || '')
+                .trim()
+                .toLowerCase();
+        }
+
+        /** Teléfono: conservar dígitos, espacios y +; sin “Title Case”. */
+        function formatResidentPhone(phone) {
+            return String(phone || '').trim();
         }
 
         /** Formatea la info de bicicleteros (array o valor único) para mostrar */
@@ -16200,9 +16251,9 @@ function __deptUnitsStorageKey() {
                 formData.residents = [];
                 
                 console.log('Nota preservada en formData:', formData.unitNote);
-                // Obtener residentes del formulario
-                const residentItems = document.querySelectorAll('.resident-item');
-                residentItems.forEach(item => {
+                // Obtener residentes del formulario (solo filas dentro de la lista de unidad)
+                const residentItems = document.querySelectorAll('#residentsList .resident-item');
+                residentItems.forEach((item, rowIdx) => {
                     const name = item.querySelector('.resident-name').value.trim();
                     const rut = item.querySelector('.resident-rut').value.trim();
                     const email = item.querySelector('.resident-email').value.trim();
@@ -16216,57 +16267,69 @@ function __deptUnitsStorageKey() {
                                 : 'El RUT debe tener el formato 12.345.678-9';
                         throw new Error(rutM || 'RUT inválido');
                     }
-                    if (name && email && type) {
-                        // Obtener la fecha de registro del elemento del formulario
-                        const residentItem = item;
-                        const dateElement = residentItem.querySelector('small[data-registration-date]');
-                        let registeredAt = new Date(); // Fecha por defecto
-                        
-                        // Si hay un elemento de fecha en el formulario, usar esa fecha
-                        if (dateElement && dateElement.dataset.registrationDate) {
-                            try {
-                                const parsedDate = new Date(dateElement.dataset.registrationDate);
-                                if (!isNaN(parsedDate.getTime())) {
-                                    registeredAt = parsedDate;
-                                }
-                            } catch (error) {
-                                console.warn('Error parseando fecha del formulario:', error);
-                            }
-                        } else if (existingUnit && existingUnit.residents) {
-                            // Si no hay fecha en el formulario pero estamos editando, intentar preservar la fecha del residente original
-                            // Buscar por nombre y email para encontrar el residente original
-                            const originalResident = existingUnit.residents.find(r => 
-                                r.name && formatName(name) && 
-                                r.name.toLowerCase() === formatName(name).toLowerCase() &&
-                                r.email && email && 
-                                r.email.toLowerCase() === formatText(email).toLowerCase()
-                            );
-                            if (originalResident && originalResident.registeredAt) {
-                                try {
-                                    const parsedDate = new Date(originalResident.registeredAt);
-                                    if (!isNaN(parsedDate.getTime())) {
-                                        registeredAt = parsedDate;
-                                    }
-                                } catch (error) {
-                                    console.warn('Error parseando fecha del residente original:', error);
-                                }
-                            }
+                    var hasAny =
+                        !!(name || email || phone || rut || (type && String(type).trim() !== ''));
+                    if (!hasAny) {
+                        return;
+                    }
+                    if (!name || !email || !type) {
+                        throw new Error(
+                            'Residente (fila ' +
+                                (rowIdx + 1) +
+                                '): complete nombre, correo y tipo, o elimine la fila vacía con el botón ×.'
+                        );
+                    }
+                    var domLineId = (item.getAttribute('data-cg-res-line-id') || '').trim();
+                    var prevMatch = null;
+                    if (existingUnit && Array.isArray(existingUnit.residents)) {
+                        if (domLineId) {
+                            prevMatch = existingUnit.residents.find(function (r) {
+                                return r.cgResLineId && String(r.cgResLineId) === domLineId;
+                            });
                         }
-                        
-                        var rowLineId = item.getAttribute("data-cg-res-line-id") || "";
-                        if (!rowLineId.trim()) {
-                            rowLineId = "cgRes_" + Date.now() + "_" + Math.random().toString(36).slice(2, 11);
+                        if (
+                            !prevMatch &&
+                            existingUnit.residents.length === residentItems.length &&
+                            rowIdx < existingUnit.residents.length
+                        ) {
+                            prevMatch = existingUnit.residents[rowIdx];
                         }
-                        formData.residents.push({
+                    }
+                    var rowLineId =
+                        domLineId ||
+                        'cgRes_' + Date.now() + '_' + Math.random().toString(36).slice(2, 11);
+                    const dateElement = item.querySelector('small[data-registration-date]');
+                    let registeredAt = new Date();
+                    if (dateElement && dateElement.dataset.registrationDate) {
+                        try {
+                            const parsedDate = new Date(dateElement.dataset.registrationDate);
+                            if (!isNaN(parsedDate.getTime())) {
+                                registeredAt = parsedDate;
+                            }
+                        } catch (error) {
+                            console.warn('Error parseando fecha del formulario:', error);
+                        }
+                    } else if (prevMatch && prevMatch.registeredAt) {
+                        try {
+                            const parsedDate = new Date(prevMatch.registeredAt);
+                            if (!isNaN(parsedDate.getTime())) {
+                                registeredAt = parsedDate;
+                            }
+                        } catch (error) {
+                            console.warn('Error parseando fecha del residente guardado:', error);
+                        }
+                    }
+                    formData.residents.push(
+                        Object.assign({}, prevMatch || {}, {
                             name: formatName(name),
                             rut: rut,
-                            email: formatText(email),
-                            phone: formatText(phone),
+                            email: formatResidentEmail(email),
+                            phone: formatResidentPhone(phone),
                             type: formatText(type),
                             registeredAt: registeredAt.toISOString(),
                             cgResLineId: rowLineId
-                        });
-                    }
+                        })
+                    );
                 });
                 
                 var resKeysSeen = {};
@@ -16370,7 +16433,8 @@ function __deptUnitsStorageKey() {
             if (addBikeBtn) addBikeBtn.style.display = '';
             // Limpiar el estado de edición
             appState.editingUnitId = null;
-            document.querySelector('.btn.btn-primary').textContent = '✅ Registrar Unidad';
+            var ufsb = document.getElementById('unitFormSubmitBtn');
+            if (ufsb) ufsb.textContent = '✅ Registrar Unidad';
         }
 
         function deleteUnit(unitId) {
@@ -17570,7 +17634,8 @@ function __deptUnitsStorageKey() {
             } else {
                 addResident();
             }
-            document.querySelector('.btn.btn-primary').textContent = '💾 Guardar Cambios';
+            var ufsbEdit = document.getElementById('unitFormSubmitBtn');
+            if (ufsbEdit) ufsbEdit.textContent = '💾 Guardar Cambios';
             showTab('units');
             
             // Actualizar el mapa después de cargar los residentes para edición
@@ -18075,15 +18140,43 @@ function __deptUnitsStorageKey() {
         // ===== EDITAR RESIDENTE DESDE FICHA DEL MAPA =====
         function closeMapModalAndEditResident(unitId, residentIndex) {
             cgCloseBuildingUnitFichaOverlay();
+            var ri = Number(residentIndex);
+            var unitForLine =
+                appState.units && appState.units.length
+                    ? appState.units.find(function (u) {
+                          return __deptSameUnitId(u.id, unitId);
+                      })
+                    : null;
+            var lineId =
+                unitForLine &&
+                Array.isArray(unitForLine.residents) &&
+                !isNaN(ri) &&
+                unitForLine.residents[ri]
+                    ? String(unitForLine.residents[ri].cgResLineId || '').trim()
+                    : '';
             editUnit(unitId);
             setTimeout(() => {
                 const list = document.getElementById('residentsList');
                 if (!list) return;
-                const item = list.children[residentIndex];
+                var item = null;
+                if (lineId) {
+                    var ch = list.children;
+                    for (var ci = 0; ci < ch.length; ci++) {
+                        if ((ch[ci].getAttribute('data-cg-res-line-id') || '') === lineId) {
+                            item = ch[ci];
+                            break;
+                        }
+                    }
+                }
+                if (!item && !isNaN(ri) && list.children[ri]) {
+                    item = list.children[ri];
+                }
                 if (item) {
                     item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                     item.style.boxShadow = '0 0 0 2px var(--accent-color)';
-                    setTimeout(() => { item.style.boxShadow = ''; }, 2000);
+                    setTimeout(() => {
+                        item.style.boxShadow = '';
+                    }, 2000);
                 }
             }, 150);
         }
@@ -18101,6 +18194,12 @@ function __deptUnitsStorageKey() {
 
         // ===== Ficha unidad: en el mismo panel del mapa si existe #buildingMapInlineDetail; si no, modal pantalla completa =====
         function showUnitDetailModal(unit) {
+            var freshU = appState.units.find(function (u) {
+                return __deptSameUnitId(u.id, unit.id);
+            });
+            if (freshU) {
+                unit = freshU;
+            }
             let residentsHtml = '';
             if (unit.residents && unit.residents.length) {
                 residentsHtml = `<ul style="text-align:left; margin:2px 0 0 0; padding-left:12px; list-style: none;">` +
@@ -19421,6 +19520,13 @@ function __deptUnitsStorageKey() {
 
         // ===== MODAL DE NOTA =====
         function showNoteModal(unit, isEditing = false) {
+            // Siempre usar la copia actual en appState (evita nota/contrato desactualizados tras otros guardados)
+            var live = appState.units.find(function (u) {
+                return __deptSameUnitId(u.id, unit.id);
+            });
+            if (live) {
+                unit = live;
+            }
             // Normalizar datos de la unidad antes de mostrar el modal
             if (unit.unitNote === undefined || unit.unitNote === null) {
                 unit.unitNote = '';
@@ -19454,7 +19560,7 @@ function __deptUnitsStorageKey() {
                         </div>
                     </div>
                     ` : ''}
-                    <textarea id="noteTextarea" class="form-input" rows="4" placeholder="Escribe tu nota aquí..." style="width: 100%; margin-bottom: 15px;">${currentNote}</textarea>
+                    <textarea id="noteTextarea" class="form-input" rows="4" placeholder="Escribe tu nota aquí..." style="width: 100%; margin-bottom: 15px;">${__h(currentNote)}</textarea>
                     <div style="margin-bottom: 12px;">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rentalContractCheckbox" ${unit.hasRentalContract ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer;">
@@ -23350,7 +23456,7 @@ function __deptUnitsStorageKey() {
             window.loadUnitsFromCloud(true).catch(function () {});
           }
           if (typeof window.loadFormerResidentsFromCloud === "function") {
-            window.loadFormerResidentsFromCloud().catch(function () {});
+            window.loadFormerResidentsFromCloud(true).catch(function () {});
           }
         }
         if (dash) {
@@ -25006,7 +25112,7 @@ function __deptUnitsStorageKey() {
         window.loadUnitsFromCloud(true).catch(function () {});
       }
       if (typeof window.loadFormerResidentsFromCloud === "function") {
-        window.loadFormerResidentsFromCloud().catch(function () {});
+        window.loadFormerResidentsFromCloud(true).catch(function () {});
       }
     }, 3000);
   };
