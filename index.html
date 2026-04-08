@@ -519,7 +519,8 @@
 
       /**
        * Libro de novedades: unión por id entre remoto y caché local (evita last-write-wins que borra entradas).
-       * Misma idea que mergeStaffChatMessages: timestamp `at` más reciente gana; empate → gana la copia local.
+       * Timestamp `at` más reciente gana; empate → `editedAt` más reciente; segunda ingesta gana empates restantes.
+       * Si la copia ganadora trae `note` vacío y la otra tenía texto, se conserva la nota (listas desfasadas / otro equipo).
        * Respeta __cgPendingDeleted.novedades (eliminaciones de admin no se reinyectan desde el remoto).
        */
       function mergeNovedades(remoteArr, localArr) {
@@ -543,6 +544,16 @@
           if (ta !== tb) return ta >= tb;
           return editedAtMs(a) >= editedAtMs(b);
         }
+        function noteTrimmed(n) {
+          return String(n == null || n.note == null ? "" : n.note).trim();
+        }
+        /** Si la copia ganadora dejó la nota vacía y la otra tenía texto, conservar la nota (evita pérdida al mezclar listas desfasadas). */
+        function novedadMergeNotes(winner, loser) {
+          var wn = noteTrimmed(winner);
+          var ln = noteTrimmed(loser);
+          if (!wn && ln) return Object.assign({}, winner, { note: loser.note });
+          return winner;
+        }
         var byId = Object.create(null);
         function ingest(arr) {
           var i;
@@ -551,7 +562,16 @@
             if (!m || m.id == null || String(m.id) === "") continue;
             var id = String(m.id);
             if (pendDel[id]) continue;
-            if (!byId[id] || novedadWinsOver(m, byId[id])) byId[id] = m;
+            var ex = byId[id];
+            if (!ex) {
+              byId[id] = m;
+              continue;
+            }
+            if (novedadWinsOver(m, ex)) {
+              byId[id] = novedadMergeNotes(m, ex);
+            } else {
+              byId[id] = novedadMergeNotes(ex, m);
+            }
           }
         }
         ingest(remoteArr);
@@ -12115,6 +12135,18 @@
         if (document.visibilityState === "visible") resyncSoon();
       });
       window.addEventListener("online", resyncSoon);
+    })();
+    (function cgFlushCloudOnPageHide() {
+      if (window.__cgFlushCloudOnPageHideBound) return;
+      window.__cgFlushCloudOnPageHideBound = true;
+      function flushNow() {
+        try {
+          if (!window.cgFsBridge || typeof window.cgFsBridge.active !== "function" || !window.cgFsBridge.active()) return;
+          if (typeof window.CG.flushPendingCloudWritesNow === "function") window.CG.flushPendingCloudWritesNow();
+        } catch (eFl) {}
+      }
+      window.addEventListener("pagehide", flushNow);
+      window.addEventListener("beforeunload", flushNow);
     })();
     (function cgBindSessionInvalidationOnUsersRemote() {
       if (window.__cgSessionInvalidationOnUsersBound) return;
@@ -29414,7 +29446,13 @@ function __deptUnitsStorageKey() {
               : vn.value || ""
         };
         G.state.novedades = (Array.isArray(G.state.novedades) ? G.state.novedades : []).concat([rec]);
-        if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("novedades");
+        if (typeof G.cloudPushKeyImmediate === "function") {
+          G.cloudPushKeyImmediate("novedades").then(function (r) {
+            if (r && r.ok === false && !r.skipped && typeof G.toast === "function") {
+              G.toast("No se pudo sincronizar la novedad con la nube. Revise la red.", "error");
+            }
+          });
+        }
         G.logConserjeActivity(
           "novedad",
           "Registró novedad [" + (rec.category || "—") + "] — " + (rec.text || "").slice(0, 140)
@@ -29563,7 +29601,13 @@ function __deptUnitsStorageKey() {
         return Object.assign({}, x, base);
       });
     }
-    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("novedades");
+    if (typeof G.cloudPushKeyImmediate === "function") {
+      G.cloudPushKeyImmediate("novedades").then(function (r) {
+        if (r && r.ok === false && !r.skipped && typeof G.toast === "function") {
+          G.toast("No se pudo sincronizar la marca de turno en la nube.", "error");
+        }
+      });
+    }
     UI.closeModal();
     G.toast("Guardado");
     var admTurnTab = document.querySelector(".admin-tab[data-adm=\"turnos\"]");
@@ -29749,7 +29793,13 @@ function __deptUnitsStorageKey() {
       if (n.id !== id) return n;
       return Object.assign({}, n, patch);
     });
-    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("novedades");
+    if (typeof G.cloudPushKeyImmediate === "function") {
+      G.cloudPushKeyImmediate("novedades").then(function (r) {
+        if (r && r.ok === false && !r.skipped && typeof G.toast === "function") {
+          G.toast("No se pudo guardar en la nube (nota o texto). Revise la red y reintente.", "error");
+        }
+      });
+    }
     UI.closeModal();
     G.toast("Novedad actualizada");
     nav("novedades");
