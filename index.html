@@ -262,7 +262,8 @@
       /** Mismo valor en todos los dispositivos; si gestiona varios edificios en un solo proyecto, use un id por edificio. */
       siteId: "conserjeriawm2",
       useAnonymousAuth: false,
-      useLocalStorageCache: true,
+      /** false: la verdad vive en Firestore (varios equipos); el navegador solo memoria + listener. true: además caché en disco. */
+      useLocalStorageCache: false,
       connectFirestoreEmulator: null
     };
 
@@ -622,7 +623,7 @@
             delete t[shortKey];
             var latest = window.__cgFsMem[shortKey];
             if (typeof latest === "string") window.cgFsBridge.pushImmediate(shortKey, latest);
-          }, 320);
+          }, 0);
         },
         flushPending: function () {
           var t = window.__cgFsWriteTimers;
@@ -705,12 +706,16 @@
             if (!revMetaOk) return;
             if (Math.floor(meta.staffChatRev) <= __cgReadLocalStaffChatRevFromLs(LS)) return;
           }
+          var curMem0 = window.__cgFsMem[shortKey];
           var inflC = window.__cgFsPushInFlightCount && window.__cgFsPushInFlightCount[shortKey];
-          if (inflC > 0) {
-            var curMem = window.__cgFsMem[shortKey];
-            if (typeof curMem === "string" && curMem !== next) {
-              return;
-            }
+          var writeTimerPending = window.__cgFsWriteTimers && window.__cgFsWriteTimers[shortKey];
+          if (
+            shortKey !== "staffChatMessages" &&
+            typeof curMem0 === "string" &&
+            curMem0 !== next &&
+            (inflC > 0 || writeTimerPending)
+          ) {
+            return;
           }
 
           var remoteSnapshot = next;
@@ -811,9 +816,9 @@
             (shortKey === "visits" || shortKey === "staffChatMessages" || shortKey === "novedades") &&
             next !== remoteSnapshot &&
             window.cgFsBridge &&
-            typeof window.cgFsBridge.queueWrite === "function"
+            typeof window.cgFsBridge.pushImmediate === "function"
           ) {
-            window.cgFsBridge.queueWrite(shortKey, next);
+            window.cgFsBridge.pushImmediate(shortKey, next);
           }
         }
       };
@@ -889,7 +894,7 @@
           if (sk === "session") return trySessionSet(fullKey, str);
           window.__cgFsMem[sk] = str;
           if (window.__cgFsUseLocalCache) tryLocalStorageSet(fullKey, str);
-          window.cgFsBridge.queueWrite(sk, str);
+          window.cgFsBridge.pushImmediate(sk, str);
           return true;
         };
 
@@ -8263,7 +8268,7 @@
       try {
         var i;
         var k;
-        var skip = { session: true };
+        var skip = { session: true, __cgPendingDeleted: true };
         for (i = 0; i < localStorage.length; i++) {
           k = localStorage.key(i);
           if (!k || k.indexOf(LS) !== 0) continue;
@@ -8394,7 +8399,16 @@
     function scheduleCloudWrite(shortKey) {
       if (!__cgFsCoreActive() || !shortKey || shortKey === "session") return;
       var str = window.__cgFsMem[shortKey];
-      if (typeof str === "string") window.cgFsBridge.queueWrite(shortKey, str);
+      if (typeof str !== "string") {
+        try {
+          var rSq = P.localGetRaw(LS + shortKey);
+          if (rSq != null && rSq !== "") {
+            window.__cgFsMem[shortKey] = rSq;
+            str = rSq;
+          }
+        } catch (eSq) {}
+      }
+      if (typeof str === "string") window.cgFsBridge.pushImmediate(shortKey, str);
     }
 
     function __cgMaybeAnonymousAuth() {
@@ -8489,6 +8503,14 @@
 
     function cloudSyncAfterDirectLocalStorageWrite(shortKey) {
       if (!shortKey || !__cgFsCoreActive()) return;
+      try {
+        if (typeof window.__cgFsMem[shortKey] !== "string") {
+          var rawSync = P.localGetRaw(LS + shortKey);
+          if (rawSync != null && rawSync !== "") {
+            window.__cgFsMem[shortKey] = rawSync;
+          }
+        }
+      } catch (eSy) {}
       cloudPushKeyImmediate(shortKey);
     }
 
