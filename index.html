@@ -319,6 +319,8 @@
       window.__cgFsLastError = null;
       window.__cgFsListenerUnsub = null;
       window.__cgFsWriteTimers = Object.create(null);
+      /** Cadena Promise: una escritura Firestore tras otra (evita resource-exhausted en el stream). */
+      window.__cgFsPushSerialChain = null;
       window.__cgFsSkipFirestoreKey = { session: true, __cgPendingDeleted: true, staffChatRev: true };
       window.__cgCloudSyncLastInitResult = null;
       window.__cgFsPullGeneration = 0;
@@ -667,11 +669,12 @@
             }
           }
           var mem = window.__cgFsMem;
-          var LS = window.CG_PERSIST.LS;
           for (k in mem) {
             if (!Object.prototype.hasOwnProperty.call(mem, k) || window.__cgFsSkipFirestoreKey[k]) continue;
-            window.cgFsBridge.pushImmediate(k, mem[k]);
+            var js = mem[k];
+            if (typeof js === "string") window.cgFsBridge.pushImmediate(k, js);
           }
+          return window.__cgFsPushSerialChain || Promise.resolve();
         },
         pushImmediate: function (shortKey, jsonString) {
           if (!fsActive() || !shortKey || window.__cgFsSkipFirestoreKey[shortKey]) {
@@ -680,34 +683,52 @@
           if (typeof jsonString !== "string") {
             return Promise.resolve({ ok: false, reason: "bad_payload" });
           }
+          if (!window.__cgFsPushSerialChain) window.__cgFsPushSerialChain = Promise.resolve();
           var infl = window.__cgFsPushInFlightCount;
-          infl[shortKey] = (infl[shortKey] || 0) + 1;
-          var decInflight = function () {
-            infl[shortKey] = (infl[shortKey] || 1) - 1;
-            if (infl[shortKey] <= 0) delete infl[shortKey];
-          };
-          var ref = kvCol().doc(shortKey);
-          var payload = {
-            json: jsonString,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            key: shortKey
-          };
-          if (shortKey === "staffChatMessages") {
-            var LSpr = window.CG_PERSIST && window.CG_PERSIST.LS ? window.CG_PERSIST.LS : "";
-            payload.staffChatRev = __cgReadLocalStaffChatRevFromLs(LSpr);
-          }
-          return ref
-            .set(payload, { merge: true })
-            .then(function () {
-              decInflight();
-              return { ok: true, shortKey: shortKey };
-            })
-            .catch(function (err) {
-              decInflight();
-              window.__cgFsLastError = err;
-              console.warn("[CG][Firestore] escritura", shortKey, err);
-              return { ok: false, err: err, shortKey: shortKey };
-            });
+          var result = new Promise(function (resolve) {
+            window.__cgFsPushSerialChain = window.__cgFsPushSerialChain
+              .then(function () {
+                var latest = window.__cgFsMem[shortKey];
+                if (typeof latest !== "string") {
+                  resolve({ ok: false, reason: "missing_mem", shortKey: shortKey });
+                  return;
+                }
+                infl[shortKey] = (infl[shortKey] || 0) + 1;
+                var decInflight = function () {
+                  infl[shortKey] = (infl[shortKey] || 1) - 1;
+                  if (infl[shortKey] <= 0) delete infl[shortKey];
+                };
+                var ref = kvCol().doc(shortKey);
+                var payload = {
+                  json: latest,
+                  updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                  key: shortKey
+                };
+                if (shortKey === "staffChatMessages") {
+                  var LSpr = window.CG_PERSIST && window.CG_PERSIST.LS ? window.CG_PERSIST.LS : "";
+                  payload.staffChatRev = __cgReadLocalStaffChatRevFromLs(LSpr);
+                }
+                return ref
+                  .set(payload, { merge: true })
+                  .then(function () {
+                    decInflight();
+                    resolve({ ok: true, shortKey: shortKey });
+                  })
+                  .catch(function (err) {
+                    decInflight();
+                    window.__cgFsLastError = err;
+                    console.warn("[CG][Firestore] escritura", shortKey, err);
+                    resolve({ ok: false, err: err, shortKey: shortKey });
+                  });
+              })
+              .catch(function (eQ) {
+                try {
+                  console.warn("[CG][Firestore] cola serial:", eQ);
+                } catch (eZ) {}
+                resolve({ ok: false, err: eQ, shortKey: shortKey });
+              });
+          });
+          return result;
         },
         abortTimers: function () {
           var t = window.__cgFsWriteTimers;
@@ -8597,18 +8618,15 @@
     function cloudPushAllKeysOnce() {
       if (!__cgFsCoreActive()) return Promise.resolve({ ok: true, skipped: true });
       window.cgFsBridge.flushPending();
-      var mem = window.__cgFsMem;
-      var tasks = [];
-      var k;
-      for (k in mem) {
-        if (!Object.prototype.hasOwnProperty.call(mem, k) || window.__cgFsSkipFirestoreKey[k]) continue;
-        tasks.push(window.cgFsBridge.pushImmediate(k, mem[k]));
-      }
-      return Promise.all(tasks).then(function (results) {
-        var bad = results.filter(function (x) {
-          return x && !x.ok && !x.skipped;
-        });
-        return { ok: !bad.length, partial: !!bad.length, count: results.length };
+      /* Una sola cola serial: no duplicar pushImmediate por clave (antes: flush + Promise.all = 2× escrituras). */
+      return (window.__cgFsPushSerialChain || Promise.resolve()).then(function () {
+        var mem = window.__cgFsMem;
+        var n = 0;
+        var k;
+        for (k in mem) {
+          if (Object.prototype.hasOwnProperty.call(mem, k) && !window.__cgFsSkipFirestoreKey[k]) n++;
+        }
+        return { ok: true, partial: false, count: n };
       });
     }
 
@@ -8676,7 +8694,10 @@
         }
         if (key !== "session") {
           __cgMarkLsKeyDirty(key);
-          scheduleCloudWrite(key);
+          /* localSetRaw ya encola pushImmediate con Firestore activo; evitar doble escritura en el stream. */
+          if (typeof window.cgFsBridge !== "object" || typeof window.cgFsBridge.active !== "function" || !window.cgFsBridge.active()) {
+            scheduleCloudWrite(key);
+          }
         }
       } catch (eSave) {
         console.warn("[CG] save: excepción al guardar", key, eSave);
