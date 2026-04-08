@@ -431,6 +431,18 @@
           return t !== t ? 0 : t;
         }
 
+        function visitNotasTrim(v) {
+          return String(v == null || v.notas == null ? "" : v.notas).trim();
+        }
+        /** Observaciones locales si el remoto llegó sin notas (misma idea que merge de novedades). */
+        function mergeVisitNotasFromLocal(remoteRow, localRow) {
+          if (!localRow) return remoteRow;
+          var rn = visitNotasTrim(remoteRow);
+          var ln = visitNotasTrim(localRow);
+          if (!rn && ln) return Object.assign({}, remoteRow, { notas: localRow.notas });
+          return remoteRow;
+        }
+
         var localById = Object.create(null);
         var i;
         for (i = 0; i < localArr.length; i++) {
@@ -454,13 +466,16 @@
           var lOut = outMs(loc);
           if (lOut > 0 && (rOut === 0 || lOut > rOut)) {
             out.push(
-              Object.assign({}, rv, {
-                outAt: loc.outAt,
-                salidaRegistradoPor: loc.salidaRegistradoPor != null ? loc.salidaRegistradoPor : rv.salidaRegistradoPor
-              })
+              mergeVisitNotasFromLocal(
+                Object.assign({}, rv, {
+                  outAt: loc.outAt,
+                  salidaRegistradoPor: loc.salidaRegistradoPor != null ? loc.salidaRegistradoPor : rv.salidaRegistradoPor
+                }),
+                loc
+              )
             );
           } else {
-            out.push(rv);
+            out.push(mergeVisitNotasFromLocal(rv, loc));
           }
         }
 
@@ -685,47 +700,57 @@
           }
           if (!window.__cgFsPushSerialChain) window.__cgFsPushSerialChain = Promise.resolve();
           var infl = window.__cgFsPushInFlightCount;
+          var settled = false;
           var result = new Promise(function (resolve) {
+            function finish(r) {
+              if (settled) return;
+              settled = true;
+              resolve(r);
+            }
             window.__cgFsPushSerialChain = window.__cgFsPushSerialChain
               .then(function () {
-                var latest = window.__cgFsMem[shortKey];
-                if (typeof latest !== "string") {
-                  resolve({ ok: false, reason: "missing_mem", shortKey: shortKey });
-                  return;
+                try {
+                  var latest = window.__cgFsMem[shortKey];
+                  if (typeof latest !== "string") {
+                    finish({ ok: false, reason: "missing_mem", shortKey: shortKey });
+                    return;
+                  }
+                  infl[shortKey] = (infl[shortKey] || 0) + 1;
+                  var decInflight = function () {
+                    infl[shortKey] = (infl[shortKey] || 1) - 1;
+                    if (infl[shortKey] <= 0) delete infl[shortKey];
+                  };
+                  var ref = kvCol().doc(shortKey);
+                  var payload = {
+                    json: latest,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    key: shortKey
+                  };
+                  if (shortKey === "staffChatMessages") {
+                    var LSpr = window.CG_PERSIST && window.CG_PERSIST.LS ? window.CG_PERSIST.LS : "";
+                    payload.staffChatRev = __cgReadLocalStaffChatRevFromLs(LSpr);
+                  }
+                  return ref
+                    .set(payload, { merge: true })
+                    .then(function () {
+                      decInflight();
+                      finish({ ok: true, shortKey: shortKey });
+                    })
+                    .catch(function (err) {
+                      decInflight();
+                      window.__cgFsLastError = err;
+                      console.warn("[CG][Firestore] escritura", shortKey, err);
+                      finish({ ok: false, err: err, shortKey: shortKey });
+                    });
+                } catch (eRun) {
+                  finish({ ok: false, err: eRun, shortKey: shortKey });
                 }
-                infl[shortKey] = (infl[shortKey] || 0) + 1;
-                var decInflight = function () {
-                  infl[shortKey] = (infl[shortKey] || 1) - 1;
-                  if (infl[shortKey] <= 0) delete infl[shortKey];
-                };
-                var ref = kvCol().doc(shortKey);
-                var payload = {
-                  json: latest,
-                  updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                  key: shortKey
-                };
-                if (shortKey === "staffChatMessages") {
-                  var LSpr = window.CG_PERSIST && window.CG_PERSIST.LS ? window.CG_PERSIST.LS : "";
-                  payload.staffChatRev = __cgReadLocalStaffChatRevFromLs(LSpr);
-                }
-                return ref
-                  .set(payload, { merge: true })
-                  .then(function () {
-                    decInflight();
-                    resolve({ ok: true, shortKey: shortKey });
-                  })
-                  .catch(function (err) {
-                    decInflight();
-                    window.__cgFsLastError = err;
-                    console.warn("[CG][Firestore] escritura", shortKey, err);
-                    resolve({ ok: false, err: err, shortKey: shortKey });
-                  });
               })
               .catch(function (eQ) {
                 try {
                   console.warn("[CG][Firestore] cola serial:", eQ);
                 } catch (eZ) {}
-                resolve({ ok: false, err: eQ, shortKey: shortKey });
+                finish({ ok: false, err: eQ, shortKey: shortKey });
               });
           });
           return result;
