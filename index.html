@@ -531,6 +531,18 @@
           var t = new Date(n.at).getTime();
           return t !== t ? 0 : t;
         }
+        /** Desempate cuando `at` es igual (p. ej. solo se editó la nota): gana la revisión más reciente. */
+        function editedAtMs(n) {
+          if (!n || n.editedAt == null) return 0;
+          var e = typeof n.editedAt === "number" ? n.editedAt : new Date(n.editedAt).getTime();
+          return e !== e ? 0 : e;
+        }
+        function novedadWinsOver(a, b) {
+          var ta = atMs(a);
+          var tb = atMs(b);
+          if (ta !== tb) return ta >= tb;
+          return editedAtMs(a) >= editedAtMs(b);
+        }
         var byId = Object.create(null);
         function ingest(arr) {
           var i;
@@ -539,7 +551,7 @@
             if (!m || m.id == null || String(m.id) === "") continue;
             var id = String(m.id);
             if (pendDel[id]) continue;
-            if (!byId[id] || atMs(m) >= atMs(byId[id])) byId[id] = m;
+            if (!byId[id] || novedadWinsOver(m, byId[id])) byId[id] = m;
           }
         }
         ingest(remoteArr);
@@ -709,8 +721,12 @@
           var curMem0 = window.__cgFsMem[shortKey];
           var inflC = window.__cgFsPushInFlightCount && window.__cgFsPushInFlightCount[shortKey];
           var writeTimerPending = window.__cgFsWriteTimers && window.__cgFsWriteTimers[shortKey];
+          /* novedades y visits: siempre pasar al merge aunque haya push en vuelo; si no, se pierden
+           * cambios remotos (otros equipos) o la fusión con memoria local durante la subida. */
           if (
             shortKey !== "staffChatMessages" &&
+            shortKey !== "novedades" &&
+            shortKey !== "visits" &&
             typeof curMem0 === "string" &&
             curMem0 !== next &&
             (inflC > 0 || writeTimerPending)
@@ -29042,6 +29058,7 @@ function __deptUnitsStorageKey() {
       id: G.uid(),
       seq: nextNovedadSeq(),
       at: now,
+      editedAt: Date.now(),
       userId: u.id,
       userName: u.name,
       category: "Turno",
@@ -29386,6 +29403,7 @@ function __deptUnitsStorageKey() {
           id: G.uid(),
           seq: nextNovedadSeq(),
           at: new Date().toISOString(),
+          editedAt: Date.now(),
           userId: u.id,
           userName: u.name,
           category: f.category.value,
@@ -29526,6 +29544,7 @@ function __deptUnitsStorageKey() {
     var base = {
       category: "Turno",
       at: at,
+      editedAt: Date.now(),
       text: text,
       note:
         typeof G.normalizeNovedadUsuarioTexto === "function"
@@ -29697,6 +29716,7 @@ function __deptUnitsStorageKey() {
     }
     var patch = {
       category: f.category.value,
+      editedAt: Date.now(),
       text: typeof G.normalizeNovedadUsuarioTexto === "function" ? G.normalizeNovedadUsuarioTexto(vtx.value) : vtx.value,
       note:
         typeof G.normalizeNovedadUsuarioTexto === "function"
