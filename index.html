@@ -9797,6 +9797,39 @@
     }
 
     /**
+     * Al cerrar sesión con el botón lateral: cierra el tramo de turno abierto del conserje actual
+     * (endReason "logout"). Sin esto, el tramo queda abierto y loginBlockedByOpenConserjeShift bloquea
+     * a cualquier otro conserje hasta que un admin cierre el turno manualmente.
+     */
+    function closeOpenConserjeShiftBeforeLogout() {
+      var u = currentUser();
+      if (!u || u.role !== "conserje") return false;
+      var list = load("shiftLogs", []);
+      if (!Array.isArray(list) || list.length === 0) return false;
+      var openId = null;
+      var i;
+      for (i = 0; i < list.length; i++) {
+        var s = list[i];
+        if (!s || !shiftLogTramoIsOpen(s)) continue;
+        if (sameUserId(s.userId, u.id)) {
+          openId = s.id;
+          break;
+        }
+      }
+      if (!openId) return false;
+      var now = new Date().toISOString();
+      var newList = list.map(function (x) {
+        if (!x || x.id !== openId) return x;
+        return Object.assign({}, x, { endAt: now, endReason: "logout" });
+      });
+      state.shiftLogs = newList;
+      if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
+        window.CG.cloudPushKeyImmediate("shiftLogs");
+      }
+      return true;
+    }
+
+    /**
      * Cierra tramos de turno abiertos cuyo userId ya no es un conserje válido (empleado borrado,
      * duplicado antiguo o rol cambiado). Unifica userId duplicados por mismo nombre de usuario.
      * Solo invocación explícita (Administración → Personal) o API; no corre en arranque.
@@ -12775,7 +12808,7 @@
       authEnsureReady, authValidateDeptGateNewPassword, authVerifyLoginPassword, authCreatePasswordVerifier, authDeptGateExists, authVerifyDeptGate, authSetDeptGateFromPasswords, authSetDeptGateInitial,
       shiftLogTramoIsOpen,
       conserjeShiftBlockerFor,
-      currentUser, setSession, clearSession, rehydrateSessionFromStorage, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict,
+      currentUser, setSession, clearSession, rehydrateSessionFromStorage, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict, closeOpenConserjeShiftBeforeLogout,
       cleanupStaffDirectoryAndShiftOrphans,
       canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, reservaOcurreEnDiaChile, reservaEnCursoAhora, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, proveedorServicioIconClass, proveedorServicioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
@@ -30293,7 +30326,7 @@ function __deptUnitsStorageKey() {
         "</strong>.</li>" +
         "<li>Hasta que pulse <strong>Abrir turno</strong> de nuevo, el sistema <strong>bloqueará</strong> visitas, encomiendas, reservas y nuevas entradas en el libro de novedades.</li>" +
         "<li>Se añadirá automáticamente la marca <strong>Turno cerrado</strong> en la bitácora.</li>" +
-        "<li>Cerrar la sesión del navegador <strong>no cierra</strong> el turno: use este botón solo cuando termine su responsabilidad en recepción.</li>" +
+        "<li>Cerrar solo la pestaña o el navegador <strong>no cierra</strong> el turno. Use <strong>Cerrar sesión</strong> en el menú lateral para salir y dejar el turno cerrado al relevo, o este botón cuando termine su responsabilidad en recepción.</li>" +
         "</ul></div>" +
         "<p class=\"page-desc\" style=\"margin:0.9rem 0 0;line-height:1.45\">Su cuenta seguirá iniciada sesión; solo cambia el estado del turno de trabajo.</p>" +
         "</div>" +
@@ -33089,7 +33122,7 @@ function __deptUnitsStorageKey() {
         G.escapeHtml(weekLabel) +
         "</span></div>" +
         sumTable +
-        "<p class=\"page-desc\" style=\"margin-top:0.75rem\">Las horas suman el tiempo que cae dentro de esa semana (solo <strong>conserjes</strong>; el administrador no genera tiempo en este resumen). Cada tramo comienza cuando el conserje pulsa <strong>Abrir turno</strong> en <em>Libro de novedades</em> (no al iniciar sesión). Un tramo <strong>abierto</strong> sigue acumulando hasta <strong>Cierre de turno</strong>; cerrar sesión no cierra el tramo.</p></div></div>" +
+        "<p class=\"page-desc\" style=\"margin-top:0.75rem\">Las horas suman el tiempo que cae dentro de esa semana (solo <strong>conserjes</strong>; el administrador no genera tiempo en este resumen). Cada tramo comienza cuando el conserje pulsa <strong>Abrir turno</strong> en <em>Libro de novedades</em> (no al iniciar sesión). Un tramo <strong>abierto</strong> sigue acumulando hasta <strong>Cierre de turno</strong> o hasta <strong>Cerrar sesión</strong> en el menú lateral (en ese caso el tramo se cierra con motivo «Cierre de sesión» para que otro conserje pueda entrar).</p></div></div>" +
         "<div class=\"card\"><div class=\"card-h\"><h3>Registros de control horario</h3></div><div class=\"card-b\">" +
         "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Listado completo (todas las fechas). Use <i class=\"fa-solid fa-trash\"></i> para eliminar un tramo. El resumen superior sigue filtrado por la semana elegida.</p>" +
         (detRows
@@ -34902,12 +34935,19 @@ function __deptUnitsStorageKey() {
   })();
 
   document.getElementById("btn-logout").addEventListener("click", function () {
+    var cerrTurno =
+      typeof G.closeOpenConserjeShiftBeforeLogout === "function" && G.closeOpenConserjeShiftBeforeLogout();
     G.clearSession();
     if (typeof G.flushPendingCloudWritesNow === "function") G.flushPendingCloudWritesNow();
     if (typeof G.cloudSyncAbortInFlight === "function") G.cloudSyncAbortInFlight();
     if (typeof G.stopCloudSyncListener === "function") G.stopCloudSyncListener();
     UI.showLogin();
-    G.toast("Sesión cerrada", "warn");
+    G.toast(
+      cerrTurno
+        ? "Sesión cerrada. El turno de conserjería quedó cerrado al salir; otro conserje ya puede iniciar sesión."
+        : "Sesión cerrada",
+      "warn"
+    );
   });
 
   document.getElementById("menu-toggle").addEventListener("click", function () {
@@ -35076,5 +35116,3 @@ function __deptUnitsStorageKey() {
   </script>
 </body>
 </html>
-
-  
