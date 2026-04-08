@@ -226,24 +226,266 @@
         }
       };
     })();
-    /** Limpieza total sin login: abra este HTML con ?cg_limpieza=1 o ?cg_reset_local=1 y se borrará todo y se recargará limpio. */
-    (function cgResetLocalStorageIfQuery() {
+    /**
+     * Limpieza total sin login (endurecida): ?cg_limpieza=1 o ?cg_reset_local=1 solo registran intención;
+     * no borra hasta confirmación explícita en pantalla. Opciones en URL:
+     *   cg_reset_motivo=...   motivo legible (solo registro / UI)
+     *   cg_reset_require_token=1  exige generar y copiar un token en sessionStorage antes de borrar
+     * Sin sessionStorage no se puede guardar la intención: no se borra ni se limpia la URL (evita falsos positivos).
+     */
+    (function cgResetLocalStorageCaptureIntentFromQuery() {
       try {
         var href = String(window.location.href || "");
         var u = new URL(href);
-        if (u.searchParams.get("cg_limpieza") !== "1" && u.searchParams.get("cg_reset_local") !== "1") return;
-        var P = window.CG_PERSIST;
-        if (P && typeof P.clearAllAppBrowserStorage === "function") {
-          P.clearAllAppBrowserStorage();
+        var limp = u.searchParams.get("cg_limpieza") === "1";
+        var rst = u.searchParams.get("cg_reset_local") === "1";
+        if (!limp && !rst) return;
+        var intent = {
+          v: 1,
+          kind: limp ? "cg_limpieza" : "cg_reset_local",
+          motivo: String(u.searchParams.get("cg_reset_motivo") || "").slice(0, 500),
+          requireToken: u.searchParams.get("cg_reset_require_token") === "1",
+          ts: new Date().toISOString(),
+          href: href.slice(0, 800)
+        };
+        try {
+          sessionStorage.setItem("__cgResetLocalIntent", JSON.stringify(intent));
+        } catch (eS) {
+          return;
         }
         u.searchParams.delete("cg_limpieza");
         u.searchParams.delete("cg_reset_local");
-        window.location.replace(u.toString());
+        u.searchParams.delete("cg_reset_motivo");
+        u.searchParams.delete("cg_reset_require_token");
+        if (window.history && typeof history.replaceState === "function") {
+          history.replaceState(null, "", u.pathname + (u.search || "") + (u.hash || ""));
+        }
       } catch (e) {}
     })();
+    (function cgResetLocalStorageConfirmationGate() {
+      function esc(s) {
+        if (s == null) return "";
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/"/g, "&quot;");
+      }
+      function randToken() {
+        var b = new Uint8Array(8);
+        try {
+          crypto.getRandomValues(b);
+        } catch (eC) {
+          var i;
+          for (i = 0; i < b.length; i++) b[i] = Math.floor(Math.random() * 256);
+        }
+        var hex = "0123456789abcdef";
+        var s = "";
+        var j;
+        for (j = 0; j < b.length; j++) s += hex.charAt((b[j] >> 4) & 15) + hex.charAt(b[j] & 15);
+        return s;
+      }
+      function clearIntentAndToken() {
+        try {
+          sessionStorage.removeItem("__cgResetLocalIntent");
+        } catch (e1) {}
+        try {
+          sessionStorage.removeItem("__cgResetLocalToken");
+        } catch (e2) {}
+      }
+      function runGate() {
+        var raw = null;
+        try {
+          raw = sessionStorage.getItem("__cgResetLocalIntent");
+        } catch (eR) {
+          return;
+        }
+        if (!raw) return;
+        var intent;
+        try {
+          intent = JSON.parse(raw);
+        } catch (eJ) {
+          clearIntentAndToken();
+          return;
+        }
+        if (!intent || intent.v !== 1 || !intent.kind) {
+          clearIntentAndToken();
+          return;
+        }
+        if (document.getElementById("__cg-reset-local-gate")) return;
+
+        var ov = document.createElement("div");
+        ov.id = "__cg-reset-local-gate";
+        ov.setAttribute("role", "dialog");
+        ov.setAttribute("aria-modal", "true");
+        ov.setAttribute("aria-labelledby", "__cg-reset-local-title");
+        ov.style.cssText =
+          "position:fixed;inset:0;z-index:2147483646;background:rgba(15,18,28,.88);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;font:15px/1.45 system-ui,Segoe UI,sans-serif;color:#e8eaef;";
+        var box = document.createElement("div");
+        box.style.cssText =
+          "max-width:32rem;width:100%;background:#1a1f2e;border:1px solid #3d4a66;border-radius:12px;padding:1.25rem 1.35rem;box-shadow:0 16px 48px rgba(0,0,0,.45);";
+        var title = document.createElement("h2");
+        title.id = "__cg-reset-local-title";
+        title.textContent = "Borrado total del almacenamiento de la app";
+        title.style.cssText = "margin:0 0 .6rem;font-size:1.15rem;color:#fbbf24;";
+        var p1 = document.createElement("p");
+        p1.style.cssText = "margin:0 0 .75rem;opacity:.95;";
+        p1.innerHTML =
+          "Se solicitó un <strong>reset local</strong> por enlace (<code>" +
+          esc(intent.kind) +
+          "</code>). Esto <strong>no se ejecuta solo</strong>: confirme solo si es intencional. Los datos son distintos por origen (URL) y prefijo; un enlace compartido no debe borrar sin su consentimiento.";
+        var pMot = document.createElement("p");
+        pMot.style.cssText = "margin:0 0 .5rem;font-size:.88rem;background:#0f1419;padding:.5rem .65rem;border-radius:8px;border:1px solid #334155;";
+        pMot.innerHTML =
+          "<strong>Motivo registrado:</strong> " +
+          (intent.motivo ? esc(intent.motivo) : "<em>(ninguno — puede añadir <code>?cg_reset_motivo=...</code> al enlace)</em>");
+        var pMeta = document.createElement("p");
+        pMeta.style.cssText = "margin:0 0 1rem;font-size:.78rem;opacity:.75;word-break:break-all;";
+        pMeta.textContent = "Solicitud: " + intent.ts + (intent.href ? " · " + intent.href : "");
+
+        var tokRow = document.createElement("div");
+        tokRow.style.cssText = "margin:0 0 1rem;display:none;";
+        var tokBtn = document.createElement("button");
+        tokBtn.type = "button";
+        tokBtn.textContent = "Generar token temporal (sessionStorage)";
+        tokBtn.style.cssText =
+          "margin-bottom:.5rem;padding:.45rem .85rem;border-radius:8px;border:1px solid #64748b;background:#334155;color:#fff;cursor:pointer;font:inherit;";
+        var tokShow = document.createElement("div");
+        tokShow.style.cssText =
+          "font-family:ui-monospace,monospace;font-size:.85rem;padding:.45rem .55rem;background:#0f172a;border-radius:6px;margin-bottom:.5rem;word-break:break-all;display:none;";
+        var tokLab = document.createElement("label");
+        tokLab.style.cssText = "display:block;font-size:.82rem;margin-bottom:.25rem;";
+        tokLab.textContent = "Escriba el token mostrado:";
+        var tokInp = document.createElement("input");
+        tokInp.type = "text";
+        tokInp.autocomplete = "off";
+        tokInp.style.cssText = "width:100%;box-sizing:border-box;padding:.5rem;border-radius:8px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;font:inherit;";
+        if (intent.requireToken) {
+          tokRow.style.display = "block";
+        }
+        tokBtn.onclick = function () {
+          var t = randToken();
+          try {
+            sessionStorage.setItem("__cgResetLocalToken", t);
+          } catch (eT) {
+            tokShow.textContent = "No se pudo guardar el token en sessionStorage.";
+            tokShow.style.display = "block";
+            return;
+          }
+          tokShow.textContent = t;
+          tokShow.style.display = "block";
+        };
+        tokRow.appendChild(tokBtn);
+        tokRow.appendChild(tokShow);
+        tokRow.appendChild(tokLab);
+        tokRow.appendChild(tokInp);
+
+        var chk = document.createElement("label");
+        chk.style.cssText = "display:flex;gap:.5rem;align-items:flex-start;margin:0 0 .75rem;cursor:pointer;font-size:.88rem;";
+        var chkIn = document.createElement("input");
+        chkIn.type = "checkbox";
+        chkIn.style.marginTop = "0.2rem";
+        chk.appendChild(chkIn);
+        chk.appendChild(document.createTextNode(" Entiendo que se eliminarán por completo los datos de esta app en este navegador (localStorage/sessionStorage del producto) y que deberé registrar de nuevo al administrador si aplica."));
+
+        var phraseLab = document.createElement("label");
+        phraseLab.style.cssText = "display:block;font-size:.82rem;margin-bottom:.25rem;";
+        phraseLab.textContent = 'Para confirmar, escriba la palabra BORRAR (mayúsculas):';
+        var phraseInp = document.createElement("input");
+        phraseInp.type = "text";
+        phraseInp.autocomplete = "off";
+        phraseInp.style.cssText =
+          "width:100%;box-sizing:border-box;padding:.5rem;border-radius:8px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;font:inherit;margin-bottom:1rem;";
+
+        var bar = document.createElement("div");
+        bar.style.cssText = "display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end;";
+        var btnCancel = document.createElement("button");
+        btnCancel.type = "button";
+        btnCancel.textContent = "Cancelar (no borrar)";
+        btnCancel.style.cssText =
+          "padding:.5rem 1rem;border-radius:8px;border:1px solid #64748b;background:transparent;color:#e2e8f0;cursor:pointer;font:inherit;";
+        btnCancel.onclick = function () {
+          clearIntentAndToken();
+          ov.remove();
+        };
+        var btnGo = document.createElement("button");
+        btnGo.type = "button";
+        btnGo.textContent = "Ejecutar borrado y recargar";
+        btnGo.style.cssText =
+          "padding:.5rem 1rem;border-radius:8px;border:1px solid #b91c1c;background:#991b1b;color:#fff;cursor:pointer;font:inherit;font-weight:600;";
+        btnGo.onclick = function () {
+          if (!chkIn.checked) {
+            alert("Marque la casilla de confirmación.");
+            return;
+          }
+          if (String(phraseInp.value || "").trim() !== "BORRAR") {
+            alert('Escriba exactamente BORRAR en el campo de confirmación.');
+            return;
+          }
+          if (intent.requireToken) {
+            var expect = null;
+            try {
+              expect = sessionStorage.getItem("__cgResetLocalToken");
+            } catch (eE) {}
+            if (!expect || String(tokInp.value || "").trim() !== expect) {
+              alert("Modo estricto: genere el token y cópielo correctamente en el campo indicado.");
+              return;
+            }
+          }
+          try {
+            console.info(
+              "[CG] Borrado local confirmado por usuario",
+              JSON.stringify(
+                {
+                  kind: intent.kind,
+                  motivo: intent.motivo || null,
+                  requireToken: !!intent.requireToken,
+                  ts: new Date().toISOString()
+                },
+                null,
+                0
+              )
+            );
+          } catch (eL) {}
+          var P = window.CG_PERSIST;
+          if (P && typeof P.clearAllAppBrowserStorage === "function") {
+            P.clearAllAppBrowserStorage();
+          }
+          clearIntentAndToken();
+          try {
+            window.location.replace(window.location.pathname + (window.location.search || "") + (window.location.hash || ""));
+          } catch (eRep) {
+            window.location.reload();
+          }
+        };
+
+        bar.appendChild(btnCancel);
+        bar.appendChild(btnGo);
+        box.appendChild(title);
+        box.appendChild(p1);
+        box.appendChild(pMot);
+        box.appendChild(pMeta);
+        box.appendChild(tokRow);
+        box.appendChild(chk);
+        box.appendChild(phraseLab);
+        box.appendChild(phraseInp);
+        box.appendChild(bar);
+        ov.appendChild(box);
+        document.body.appendChild(ov);
+        try {
+          phraseInp.focus();
+        } catch (eF) {}
+      }
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", runGate);
+      } else {
+        runGate();
+      }
+    })();
     window.__CG_FACTORY_DISTRIB__ = true;
+    /** Identificador de esta variante del HTML (diagnóstico / comparación de entorno; no cambia datos). */
+    window.CG_HTML_VARIANT_ID = "index-fabrica";
   </script>
-  <!-- Firebase: fuente de verdad en Firestore; localStorage solo como caché opcional (ver CG_FIREBASE_CONFIG). -->
+  <!-- Firebase: Firestore sincroniza; localStorage guarda copia durable de claves de negocio (offline-first, sobrevive a F5). -->
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
@@ -262,7 +504,7 @@
       /** Mismo valor en todos los dispositivos; si gestiona varios edificios en un solo proyecto, use un id por edificio. */
       siteId: "conserjeriawm2",
       useAnonymousAuth: false,
-      /** false: la verdad vive en Firestore (varios equipos); el navegador solo memoria + listener. true: además caché en disco. */
+      /** La copia en disco de datos de negocio con Firestore activo es siempre obligatoria (local-first); este flag queda por compatibilidad. */
       useLocalStorageCache: false,
       connectFirestoreEmulator: null
     };
@@ -314,8 +556,11 @@
       window.__cgFsMem = Object.create(null);
       /** Contador de escrituras Firestore en curso por clave corta (evita race: snapshot viejo pisa memoria local). */
       window.__cgFsPushInFlightCount = Object.create(null);
+      /** Refleja CG_FIREBASE_CONFIG.useLocalStorageCache (reservado); la copia durable en disco ya no depende de este valor. */
       window.__cgFsUseLocalCache = true;
       window.__cgFsRemoteReady = false;
+      /** true solo tras snapshot completo de la colección kv o cloudPullAllOnce exitoso (nunca tras cloudPullSingleLsKey). */
+      window.__cgCloudKvHydratedOnce = false;
       window.__cgFsLastError = null;
       window.__cgFsListenerUnsub = null;
       window.__cgFsWriteTimers = Object.create(null);
@@ -665,6 +910,93 @@
       window.__cgFsPumpGapTimer = null;
       window.__cgFsPumpIdleWaiters = [];
 
+      /**
+       * Outbox de sincronización (localStorage, sin pasar por el parche CG_PERSIST): claves cuyo último set a
+       * Firestore puede no haberse confirmado antes de cerrar/refrescar. Los datos de negocio ya van en disco
+       * de forma síncrona en localSetRaw; esto solo marca “pendiente de ACK remoto” para reintentar al arrancar.
+       * No usar navigator.sendBeacon como sustituto: límites de tamaño, sin cabeceras OAuth de Firebase, y la
+       * API REST de Firestore no encaja en un único beacon fiable; la garantía es disco + reintento con el SDK.
+       */
+      var CG_FS_SYNC_OUTBOX_SUFFIX = "__cgFsSyncOutbox";
+
+      function __cgFsOutboxFullKey() {
+        var Po = window.CG_PERSIST;
+        return (Po && Po.LS ? Po.LS : "") + CG_FS_SYNC_OUTBOX_SUFFIX;
+      }
+
+      function __cgFsOutboxLoadRaw() {
+        try {
+          return tryLocalStorageGet(__cgFsOutboxFullKey());
+        } catch (eOb0) {
+          return null;
+        }
+      }
+
+      function __cgFsOutboxParse() {
+        var raw = __cgFsOutboxLoadRaw();
+        if (raw == null || raw === "") return { v: 1, keys: {} };
+        try {
+          var o = JSON.parse(raw);
+          if (!o || typeof o !== "object") return { v: 1, keys: {} };
+          if (!o.keys || typeof o.keys !== "object" || Array.isArray(o.keys)) o.keys = {};
+          return { v: 1, keys: o.keys };
+        } catch (eOb1) {
+          return { v: 1, keys: {} };
+        }
+      }
+
+      function __cgFsOutboxSave(keysObj) {
+        try {
+          tryLocalStorageSet(__cgFsOutboxFullKey(), JSON.stringify({ v: 1, keys: keysObj || {} }));
+        } catch (eOb2) {}
+      }
+
+      function __cgFsOutboxMarkPending(shortKey) {
+        if (!shortKey || window.__cgFsSkipFirestoreKey[shortKey]) return;
+        var o = __cgFsOutboxParse();
+        o.keys[shortKey] = Date.now();
+        __cgFsOutboxSave(o.keys);
+      }
+
+      function __cgFsOutboxRemove(shortKey) {
+        if (!shortKey) return;
+        var o = __cgFsOutboxParse();
+        if (!Object.prototype.hasOwnProperty.call(o.keys, shortKey)) return;
+        delete o.keys[shortKey];
+        __cgFsOutboxSave(o.keys);
+      }
+
+      /** Solo quita del outbox si no hubo edición local más nueva que el JSON que acaba de aceptar Firestore (evita falsos “sync OK”). */
+      function __cgFsOutboxMaybeAck(shortKey, sentJson) {
+        var cur = window.__cgFsMem[shortKey];
+        if (typeof cur === "string" && cur !== sentJson) return;
+        __cgFsOutboxRemove(shortKey);
+      }
+
+      function __cgFsReplaySyncOutbox() {
+        if (!fsActive()) return;
+        var o = __cgFsOutboxParse();
+        var ks = Object.keys(o.keys);
+        if (!ks.length) return;
+        var Po = window.CG_PERSIST;
+        var LSr = Po && Po.LS ? Po.LS : "";
+        var ii;
+        for (ii = 0; ii < ks.length; ii++) {
+          var sk = ks[ii];
+          if (!sk || window.__cgFsSkipFirestoreKey[sk]) continue;
+          var raw =
+            typeof window.__cgFsMem[sk] === "string" && window.__cgFsMem[sk]
+              ? window.__cgFsMem[sk]
+              : LSr
+                ? tryLocalStorageGet(LSr + sk)
+                : null;
+          if (typeof raw === "string" && raw !== "") {
+            window.__cgFsMem[sk] = raw;
+            window.cgFsBridge.pushImmediate(sk, raw);
+          }
+        }
+      }
+
       function __cgFsEnqueueWriteJob(shortKey, resolve) {
         var q = window.__cgFsWritePumpQueue;
         var last = q[q.length - 1];
@@ -735,6 +1067,11 @@
           .set(payload, { merge: true })
           .then(function () {
             decInflight();
+            __cgFsOutboxMaybeAck(shortKey, latest);
+            var memNow = window.__cgFsMem[shortKey];
+            if (typeof memNow === "string" && memNow !== latest) {
+              window.cgFsBridge.pushImmediate(shortKey, memNow);
+            }
             var okr = { ok: true, shortKey: shortKey };
             var rj;
             for (rj = 0; rj < resolvers.length; rj++) {
@@ -819,6 +1156,8 @@
           }
           return window.cgFsBridge.whenWritePumpIdle();
         },
+        /** Reencola subidas marcadas en el outbox (tras pull/hidratar o red recuperada). Idempotente: cada doc kv se reemplaza entero, no se duplican filas de negocio. */
+        replaySyncOutbox: __cgFsReplaySyncOutbox,
         pushImmediate: function (shortKey, jsonString) {
           if (!fsActive() || !shortKey || window.__cgFsSkipFirestoreKey[shortKey]) {
             return Promise.resolve({ ok: true, skipped: true });
@@ -826,6 +1165,7 @@
           if (typeof jsonString !== "string") {
             return Promise.resolve({ ok: false, reason: "bad_payload" });
           }
+          __cgFsOutboxMarkPending(shortKey);
           return new Promise(function (resolve) {
             __cgFsEnqueueWriteJob(shortKey, resolve);
             __cgFsKickWritePump();
@@ -845,7 +1185,9 @@
           if (changeType === "removed" || jsonString == null) {
             var had = Object.prototype.hasOwnProperty.call(window.__cgFsMem, shortKey);
             delete window.__cgFsMem[shortKey];
-            if (window.__cgFsUseLocalCache) tryLocalStorageRemove(full);
+            /* Quitar también del disco: si no, un refresh reaplicaría un documento “fantasma” ya borrado en nube. */
+            tryLocalStorageRemove(full);
+            __cgFsOutboxRemove(shortKey);
             if (had) cgDispatchCloudStorageApplied(shortKey, "removed");
             return;
           }
@@ -968,7 +1310,8 @@
           }
 
           window.__cgFsMem[shortKey] = next;
-          if (window.__cgFsUseLocalCache) tryLocalStorageSet(full, next);
+          /* Espejo en disco del valor fusionado: otras pestañas y F5 ven lo mismo que la nube sin depender solo de RAM. */
+          tryLocalStorageSet(full, next);
           cgDispatchCloudStorageApplied(shortKey, "modified");
           if (
             (shortKey === "visits" || shortKey === "staffChatMessages" || shortKey === "novedades") &&
@@ -1033,10 +1376,9 @@
           var sk = fullKey.slice(LSref.length);
           if (sk === "session") return trySessionGet(fullKey);
           if (Object.prototype.hasOwnProperty.call(window.__cgFsMem, sk)) return window.__cgFsMem[sk];
-          if (window.__cgFsUseLocalCache) {
-            var c = tryLocalStorageGet(fullKey);
-            if (c != null && c !== "") return c;
-          }
+          /* Tras F5 la RAM está vacía: leer localStorage evita perder lo guardado antes de que Firestore confirme. */
+          var c = tryLocalStorageGet(fullKey);
+          if (c != null && c !== "") return c;
           return null;
         };
 
@@ -1051,7 +1393,8 @@
           var sk = fullKey.slice(LSref.length);
           if (sk === "session") return trySessionSet(fullKey, str);
           window.__cgFsMem[sk] = str;
-          if (window.__cgFsUseLocalCache) tryLocalStorageSet(fullKey, str);
+          /* Escritura síncrona a disco primero: si falla la red o el usuario recarga, el dato sigue en este equipo. */
+          tryLocalStorageSet(fullKey, str);
           window.cgFsBridge.pushImmediate(sk, str);
           return true;
         };
@@ -1073,7 +1416,7 @@
             return;
           }
           delete window.__cgFsMem[sk];
-          if (window.__cgFsUseLocalCache) tryLocalStorageRemove(fullKey);
+          tryLocalStorageRemove(fullKey);
           if (!window.__cgFsSkipFirestoreKey[sk] && window.cgDb) {
             kvCol()
               .doc(sk)
@@ -8426,7 +8769,7 @@
       try {
         var i;
         var k;
-        var skip = { session: true, __cgPendingDeleted: true };
+        var skip = { session: true, __cgPendingDeleted: true, __cgFsSyncOutbox: true };
         for (i = 0; i < localStorage.length; i++) {
           k = localStorage.key(i);
           if (!k || k.indexOf(LS) !== 0) continue;
@@ -8437,9 +8780,9 @@
       } catch (eSt) {}
     }
 
-    /** Arranque: hidratar memoria desde caché local antes del primer snapshot remoto. */
+    /** Arranque: copiar disco → mem para que flush/push y merges vean lo mismo que tras un guardado (pendiente de subir). */
     function __cgHydrateMemLsFromLocalStorageBackup() {
-      if (!__cgFsCoreActive() || !window.__cgFsUseLocalCache) return;
+      if (!__cgFsCoreActive()) return;
       try {
         var i;
         var k;
@@ -8447,7 +8790,7 @@
           k = localStorage.key(i);
           if (!k || k.indexOf(LS) !== 0) continue;
           var sk = k.slice(LS.length);
-          if (sk === "session" || window.__cgFsSkipFirestoreKey[sk]) continue;
+          if (sk === "session" || sk === "__cgFsSyncOutbox" || window.__cgFsSkipFirestoreKey[sk]) continue;
           if (Object.prototype.hasOwnProperty.call(window.__cgFsMem, sk)) continue;
           var raw = localStorage.getItem(k);
           if (raw != null && raw !== "") window.__cgFsMem[sk] = raw;
@@ -8615,6 +8958,12 @@
               window.cgFsBridge.applyRemoteDoc(id, js, chg.type, meta);
             });
             window.__cgFsRemoteReady = true;
+            window.__cgCloudKvHydratedOnce = true;
+            try {
+              if (window.CG && typeof window.CG.ensureCloudInstallBaseline === "function") {
+                window.CG.ensureCloudInstallBaseline();
+              }
+            } catch (eBlSnap) {}
           },
           function (err) {
             window.__cgFsLastError = err;
@@ -8635,6 +8984,11 @@
         };
         window.__cgCloudSyncLastInitResult = rOk;
         attachStaffChatRemoteSync();
+        try {
+          if (window.cgFsBridge && typeof window.cgFsBridge.replaySyncOutbox === "function") {
+            window.cgFsBridge.replaySyncOutbox();
+          }
+        } catch (eReplay) {}
         return rOk;
       });
     }
@@ -8646,6 +9000,8 @@
         } catch (eS) {}
         window.__cgFsListenerUnsub = null;
       }
+      window.__cgFsRemoteReady = false;
+      window.__cgCloudKvHydratedOnce = false;
       try {
         if (window.CG && typeof window.CG.detachStaffChatRemoteSync === "function") window.CG.detachStaffChatRemoteSync();
       } catch (eD) {}
@@ -8691,6 +9047,12 @@
           }
         });
         window.__cgFsRemoteReady = true;
+        window.__cgCloudKvHydratedOnce = true;
+        try {
+          if (window.CG && typeof window.CG.ensureCloudInstallBaseline === "function") {
+            window.CG.ensureCloudInstallBaseline();
+          }
+        } catch (eBlPull) {}
       }).catch(function (err) {
         window.__cgFsLastError = err;
         __cgSyncLog("warn", "firestore_pull_all", err);
@@ -8730,6 +9092,7 @@
     }
 
     function flushPendingCloudWritesNow() {
+      /* Oportunista: pagehide/beforeunload no esperan la Promise; el outbox + localStorage ya guardaron el estado. */
       if (window.cgFsBridge) window.cgFsBridge.flushPending();
     }
 
@@ -9113,11 +9476,24 @@
      * Firestore: sin semilla local, el primer admin solo guardaba `users` y `roleModules` quedaba vacío
      * → canSeeModule ocultaba todo el menú. Si ya hay usuarios pero faltan permisos o departamento base,
      * aplica el mismo núcleo que defaultState() (sin borrar datos existentes).
+     *
+     * Criterio de seguridad: no sembrar plantilla mientras la nube no haya entregado al menos un ciclo completo
+     * de la colección kv (evita confundir vacío transitorio con instalación nueva). Los defaults destructivos de
+     * departments/building* solo si nunca se aplicó baseline antes (__cgCloudBaselineAppliedOnce).
      */
     function ensureCloudInstallBaseline() {
       if (!__cgFsCoreActive()) return;
+      if (!window.__cgFsRemoteReady) return;
+      if (!window.__cgCloudKvHydratedOnce) return;
+
       var users = load("users", []);
       if (!Array.isArray(users) || users.length === 0) return;
+      var depsExisting = load("departments", []);
+      if (Array.isArray(depsExisting) && depsExisting.length > 0) {
+        if (load("__cgCloudBaselineAppliedOnce", false) !== true) {
+          save("__cgCloudBaselineAppliedOnce", true);
+        }
+      }
       var rm = load("roleModules", { admin: [], conserje: [] });
       var adminEmpty = !Array.isArray(rm.admin) || rm.admin.length === 0;
       var conEmpty = !Array.isArray(rm.conserje) || rm.conserje.length === 0;
@@ -9126,12 +9502,14 @@
       }
       var deps = load("departments", []);
       if (!Array.isArray(deps) || deps.length === 0) {
+        if (load("__cgCloudBaselineAppliedOnce", false) === true) return;
         var d = defaultState();
         save("departments", d.departments);
         save("buildingUnits", d.buildingUnits);
         save("buildingResidents", d.buildingResidents);
         save("buildingFormerResidents", d.buildingFormerResidents);
         save("buildingParking", d.buildingParking);
+        save("__cgCloudBaselineAppliedOnce", true);
       }
     }
 
@@ -12042,8 +12420,219 @@
           r.warnings.push("Último error escritura Firestore: " + (fe && fe.message ? fe.message : String(fe)));
         }
       } catch (eFe) {}
+      try {
+        r.persistenceEnv = getPersistenceEnvironmentReport();
+        r.persistenceFingerprintSaved = readSavedPersistEnvFingerprint();
+        r.persistenceMismatch = [];
+        if (r.persistenceFingerprintSaved && r.persistenceEnv) {
+          r.persistenceMismatch = persistenceEnvMismatchLines(r.persistenceFingerprintSaved, r.persistenceEnv);
+        }
+      } catch (ePers) {
+        r.warnings.push("Diagnóstico de persistencia: " + (ePers && ePers.message ? ePers.message : String(ePers)));
+      }
       r.ok = r.issues.length === 0;
       return r;
+    }
+
+    function getPersistenceEnvironmentReport() {
+      var origin = "";
+      var protocol = "";
+      var hostname = "";
+      var port = "";
+      try {
+        origin = String(window.location.origin || "");
+        protocol = String(window.location.protocol || "");
+        hostname = String(window.location.hostname || "");
+        port = String(window.location.port || "");
+      } catch (e0) {}
+      var prefix = typeof LS === "string" ? LS : window.CG_PERSIST && window.CG_PERSIST.LS ? window.CG_PERSIST.LS : "";
+      var siteId =
+        window.CG_FIREBASE_CONFIG && window.CG_FIREBASE_CONFIG.siteId != null
+          ? String(window.CG_FIREBASE_CONFIG.siteId).trim()
+          : "";
+      var modeCloud = false;
+      try {
+        modeCloud = __cgEffectiveCloudOnly();
+      } catch (e1) {}
+      var keyCount = 0;
+      try {
+        if (P && typeof P.eachLocalKeyWithPrefix === "function" && prefix) {
+          P.eachLocalKeyWithPrefix(prefix, function () {
+            keyCount++;
+          });
+        }
+      } catch (e2) {}
+      var inIframe = false;
+      try {
+        inIframe = window.top !== window.self;
+      } catch (e3) {
+        inIframe = true;
+      }
+      var isFileProtocol = protocol === "file:";
+      var likelyEmbeddedPreview = false;
+      try {
+        likelyEmbeddedPreview = /Cursor|vscode-webview|electron|wv-workbench|replit\.com|codepen/i.test(
+          navigator.userAgent || ""
+        );
+      } catch (e4) {}
+      var htmlVariant = typeof window.CG_HTML_VARIANT_ID === "string" ? window.CG_HTML_VARIANT_ID : "unknown";
+      return {
+        origin: origin,
+        protocol: protocol,
+        hostname: hostname,
+        port: port,
+        lsPrefix: prefix,
+        siteId: siteId,
+        modeCloud: modeCloud,
+        localStorageKeyCount: keyCount,
+        htmlVariant: htmlVariant,
+        inIframe: inIframe,
+        isFileProtocol: isFileProtocol,
+        likelyEmbeddedPreview: likelyEmbeddedPreview,
+        remoteReady: !!window.__cgFsRemoteReady,
+        kvHydrated: !!window.__cgCloudKvHydratedOnce
+      };
+    }
+
+    function readSavedPersistEnvFingerprint() {
+      try {
+        var v = load("__cgPersistEnvFingerprint", null);
+        if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+        return v;
+      } catch (eR) {
+        return null;
+      }
+    }
+
+    function persistenceEnvMismatchLines(saved, cur) {
+      if (!saved || !cur) return [];
+      var out = [];
+      if (saved.origin && cur.origin && saved.origin !== cur.origin) {
+        out.push("El origen (URL base) no coincide con la referencia guardada.");
+      }
+      if (saved.lsPrefix && cur.lsPrefix && saved.lsPrefix !== cur.lsPrefix) {
+        out.push("El prefijo de localStorage no coincide (otra variante o copia del HTML).");
+      }
+      if (saved.siteId && cur.siteId && String(saved.siteId) !== String(cur.siteId)) {
+        out.push("El siteId de Firebase no coincide.");
+      }
+      if (saved.htmlVariant && cur.htmlVariant && saved.htmlVariant !== cur.htmlVariant) {
+        out.push("La variante del archivo HTML no coincide.");
+      }
+      return out;
+    }
+
+    function cgCheckPersistenceEnvironmentWarnOnce() {
+      if (window.__cgPersistEnvBannerShown) return;
+      var rep = getPersistenceEnvironmentReport();
+      var parts = [];
+      if (rep.isFileProtocol) {
+        parts.push(
+          "Abre la app como archivo (file://): los datos no son los mismos que con una URL http(s) fija."
+        );
+      }
+      if (rep.inIframe) {
+        parts.push("La app está en un iframe: el almacenamiento es el del origen del marco, no el de la página exterior.");
+      }
+      if (rep.likelyEmbeddedPreview) {
+        parts.push("Parece vista previa embebida: confirme la URL y el origen en Administración → Configuración.");
+      }
+      var saved = readSavedPersistEnvFingerprint();
+      if (saved) {
+        var mism = persistenceEnvMismatchLines(saved, rep);
+        if (mism.length) parts = parts.concat(mism);
+      }
+      if (!parts.length) return;
+      window.__cgPersistEnvBannerShown = true;
+      try {
+        toast(
+          "Persistencia: " +
+            parts[0] +
+            (parts.length > 1 ? " Más detalle en Administración → Configuración (diagnóstico de almacenamiento)." : ""),
+          "warn"
+        );
+      } catch (eT) {}
+    }
+
+    function buildPersistenceDiagnosticsPanelHtml() {
+      var rep = getPersistenceEnvironmentReport();
+      var saved = readSavedPersistEnvFingerprint();
+      var mism = saved ? persistenceEnvMismatchLines(saved, rep) : [];
+      var modeLabel = rep.modeCloud ? "Nube (Firestore) + copia en este navegador" : "Solo este navegador";
+      var syncHint = rep.modeCloud
+        ? "remoteReady=" + (rep.remoteReady ? "sí" : "no") + ", kvCompleto=" + (rep.kvHydrated ? "sí" : "no")
+        : "—";
+      var savedBlock = saved
+        ? "<p class=\"page-desc\" style=\"margin:0.5rem 0 0\"><strong>Referencia guardada:</strong> " +
+          escapeHtml(String(saved.savedAt || "")) +
+          " · origen " +
+          escapeHtml(String(saved.origin || "")) +
+          "</p>"
+        : "<p class=\"page-desc\" style=\"margin:0.5rem 0 0\">Sin referencia guardada. Use <strong>Guardar referencia de entorno</strong> cuando esta sea la URL y variante definitivas.</p>";
+      var mismatchUl =
+        mism.length > 0
+          ? "<ul style=\"margin:0.5rem 0 0;padding-left:1.2rem;color:var(--danger-color)\">" +
+            mism
+              .map(function (m) {
+                return "<li>" + escapeHtml(m) + "</li>";
+              })
+              .join("") +
+            "</ul>"
+          : "";
+      var envUl = "";
+      if (rep.isFileProtocol || rep.inIframe || rep.likelyEmbeddedPreview) {
+        envUl = "<ul style=\"margin:0.5rem 0 0;padding-left:1.2rem;color:var(--accent-color)\">";
+        if (rep.isFileProtocol) {
+          envUl +=
+            "<li><strong>file://</strong> — localStorage es distinto al de <code>http(s)://…</code>; no es el mismo “sitio” que un servidor.</li>";
+        }
+        if (rep.inIframe) {
+          envUl += "<li><strong>Iframe</strong> — los datos son los del origen del iframe (véase Origen actual arriba).</li>";
+        }
+        if (rep.likelyEmbeddedPreview) {
+          envUl +=
+            "<li><strong>Preview embebido</strong> — puede usar otro origen que la instalación de producción.</li>";
+        }
+        envUl += "</ul>";
+      }
+      return (
+        "<div class=\"card\" style=\"margin-bottom:1rem;border:1px solid var(--accent-color)\">" +
+        "<div class=\"card-h\"><h3>Diagnóstico de almacenamiento y origen</h3></div>" +
+        "<div class=\"card-b\">" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.65rem\">localStorage es <strong>distinto por origen</strong> (protocolo + dominio + puerto) y por <strong>prefijo</strong> de esta variante del HTML. Si cambia el puerto, el host o abre otra copia del archivo, verá otro almacén: <em>no significa que los datos se hayan borrado</em>.</p>" +
+        "<table class=\"data-table\" style=\"font-size:0.88rem\">" +
+        "<tbody>" +
+        "<tr><th scope=\"row\" style=\"width:38%;text-align:left;vertical-align:top\">Origen actual</th><td style=\"word-break:break-all\">" +
+        escapeHtml(rep.origin || "—") +
+        "</td></tr>" +
+        "<tr><th scope=\"row\" style=\"text-align:left;vertical-align:top\">Prefijo localStorage</th><td><code>" +
+        escapeHtml(rep.lsPrefix || "—") +
+        "</code></td></tr>" +
+        "<tr><th scope=\"row\" style=\"text-align:left;vertical-align:top\">siteId (Firebase)</th><td><code>" +
+        escapeHtml(rep.siteId || "—") +
+        "</code></td></tr>" +
+        "<tr><th scope=\"row\" style=\"text-align:left;vertical-align:top\">Modo</th><td>" +
+        escapeHtml(modeLabel) +
+        " <span style=\"opacity:0.88\">(" +
+        escapeHtml(syncHint) +
+        ")</span></td></tr>" +
+        "<tr><th scope=\"row\" style=\"text-align:left;vertical-align:top\">Claves con prefijo</th><td><strong>" +
+        String(rep.localStorageKeyCount) +
+        "</strong> <span style=\"opacity:0.85\">(entradas en localStorage bajo el prefijo)</span></td></tr>" +
+        "<tr><th scope=\"row\" style=\"text-align:left;vertical-align:top\">Variante HTML</th><td><code>" +
+        escapeHtml(rep.htmlVariant) +
+        "</code></td></tr>" +
+        "</tbody></table>" +
+        savedBlock +
+        mismatchUl +
+        envUl +
+        "<p class=\"page-desc\" style=\"margin:0.75rem 0 0;font-size:0.8rem\">La referencia de entorno es un JSON pequeño en su almacén; no modifica visitas, usuarios ni otros módulos. Consola: <code>CG.runAppDiagnostics()</code> incluye <code>persistenceEnv</code>.</p>" +
+        "<div class=\"toolbar\" style=\"flex-wrap:wrap;gap:0.5rem;margin-top:0.85rem\">" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"persistEnvSaveReference\"><i class=\"fa-solid fa-bookmark\"></i> Guardar referencia de entorno</button>" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"persistEnvClearReference\"><i class=\"fa-solid fa-eraser\"></i> Quitar referencia</button>" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"persistDiagRefresh\"><i class=\"fa-solid fa-rotate\"></i> Actualizar panel</button>" +
+        "</div></div></div>"
+      );
     }
 
     /** Elige voz en español: prioridad a neural/mejorada con acento latinoamericano (es-419, MX, CL, …). */
@@ -12205,6 +12794,9 @@
       initCloudSync, stopCloudSyncListener, attachStaffChatRemoteSync, detachStaffChatRemoteSync, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPullSingleLsKey, cloudPushAllKeysOnce,
       flushPendingCloudWritesNow, cloudPushKeyImmediate, cloudPushLsKeyPromise, armLsKeyPullQuiet, getCloudSyncLastInitResult,
       runAppDiagnostics,
+      getPersistenceEnvironmentReport: getPersistenceEnvironmentReport,
+      checkPersistenceEnvironmentWarnOnce: cgCheckPersistenceEnvironmentWarnOnce,
+      getPersistenceDiagnosticsPanelHtml: buildPersistenceDiagnosticsPanelHtml,
       registerPendingDeletedLsKey: __cgRegisterPendingDeletedLsKey,
       clearPendingDeletedBucket: __cgClearPendingDeletedLsKey,
       staffChatDedupeKeyForSync: __cgStaffChatDedupeKey,
@@ -12265,6 +12857,15 @@
           if (typeof window.CG.flushPendingCloudWritesNow === "function") window.CG.flushPendingCloudWritesNow();
         } catch (eFl) {}
       }
+      /*
+       * pagehide/beforeunload/visibility hidden: disparan la cola Firestore pero el motor puede matar la página
+       * antes de que termine el stream. No confiar solo en esto: localSetRaw persiste síncrono y __cgFsSyncOutbox
+       * marca pendientes para replay al abrir. sendBeacon no sustituye al SDK (auth Firebase, cuerpo limitado ~64KB,
+       * un POST no equivale a un set merge fiable en cgSites/.../kv sin token en curso).
+       */
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "hidden") flushNow();
+      });
       window.addEventListener("pagehide", flushNow);
       window.addEventListener("beforeunload", flushNow);
     })();
@@ -13869,12 +14470,32 @@ function __deptUnitsStorageKey() {
             }
         }
 
+        function __deptSnapshotUnits(arr) {
+            try {
+                return JSON.parse(JSON.stringify(Array.isArray(arr) ? arr : []));
+            } catch (eSnapU) {
+                return [];
+            }
+        }
+
+        function __deptSnapshotFormer(arr) {
+            try {
+                return JSON.parse(JSON.stringify(Array.isArray(arr) ? arr : []));
+            } catch (eSnapF) {
+                return [];
+            }
+        }
+
         function writeUnitsToStorage(units) {
             var str = window.CG_PERSIST.stringifyForStorage(units);
             if (!str || !window.CG_PERSIST.localSetRaw(__deptUnitsStorageKey(), str)) {
               console.warn("[Dept] writeUnitsToStorage: no se pudo guardar en local");
               return false;
             }
+            try {
+                var stW = window.__CG_DEPT_APP_STATE;
+                if (stW) stW.lastKnownGoodUnits = __deptSnapshotUnits(Array.isArray(units) ? units : []);
+            } catch (eLkgW) {}
             if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
               window.CG.cloudSyncAfterDirectLocalStorageWrite(typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units");
             }
@@ -13918,31 +14539,63 @@ function __deptUnitsStorageKey() {
         };
 
         window.loadUnitsFromCloud = async function(silent) {
+            var hadLkg = Array.isArray(appState.lastKnownGoodUnits);
             try {
                 const raw = window.CG_PERSIST.localGetRaw(__deptUnitsStorageKey());
+                /* Sin datos en almacenamiento: dataset vacío real (primera vez u origen sin clave), no confundir con fallo de lectura. */
                 if (!raw) {
                     appState.units = [];
+                    appState.lastKnownGoodUnits = [];
                     updateAllUI();
-                    return false;
+                    if (!silent) {
+                        showNotification('info', 'ℹ️ No hay unidades guardadas aún en este dispositivo. Puede empezar a registrarlas.');
+                    }
+                    return true;
                 }
                 const units = window.CG_PERSIST.parseJson(raw, null);
                 if (units == null) {
-                    throw new Error('Formato de datos local inválido');
+                    throw new Error('Formato de datos local inválido o JSON corrupto');
                 }
                 if (!Array.isArray(units)) {
                     throw new Error('Formato de datos local inválido');
                 }
                 units.forEach(normalizeUnitData);
                 appState.units = units;
+                appState.lastKnownGoodUnits = __deptSnapshotUnits(units);
                 console.log('✅ Datos cargados desde almacenamiento local:', units.length, 'unidades');
                 updateAllUI();
                 if (!silent) showNotification('success', '✅ Datos cargados desde este dispositivo');
                 return true;
             } catch (error) {
                 console.error('Error cargando datos locales:', error);
-                if (!silent) showNotification('error', '❌ Error al cargar datos locales');
-                appState.units = [];
-                updateAllUI();
+                if (hadLkg) {
+                    appState.units = __deptSnapshotUnits(appState.lastKnownGoodUnits);
+                    updateAllUI();
+                    if (!silent) {
+                        showNotification(
+                            'warning',
+                            '⚠️ No se pudieron leer las unidades (dato corrupto o error temporal). Se muestra la última copia válida.'
+                        );
+                    }
+                } else if (!Array.isArray(appState.units) || appState.units.length === 0) {
+                    appState.units = [];
+                    appState.lastKnownGoodUnits = [];
+                    updateAllUI();
+                    if (!silent) {
+                        showNotification(
+                            'error',
+                            '❌ Error al cargar datos locales y no hay una copia previa válida. Revise almacenamiento o restaure desde copia.'
+                        );
+                    }
+                } else {
+                    updateAllUI();
+                    if (!silent) {
+                        showNotification(
+                            'warning',
+                            '⚠️ Error al leer el almacenamiento; se mantiene el estado actual en memoria (aún no guardado como copia de respaldo).'
+                        );
+                    }
+                }
                 return false;
             }
         };
@@ -13999,6 +14652,10 @@ function __deptUnitsStorageKey() {
                   console.warn("[Dept] saveFormerResidentsToCloud: escritura fallida");
                   return;
                 }
+                try {
+                  var stFr = window.__CG_DEPT_APP_STATE;
+                  if (stFr) stFr.lastKnownGoodFormerResidents = __deptSnapshotFormer(uniqueResidents);
+                } catch (eLkgFr) {}
                 if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
                   window.CG.cloudSyncAfterDirectLocalStorageWrite(typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "wm815_former_residents");
                 }
@@ -14011,6 +14668,7 @@ function __deptUnitsStorageKey() {
         };
 
         window.loadFormerResidentsFromCloud = async function() {
+            var hadLkgFr = Array.isArray(appState.lastKnownGoodFormerResidents);
             try {
                 if (!appState.formerResidents) {
                     appState.formerResidents = [];
@@ -14018,12 +14676,17 @@ function __deptUnitsStorageKey() {
                 const raw = window.CG_PERSIST.localGetRaw(__deptFormerStorageKey());
                 if (!raw) {
                     appState.formerResidents = [];
+                    appState.lastKnownGoodFormerResidents = [];
+                    setTimeout(function () {
+                        if (typeof updateFormerResidentsTable === 'function') {
+                            updateFormerResidentsTable();
+                        }
+                    }, 50);
                     return true;
                 }
                 const parsed = window.CG_PERSIST.parseJson(raw, null);
                 if (parsed == null) {
-                    appState.formerResidents = [];
-                    return false;
+                    throw new Error('JSON de residentes anteriores corrupto o inválido');
                 }
                 if (!Array.isArray(parsed)) {
                     throw new Error('Formato inválido');
@@ -14043,6 +14706,7 @@ function __deptUnitsStorageKey() {
                     }
                 }
                 appState.formerResidents = formerResidents;
+                appState.lastKnownGoodFormerResidents = __deptSnapshotFormer(formerResidents);
                 console.log(`✅ ${formerResidents.length} residentes anteriores cargados desde almacenamiento local`);
                 if (duplicateCount > 0) {
                     console.log(`🧹 Se omitieron ${duplicateCount} duplicados al cargar`);
@@ -14058,8 +14722,26 @@ function __deptUnitsStorageKey() {
                 return true;
             } catch (error) {
                 console.error('❌ Error cargando residentes anteriores locales:', error);
-                if (!appState.formerResidents) {
+                if (hadLkgFr) {
+                    appState.formerResidents = __deptSnapshotFormer(appState.lastKnownGoodFormerResidents);
+                } else if (!Array.isArray(appState.formerResidents)) {
                     appState.formerResidents = [];
+                }
+                setTimeout(function () {
+                    if (typeof updateFormerResidentsTable === 'function') {
+                        updateFormerResidentsTable();
+                    }
+                }, 50);
+                if (hadLkgFr || (Array.isArray(appState.formerResidents) && appState.formerResidents.length > 0)) {
+                    showNotification(
+                        'warning',
+                        '⚠️ No se pudieron leer residentes anteriores desde almacenamiento; se muestra la última lista válida.'
+                    );
+                } else {
+                    showNotification(
+                        'warning',
+                        '⚠️ Error al leer residentes anteriores; lista vacía hasta que se corrija el almacenamiento.'
+                    );
                 }
                 return false;
             }
@@ -14118,6 +14800,8 @@ function __deptUnitsStorageKey() {
         window.__CG_DEPT_APP_STATE = {
             units: [],
             formerResidents: [], // Arrendatarios dados de salida
+            lastKnownGoodUnits: null,
+            lastKnownGoodFormerResidents: null,
             config: {
                 buildingStructure: {
                     19: ['1907', '1908', '1909', '1910', '1911', '1912', '1913', '1914', '1915'],
@@ -14144,6 +14828,8 @@ function __deptUnitsStorageKey() {
         };
         }
         const appState = window.__CG_DEPT_APP_STATE;
+        if (typeof appState.lastKnownGoodUnits === "undefined") appState.lastKnownGoodUnits = null;
+        if (typeof appState.lastKnownGoodFormerResidents === "undefined") appState.lastKnownGoodFormerResidents = null;
 
         // Función para migrar residentes existentes sin fecha de registro individual
         function migrateExistingResidents() {
@@ -17527,44 +18213,41 @@ function __deptUnitsStorageKey() {
                 console.log('💾 Cargando datos desde almacenamiento local del navegador...');
                 var deptRemount = !!window.__CG_DEPT_HAS_MOUNTED_ONCE;
                 window.__CG_DEPT_HAS_MOUNTED_ONCE = true;
-                const cloudSuccess = await loadUnitsFromCloud(deptRemount);
-                
+                const unitsLoadOk = await loadUnitsFromCloud(deptRemount);
+
                 try {
-                    const formerResidentsLoaded = await loadFormerResidentsFromCloud();
-                    if (formerResidentsLoaded) {
+                    const formerOk = await loadFormerResidentsFromCloud();
+                    if (formerOk) {
                         console.log('✅ Residentes anteriores cargados correctamente');
+                    } else {
+                        console.warn('⚠️ Carga de residentes anteriores: se preservó último estado válido o lista vacía confirmada.');
                     }
                 } catch (formerResidentsError) {
                     console.warn('⚠️ Error cargando residentes anteriores (no crítico):', formerResidentsError);
-                    if (!appState.formerResidents) {
-                        appState.formerResidents = [];
-                    }
                 }
-                
+
                 setTimeout(() => {
                     if (typeof updateFormerResidentsTable === 'function') {
                         updateFormerResidentsTable();
                     }
                 }, 100);
-                
-                if (cloudSuccess) {
-                    console.log('✅ Datos cargados desde almacenamiento local');
+
+                if (unitsLoadOk) {
+                    console.log('✅ Unidades: lectura correcta o dataset vacío confirmado en almacenamiento');
                     startRealtimeSync();
                 } else {
-                    console.log('⚠️ No había datos guardados en este navegador');
-                    appState.units = [];
-                    updateAllUI();
+                    console.warn('⚠️ Lectura de unidades falló; no se vació la tabla (última copia válida o estado en memoria).');
                     startRealtimeSync();
-                    showNotification('warning', '⚠️ No hay datos guardados en este dispositivo. Puedes empezar a registrar unidades.');
                 }
             } catch (error) {
                 console.error('❌ Error en la carga inicial:', error);
-                appState.units = [];
-                appState.formerResidents = [];
                 updateAllUI();
                 startRealtimeSync();
                 const errorMessage = error.message || 'Error desconocido';
-                showNotification('error', `❌ Error leyendo datos locales: ${errorMessage}.`);
+                showNotification(
+                    'warning',
+                    '⚠️ Incidencia al iniciar Departamentos: ' + errorMessage + '. No se han vaciado los datos mostrados.'
+                );
             }
 
             // Migrar residentes existentes para agregar fechas de registro individual
@@ -20198,6 +20881,11 @@ function __deptUnitsStorageKey() {
       cgAbsenceAlertStop();
       if (window.CG && typeof window.CG.applyFestiveAmbienceToDom === "function") window.CG.applyFestiveAmbienceToDom();
       if (window.CG && typeof window.CG.syncLoginFirstAdminPanel === "function") window.CG.syncLoginFirstAdminPanel();
+      if (window.CG && typeof window.CG.checkPersistenceEnvironmentWarnOnce === "function") {
+        try {
+          window.CG.checkPersistenceEnvironmentWarnOnce();
+        } catch (ePeL) {}
+      }
     }
     function showApp() {
       var ls = document.getElementById("login-screen");
@@ -20226,6 +20914,11 @@ function __deptUnitsStorageKey() {
         } catch (eBl) {
           console.warn("[CG] ensureCloudInstallBaseline:", eBl);
         }
+      }
+      if (typeof G.checkPersistenceEnvironmentWarnOnce === "function") {
+        try {
+          G.checkPersistenceEnvironmentWarnOnce();
+        } catch (ePeA) {}
       }
       renderTopUser();
       if (typeof G.syncDeptModuleAdminVisibility === "function") {
@@ -32299,7 +32992,9 @@ function __deptUnitsStorageKey() {
         "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;font-size:0.8rem\">Al abrir cualquier pestaña de administración se muestra un aviso (como máximo una vez al día natural) si ya pasó el plazo desde el último respaldo descargado.</p></div>" +
         "<p class=\"page-desc\" style=\"margin:0.85rem 0 0;font-size:0.78rem;color:var(--danger-color)\"><strong>Restaurar todo</strong> borra el almacenamiento local de la app y lo sustituye por el archivo. <strong>Importar módulos</strong> solo sobrescribe las claves de los grupos que elija; el resto no se toca. Con nube/Firestore, valide coherencia tras cualquier restauración.</p>" +
         "</div></div>";
-      p.innerHTML = "<div class=\"card\"><div class=\"card-h\"><h3>Rango estacionamientos (códigos E-)</h3></div><div class=\"card-b\">" +
+      p.innerHTML =
+        (typeof G.getPersistenceDiagnosticsPanelHtml === "function" ? G.getPersistenceDiagnosticsPanelHtml() : "") +
+        "<div class=\"card\"><div class=\"card-h\"><h3>Rango estacionamientos (códigos E-)</h3></div><div class=\"card-b\">" +
         "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Los valores <em>Desde</em>/<em>Hasta</em> son numéricos; en el mapa se crean como <strong>E-1</strong> … <strong>E-</strong><em>n</em> si aún no existen.</p>" +
         "<div class=\"toolbar\" style=\"gap:1rem\"><label>Desde <input type=\"number\" id=\"cfg-pk-a\" value=\"" + G.escapeAttr(String(pkFrom)) + "\" /></label>" +
         "<label>Hasta <input type=\"number\" id=\"cfg-pk-b\" value=\"" + G.escapeAttr(String(pkTo)) + "\" /></label>" +
@@ -33206,6 +33901,43 @@ function __deptUnitsStorageKey() {
     G.toast("Reproduciendo prueba de voz…", "info");
   };
 
+  A.persistEnvSaveReference = function () {
+    if (!G.currentUser()) {
+      G.toast("Inicie sesión para guardar la referencia de entorno.", "warn");
+      return;
+    }
+    if (typeof G.getPersistenceEnvironmentReport !== "function") return;
+    var rep = G.getPersistenceEnvironmentReport();
+    G.save("__cgPersistEnvFingerprint", {
+      origin: rep.origin,
+      lsPrefix: rep.lsPrefix,
+      siteId: rep.siteId,
+      htmlVariant: rep.htmlVariant,
+      savedAt: new Date().toISOString()
+    });
+    G.toast("Referencia de entorno guardada (solo metadatos).", "success");
+    A.renderAdmin("cfg");
+  };
+
+  A.persistEnvClearReference = function () {
+    var cu = G.currentUser();
+    if (!cu || cu.role !== "admin") {
+      G.toast("Solo el administrador puede quitar la referencia.", "warn");
+      return;
+    }
+    try {
+      if (G.persist && typeof G.persist.localRemove === "function") {
+        G.persist.localRemove(G.LS + "__cgPersistEnvFingerprint");
+      }
+    } catch (eC) {}
+    G.toast("Referencia eliminada.", "info");
+    A.renderAdmin("cfg");
+  };
+
+  A.persistDiagRefresh = function () {
+    A.renderAdmin("cfg");
+  };
+
   window.CG_ACTIONS = A;
 
   /**
@@ -33998,6 +34730,11 @@ function __deptUnitsStorageKey() {
         }
       })
       .then(function () {
+        try {
+          if (window.cgFsBridge && typeof window.cgFsBridge.replaySyncOutbox === "function") {
+            window.cgFsBridge.replaySyncOutbox();
+          }
+        } catch (eBootOb) {}
         cgStartApplicationRuntime();
       });
   } else {
