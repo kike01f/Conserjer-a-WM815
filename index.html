@@ -922,7 +922,7 @@
           window.cgDb = firebase.firestore();
           try {
             if (window.cgDb && typeof window.cgDb.settings === "function") {
-              window.cgDb.settings({ experimentalAutoDetectLongPolling: true });
+              window.cgDb.settings({ experimentalAutoDetectLongPolling: true, merge: true });
             }
           } catch (eFsSettings) {}
           window.cgAuth = firebase.auth();
@@ -21995,7 +21995,7 @@ function __deptUnitsStorageKey() {
         "<form id=\"f-nov\" action=\"#\" method=\"post\">" +
         "<div class=\"form-group\"><label>Categoría</label><select name=\"category\" required>" + catsForm + "</select></div>" +
         "<div class=\"form-group\"><label>Descripción</label><textarea name=\"text\" rows=\"3\" required placeholder=\"Detalle de la novedad…\"></textarea></div>" +
-        "<div class=\"form-group\"><label>Nota <span style=\"font-weight:400;opacity:0.85\">(opcional)</span></label><textarea name=\"note\" rows=\"2\" placeholder=\"Aclaraciones, seguimiento, referencia interna…\"></textarea></div>" +
+        "<div class=\"form-group\"><label for=\"f-nov-cgNovNote\">Nota <span style=\"font-weight:400;opacity:0.85\">(opcional)</span></label><textarea id=\"f-nov-cgNovNote\" name=\"cgNovNote\" rows=\"2\" placeholder=\"Aclaraciones, seguimiento, referencia interna…\"></textarea></div>" +
         "<button type=\"submit\" class=\"btn btn-primary\"><i class=\"fa-solid fa-book\"></i> Registrar</button></form></div></div>" +
         "<div class=\"card\" id=\"cg-nov-bitacora-card\"><div class=\"card-h\"><h3>Bitácora</h3><div class=\"toolbar cg-nov-bit-toolbar\">" +
         "<div class=\"cg-nov-q-wrap form-group\" style=\"margin:0\">" +
@@ -28932,6 +28932,18 @@ function __deptUnitsStorageKey() {
     return m + 1;
   }
 
+  /**
+   * Nota opcional del libro de novedades: leer siempre por querySelector (f.note no es fiable en todos los navegadores).
+   * name="cgNovNote" es el actual; se acepta name="note" por compatibilidad con HTML antiguo en caché.
+   */
+  function readNovedadNoteFromForm(form) {
+    if (!form || typeof form.querySelector !== "function") return "";
+    var el = form.querySelector('textarea[name="cgNovNote"]') || form.querySelector('textarea[name="note"]');
+    if (!el) return "";
+    var v = el.value;
+    return v != null ? String(v) : "";
+  }
+
   function shiftTramoAbiertoSeg(s) {
     return !!(s && (s.endAt == null || s.endAt === ""));
   }
@@ -28986,7 +28998,7 @@ function __deptUnitsStorageKey() {
       "Abra su turno en el recuadro <strong>Control de turno</strong> para poder registrar entradas en el libro.";
     var catEl = f.querySelector('[name="category"]');
     var textEl = f.querySelector('[name="text"]');
-    var noteEl = f.querySelector('[name="note"]');
+    var noteEl = f.querySelector('textarea[name="cgNovNote"]') || f.querySelector('textarea[name="note"]');
     var subEl = f.querySelector('button[type="submit"]');
     if (catEl) catEl.disabled = locked;
     if (textEl) textEl.disabled = locked;
@@ -29472,7 +29484,7 @@ function __deptUnitsStorageKey() {
           G.toast(vt.message, "error");
           return;
         }
-        var vn = G.validate.textBlock((f.note && f.note.value) || "", { label: "Nota", min: 0, max: 4000 });
+        var vn = G.validate.textBlock(readNovedadNoteFromForm(f), { label: "Nota", min: 0, max: 4000 });
         if (!vn.ok) {
           G.toast(vn.message, "error");
           return;
@@ -29572,7 +29584,7 @@ function __deptUnitsStorageKey() {
         "<div class=\"form-group\"><label>Texto en bitácora</label><textarea name=\"text\" rows=\"3\" required>" +
         G.escapeHtml(text) +
         "</textarea></div>" +
-        "<div class=\"form-group\"><label>Nota <span style=\"font-weight:400;opacity:0.85\">(opcional)</span></label><textarea name=\"note\" rows=\"2\" placeholder=\"Aclaración o detalle adicional…\">" +
+        "<div class=\"form-group\"><label for=\"f-nov-turno-cgNovNote\">Nota <span style=\"font-weight:400;opacity:0.85\">(opcional)</span></label><textarea id=\"f-nov-turno-cgNovNote\" name=\"cgNovNote\" rows=\"2\" placeholder=\"Aclaración o detalle adicional…\">" +
         G.escapeHtml(n ? String(n.note || "") : "") +
         "</textarea></div>" +
         "<div class=\"form-group\"><label>Fecha y hora</label><input name=\"at\" type=\"datetime-local\" required value=\"" +
@@ -29612,7 +29624,7 @@ function __deptUnitsStorageKey() {
     }
     var text =
       typeof G.normalizeNovedadUsuarioTexto === "function" ? G.normalizeNovedadUsuarioTexto(vt.value) : vt.value;
-    var vnote = G.validate.textBlock((f.note && f.note.value) || "", { label: "Nota", min: 0, max: 4000 });
+    var vnote = G.validate.textBlock(readNovedadNoteFromForm(f), { label: "Nota", min: 0, max: 4000 });
     if (!vnote.ok) {
       G.toast(vnote.message, "error");
       return;
@@ -29758,7 +29770,7 @@ function __deptUnitsStorageKey() {
         "<div class=\"form-group\"><label>Descripción</label><textarea name=\"text\" rows=\"4\">" +
         G.escapeHtml(n.text) +
         "</textarea></div>" +
-        "<div class=\"form-group\"><label>Nota <span style=\"font-weight:400;opacity:0.85\">(opcional)</span></label><textarea name=\"note\" rows=\"3\" placeholder=\"Aclaraciones, seguimiento, referencia interna…\">" +
+        "<div class=\"form-group\"><label for=\"f-nov-e-cgNovNote\">Nota <span style=\"font-weight:400;opacity:0.85\">(opcional)</span></label><textarea id=\"f-nov-e-cgNovNote\" name=\"cgNovNote\" rows=\"3\" placeholder=\"Aclaraciones, seguimiento, referencia interna…\">" +
         G.escapeHtml(String(n.note || "")) +
         "</textarea></div>" +
         "<input type=\"hidden\" name=\"nid\" value=\"" +
@@ -29799,7 +29811,7 @@ function __deptUnitsStorageKey() {
       G.toast(vtx.message, "error");
       return;
     }
-    var vnx = G.validate.textBlock((f.note && f.note.value) || "", { label: "Nota", min: 0, max: 4000 });
+    var vnx = G.validate.textBlock(readNovedadNoteFromForm(f), { label: "Nota", min: 0, max: 4000 });
     if (!vnx.ok) {
       G.toast(vnx.message, "error");
       return;
