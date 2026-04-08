@@ -14505,6 +14505,25 @@ function __deptUnitsStorageKey() {
             return true;
         }
 
+        /** Escribe wm815_former_residents desde un array explícito (disco + lastKnownGood + cloudSync). Usado también en flujos transaccionales sin tocar appState antes de tiempo. */
+        function writeFormerResidentsToStorage(formerResidentsArray) {
+            var arr = Array.isArray(formerResidentsArray) ? formerResidentsArray : [];
+            var strF = window.CG_PERSIST.stringifyForStorage(arr);
+            if (!strF || !window.CG_PERSIST.localSetRaw(__deptFormerStorageKey(), strF)) {
+                return false;
+            }
+            try {
+                var stFr = window.__CG_DEPT_APP_STATE;
+                if (stFr) stFr.lastKnownGoodFormerResidents = __deptSnapshotFormer(arr);
+            } catch (eLkgFr) {}
+            if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
+                window.CG.cloudSyncAfterDirectLocalStorageWrite(
+                    typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "wm815_former_residents"
+                );
+            }
+            return true;
+        }
+
         window.saveUnitsToCloud = async function() {
             try {
                 isSaving = true;
@@ -14622,14 +14641,18 @@ function __deptUnitsStorageKey() {
 
         window.saveFormerResidentsToCloud = async function() {
             try {
-                if (!appState.formerResidents || appState.formerResidents.length === 0) {
-                    console.log('⚠️ No hay residentes anteriores para guardar');
-                    return;
+                if (!Array.isArray(appState.formerResidents)) {
+                    console.warn("[Dept] saveFormerResidentsToCloud: formerResidents no es array; se normaliza a [].");
+                    appState.formerResidents = [];
+                }
+                const source = appState.formerResidents;
+                if (source.length === 0) {
+                    console.log("[Dept] saveFormerResidentsToCloud: guardando lista vacía [] (evita que el último borrado reviva tras recargar).");
                 }
                 let duplicateCount = 0;
                 const uniqueResidents = [];
                 const seenIds = new Set();
-                for (const formerResident of appState.formerResidents) {
+                for (const formerResident of source) {
                     if (!formerResident.id) {
                         console.error('⚠️ Residente anterior sin ID:', formerResident);
                         continue;
@@ -14646,20 +14669,20 @@ function __deptUnitsStorageKey() {
                     appState.formerResidents = uniqueResidents;
                     console.log(`🧹 Eliminados ${duplicateCount} residentes duplicados antes de guardar`);
                 }
-                console.log(`💾 Guardando ${uniqueResidents.length} residentes anteriores en almacenamiento local...`);
-                var strF = window.CG_PERSIST.stringifyForStorage(uniqueResidents);
-                if (!strF || !window.CG_PERSIST.localSetRaw(__deptFormerStorageKey(), strF)) {
-                  console.warn("[Dept] saveFormerResidentsToCloud: escritura fallida");
+                console.log(
+                    "[Dept] saveFormerResidentsToCloud: escribiendo almacenamiento (" +
+                        uniqueResidents.length +
+                        " fila(s) única(s), clave wm815_former_residents / Firestore kv)…"
+                );
+                if (!writeFormerResidentsToStorage(uniqueResidents)) {
+                  console.warn("[Dept] saveFormerResidentsToCloud: localSetRaw falló (lista vacía o no).");
                   return;
                 }
-                try {
-                  var stFr = window.__CG_DEPT_APP_STATE;
-                  if (stFr) stFr.lastKnownGoodFormerResidents = __deptSnapshotFormer(uniqueResidents);
-                } catch (eLkgFr) {}
-                if (window.CG && typeof window.CG.cloudSyncAfterDirectLocalStorageWrite === "function") {
-                  window.CG.cloudSyncAfterDirectLocalStorageWrite(typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "wm815_former_residents");
-                }
-                console.log('✅ Residentes anteriores guardados localmente');
+                console.log(
+                    "[Dept] saveFormerResidentsToCloud: OK — lastKnownGoodFormerResidents=" +
+                        uniqueResidents.length +
+                        " elemento(s); cloudSyncAfterDirectLocalStorageWrite disparado."
+                );
             } catch (error) {
                 console.error('❌ Error guardando residentes anteriores:', error);
                 showNotification('error', '❌ Error al guardar residentes anteriores');
@@ -15056,6 +15079,41 @@ function __deptUnitsStorageKey() {
             s = s.replace(/\s+/g, " ").trim();
             if (!s) return "";
             return "BC-" + s;
+        }
+
+        /** Igual criterio que parkingCanonCode en el core (evita E-101 vs E101 como duplicado). */
+        function __deptFormParkingCanonKey(v) {
+            if (v == null) return "";
+            var s = String(v).trim().replace(/\s+/g, "");
+            if (!s) return "";
+            var m = s.match(/^E-?(\d+)$/i);
+            if (m) return "E-" + m[1];
+            if (/^E-/i.test(s)) return "E-" + s.replace(/^E-/i, "").replace(/\D.*/, "");
+            return s;
+        }
+
+        function __deptFormNormalizeRutKey(rut) {
+            return String(rut || "")
+                .replace(/\./g, "")
+                .replace(/-/g, "")
+                .trim()
+                .toLowerCase();
+        }
+
+        /** Huella para detectar residentes obviamente duplicados en el mismo formulario. */
+        function __deptFormResidentDedupKey(res) {
+            var n = String(res.name || "")
+                .toLowerCase()
+                .replace(/\s+/g, " ")
+                .trim();
+            var t = String(res.type || "").trim();
+            var rut = __deptFormNormalizeRutKey(res.rut);
+            var em = String(res.email || "")
+                .trim()
+                .toLowerCase();
+            if (rut.length >= 7) return n + "\t" + t + "\trut:" + rut;
+            if (em) return n + "\t" + t + "\tem:" + em;
+            return n + "\t" + t + "\tbare";
         }
 
         // ===== Cambio de clave Estadística (PBKDF2 en localStorage + sync opcional; sin variable global ni texto plano) =====
@@ -15853,6 +15911,17 @@ function __deptUnitsStorageKey() {
                         return p && String(p).trim() !== '';
                     });
                 
+                var seenParkingCanon = {};
+                for (var pi = 0; pi < parkingNumbers.length; pi++) {
+                    var pCanon = __deptFormParkingCanonKey(parkingNumbers[pi]);
+                    if (pCanon && seenParkingCanon[pCanon]) {
+                        throw new Error(
+                            "Hay estacionamientos duplicados en el formulario (mismo código: " + parkingNumbers[pi] + ")."
+                        );
+                    }
+                    if (pCanon) seenParkingCanon[pCanon] = true;
+                }
+                
                 // Validar formato de cada estacionamiento
                 for (const parkingNumber of parkingNumbers) {
                     if (!validateParkingNumber(parkingNumber)) {
@@ -15880,6 +15949,26 @@ function __deptUnitsStorageKey() {
                     .filter(function (s) {
                         return s && String(s).trim() !== '';
                     });
+                
+                var normBodegaK =
+                    window.CG && typeof window.CG.normalizeBodegaCodeKey === "function"
+                        ? window.CG.normalizeBodegaCodeKey.bind(window.CG)
+                        : function (x) {
+                              return String(x || "")
+                                  .trim()
+                                  .replace(/\s+/g, " ")
+                                  .toLowerCase();
+                          };
+                var seenBodega = {};
+                for (var si = 0; si < storageNumbers.length; si++) {
+                    var bKey = normBodegaK(storageNumbers[si]);
+                    if (bKey && seenBodega[bKey]) {
+                        throw new Error(
+                            "Hay bodegas duplicadas en el formulario (mismo código: " + storageNumbers[si] + ")."
+                        );
+                    }
+                    if (bKey) seenBodega[bKey] = true;
+                }
                 
                 // Si estamos editando, empezar con la unidad existente para preservar TODOS los campos
                 // Si es nueva, crear objeto desde cero
@@ -15919,6 +16008,24 @@ function __deptUnitsStorageKey() {
                 formData.bikeStorageDetails = bikeStorageDetails;
                 formData.bikeStorageNumber = bikeStorageNumbers.length > 0 ? bikeStorageNumbers[0] : '';
                 formData.bikeStorageDetail = bikeStorageDetails.length > 0 ? bikeStorageDetails[0] : '';
+                
+                var seenBike = {};
+                for (var bii = 0; bii < bikeStorageNumbers.length; bii++) {
+                    var bn = String(bikeStorageNumbers[bii] || "")
+                        .trim()
+                        .toUpperCase();
+                    var bdet = String((bikeStorageDetails[bii] || "").trim()).toLowerCase();
+                    if (!bn) continue;
+                    var bikeK = bn + "|" + bdet;
+                    if (seenBike[bikeK]) {
+                        throw new Error(
+                            "Hay bicicleteros duplicados en el formulario (mismo número" +
+                                (bdet ? " y detalle" : "") +
+                                ")."
+                        );
+                    }
+                    seenBike[bikeK] = true;
+                }
                 
                 // Preservar campos especiales si existen (no sobrescribir si no vienen del formulario)
                 if (existingUnit) {
@@ -16007,6 +16114,18 @@ function __deptUnitsStorageKey() {
                         });
                     }
                 });
+                
+                var resKeysSeen = {};
+                for (var rxi = 0; rxi < formData.residents.length; rxi++) {
+                    var rk = __deptFormResidentDedupKey(formData.residents[rxi]);
+                    if (resKeysSeen[rk]) {
+                        throw new Error(
+                            "Hay residentes duplicados en la misma unidad (mismo nombre, tipo y RUT o correo)."
+                        );
+                    }
+                    resKeysSeen[rk] = true;
+                }
+                
                 // Validaciones
                 if (!formData.unitNumber || !formData.unitUse || !formData.residents.length) {
                     throw new Error('Complete todos los campos requeridos (*)');
@@ -16262,6 +16381,7 @@ function __deptUnitsStorageKey() {
                                 confirmBtn.innerHTML = '✅ Confirmar Salida';
                                 showNotification('error', '❌ No se encontró la unidad');
                                 confirmModal.remove();
+                                isProcessingExit = false;
                                 return;
                             }
                             
@@ -16279,16 +16399,14 @@ function __deptUnitsStorageKey() {
                                 confirmBtn.innerHTML = '✅ Confirmar Salida';
                                 showNotification('error', '❌ No se encontró el residente en la unidad');
                                 confirmModal.remove();
+                                isProcessingExit = false;
                                 return;
                             }
                             
-                            // Asegurar que appState.formerResidents esté inicializado
-                            if (!appState.formerResidents) {
-                                appState.formerResidents = [];
-                            }
+                            const formerList = Array.isArray(appState.formerResidents) ? appState.formerResidents : [];
                             
                             // Verificar si el residente ya está en formerResidents (evitar duplicados)
-                            const alreadyExists = appState.formerResidents.find(r => 
+                            const alreadyExists = formerList.find(r => 
                                 r.name === residentData.name && 
                                 r.type === residentData.type &&
                                 r.unitNumber === unitData.unitNumber &&
@@ -16302,6 +16420,7 @@ function __deptUnitsStorageKey() {
                                 confirmBtn.innerHTML = '✅ Confirmar Salida';
                                 showNotification('warning', '⚠️ Este residente ya está en la lista de residentes anteriores');
                                 confirmModal.remove();
+                                isProcessingExit = false;
                                 return;
                             }
                             
@@ -16321,40 +16440,57 @@ function __deptUnitsStorageKey() {
                                 originalData: residentData.originalData || { ...residentData }
                             };
                             
-                            console.log('📝 Creando residente anterior:', formerResident);
+                            console.log('[Dept] giveResidentExit: snapshot nuevo histórico', formerResident);
                             
-                            // Verificar una vez más antes de agregar (doble verificación)
-                            const existsById = appState.formerResidents.find(r => r.id === uniqueId);
-                            if (!existsById) {
-                                // Agregar a residentes anteriores
-                                appState.formerResidents.push(formerResident);
-                                console.log(`✅ Residente agregado a appState.formerResidents. Total: ${appState.formerResidents.length}`);
-                            } else {
-                                console.warn('⚠️ Residente anterior ya existe con este ID, saltando agregado');
+                            /* Transacción app: clonar estado previo sin mutar appState hasta que ambos persistan; si falla el 2.º guardado, revertir disco de unidades al snapshot actual en memoria. */
+                            let nextUnits;
+                            let nextFormer;
+                            try {
+                                nextUnits = JSON.parse(JSON.stringify(appState.units));
+                            } catch (eNu) {
+                                throw new Error('No se pudo clonar unidades para la operación');
                             }
-                            
-                            // Eliminar de la unidad
-                            currentUnit.residents.splice(currentResidentIndex, 1);
-                            
-                            // Actualizar en appState
-                            const unitIndex = appState.units.findIndex(u => __deptSameUnitId(u.id, unitData.id));
-                            if (unitIndex !== -1) {
-                                appState.units[unitIndex] = currentUnit;
+                            try {
+                                nextFormer = JSON.parse(JSON.stringify(formerList));
+                            } catch (eNf) {
+                                throw new Error('No se pudo clonar residentes anteriores para la operación');
                             }
+                            const nu = nextUnits.find(u => __deptSameUnitId(u.id, unitData.id));
+                            if (!nu || !Array.isArray(nu.residents)) {
+                                throw new Error('Unidad inválida en copia de trabajo');
+                            }
+                            const ixSnap = nu.residents.findIndex(r => 
+                                r.name === residentData.name && 
+                                r.type === residentData.type &&
+                                (r.rut === residentData.rut || (!r.rut && !residentData.rut))
+                            );
+                            if (ixSnap === -1) {
+                                throw new Error('Residente no encontrado en copia de trabajo');
+                            }
+                            nu.residents.splice(ixSnap, 1);
+                            nextFormer.push(formerResident);
                             
-                            // Actualizar mensaje de carga
                             loadingIndicator.querySelector('p').textContent = 'Guardando unidades localmente...';
-                            
-                            console.log('💾 Guardando unidades en almacenamiento local...');
-                            await saveUnitsToCloud();
+                            console.log('[Dept] giveResidentExit: persistiendo unidades (pre-appState)');
+                            if (!writeUnitsToStorage(nextUnits)) {
+                                throw new Error('No se pudieron guardar las unidades');
+                            }
                             
                             loadingIndicator.querySelector('p').textContent = 'Guardando residentes anteriores localmente...';
+                            console.log('[Dept] giveResidentExit: persistiendo histórico (pre-appState)');
+                            if (!writeFormerResidentsToStorage(nextFormer)) {
+                                console.warn('[Dept] giveResidentExit: falló histórico; revirtiendo unidades en almacenamiento al estado previo en memoria');
+                                try {
+                                    writeUnitsToStorage(appState.units);
+                                } catch (eRb) {
+                                    console.error('[Dept] giveResidentExit: rollback de unidades falló', eRb);
+                                }
+                                throw new Error('No se pudieron guardar residentes anteriores');
+                            }
                             
-                            console.log('💾 Guardando residentes anteriores en almacenamiento local...');
-                            await saveFormerResidentsToCloud();
-                            
-                            // Verificar que se guardó correctamente
-                            console.log(`✅ Verificación: appState.formerResidents tiene ${appState.formerResidents.length} residentes`);
+                            appState.units = nextUnits;
+                            appState.formerResidents = nextFormer;
+                            console.log('[Dept] giveResidentExit: memoria y disco alineados; former count=' + nextFormer.length);
                             
                             // Actualizar UI
                             updateAllUI();
@@ -16681,7 +16817,7 @@ function __deptUnitsStorageKey() {
                     const restoreBtn = confirmModal.querySelector('#confirmRestoreBtn');
                     const cancelRestoreBtn = confirmModal.querySelector('#cancelRestoreBtn');
                     
-                    restoreBtn.onclick = async () => {
+                    restoreBtn.onclick = () => {
                         // Deshabilitar botones y mostrar indicador de carga
                         restoreBtn.disabled = true;
                         cancelRestoreBtn.disabled = true;
@@ -16701,7 +16837,7 @@ function __deptUnitsStorageKey() {
                         ensureSpinnerStyle();
                         
                         try {
-                            // Verificar nuevamente que la unidad existe
+                            // Verificar nuevamente que la unidad existe (solo lectura; aún no mutamos appState)
                             const currentUnit = appState.units.find(u => __deptSameUnitId(u.id, formerResident.unitId));
                             if (!currentUnit) {
                                 loadingIndicator.remove();
@@ -16713,28 +16849,58 @@ function __deptUnitsStorageKey() {
                                 return;
                             }
                             
-                            // Restaurar el residente usando los datos originales si están disponibles, sino usar los datos básicos
+                            const formerList = Array.isArray(appState.formerResidents) ? appState.formerResidents : [];
+                            const frSnap = formerList.find(r => r.id === residentId);
+                            if (!frSnap) {
+                                loadingIndicator.remove();
+                                restoreBtn.disabled = false;
+                                cancelRestoreBtn.disabled = false;
+                                restoreBtn.innerHTML = '✅ Sí, Restaurar';
+                                showNotification('error', '❌ El residente ya no está en la lista de anteriores');
+                                confirmModal.remove();
+                                return;
+                            }
+                            
+                            // Misma lógica que antes: originalData completo o campos básicos
                             let restoredResident;
-                            if (formerResident.originalData && typeof formerResident.originalData === 'object') {
-                                // Usar datos originales completos
+                            if (frSnap.originalData && typeof frSnap.originalData === 'object') {
                                 restoredResident = {
-                                    ...formerResident.originalData,
-                                    registeredAt: formerResident.registeredAt || formerResident.originalData.registeredAt || new Date().toISOString()
+                                    ...frSnap.originalData,
+                                    registeredAt: frSnap.registeredAt || frSnap.originalData.registeredAt || new Date().toISOString()
                                 };
                             } else {
-                                // Usar datos básicos guardados
                                 restoredResident = {
-                                    name: formerResident.name,
-                                    email: formerResident.email || '',
-                                    phone: formerResident.phone || '',
-                                    rut: formerResident.rut || '',
-                                    type: formerResident.type,
-                                    registeredAt: formerResident.registeredAt || new Date().toISOString()
+                                    name: frSnap.name,
+                                    email: frSnap.email || '',
+                                    phone: frSnap.phone || '',
+                                    rut: frSnap.rut || '',
+                                    type: frSnap.type,
+                                    registeredAt: frSnap.registeredAt || new Date().toISOString()
                                 };
                             }
                             
-                            // Verificar si el residente ya existe en la unidad (por nombre y tipo)
-                            const existingResident = currentUnit.residents.find(r => 
+                            /* Transacción app: clonar unidades e histórico sin mutar appState; persistir ambos y solo entonces asignar. Si falla el guardado del histórico tras unidades, revertir disco de unidades al snapshot en memoria (evita duplicado residente+former o unidad sin quitar del histórico). */
+                            let nextUnits;
+                            let nextFormer;
+                            try {
+                                nextUnits = JSON.parse(JSON.stringify(appState.units));
+                            } catch (eNu) {
+                                throw new Error('No se pudo clonar unidades para la operación');
+                            }
+                            try {
+                                nextFormer = JSON.parse(JSON.stringify(formerList));
+                            } catch (eNf) {
+                                throw new Error('No se pudo clonar residentes anteriores para la operación');
+                            }
+                            nextFormer = nextFormer.filter(r => r.id !== residentId);
+                            // Último elemento: nextFormer es [] — writeFormerResidentsToStorage([]) persiste lista vacía (no revivir datos viejos al recargar)
+                            
+                            const nu = nextUnits.find(u => __deptSameUnitId(u.id, frSnap.unitId));
+                            if (!nu || !Array.isArray(nu.residents)) {
+                                throw new Error('Unidad inválida en copia de trabajo');
+                            }
+                            
+                            const existingResident = nu.residents.find(r => 
                                 r.name === restoredResident.name && 
                                 r.type === restoredResident.type
                             );
@@ -16744,44 +16910,42 @@ function __deptUnitsStorageKey() {
                                 restoreBtn.disabled = false;
                                 cancelRestoreBtn.disabled = false;
                                 restoreBtn.innerHTML = '✅ Sí, Restaurar';
-                                showNotification('warning', `⚠️ Ya existe un residente con el mismo nombre y tipo en la unidad ${formerResident.unitNumber}`);
+                                showNotification('warning', `⚠️ Ya existe un residente con el mismo nombre y tipo en la unidad ${frSnap.unitNumber}`);
                                 confirmModal.remove();
                                 return;
                             }
                             
-                            // Actualizar mensaje de carga
                             loadingIndicator.querySelector('p').textContent = 'Agregando residente a la unidad...';
-                            
-                            // Agregar el residente a la unidad
-                            if (!currentUnit.residents) {
-                                currentUnit.residents = [];
-                            }
-                            currentUnit.residents.push(restoredResident);
-                            
-                            // Actualizar en appState
-                            const unitIndex = appState.units.findIndex(u => __deptSameUnitId(u.id, formerResident.unitId));
-                            if (unitIndex !== -1) {
-                                appState.units[unitIndex] = currentUnit;
-                            }
-                            
-                            // Eliminar de residentes anteriores
-                            appState.formerResidents = appState.formerResidents.filter(r => r.id !== residentId);
+                            nu.residents.push(restoredResident);
                             
                             loadingIndicator.querySelector('p').textContent = 'Guardando unidades localmente...';
-                            await saveUnitsToCloud();
+                            console.log('[Dept] restoreFormerResident: persistiendo unidades (pre-appState)');
+                            if (!writeUnitsToStorage(nextUnits)) {
+                                throw new Error('No se pudieron guardar las unidades');
+                            }
                             
                             loadingIndicator.querySelector('p').textContent = 'Guardando residentes anteriores localmente...';
+                            console.log('[Dept] restoreFormerResident: persistiendo histórico (pre-appState), former count=' + nextFormer.length);
+                            if (!writeFormerResidentsToStorage(nextFormer)) {
+                                console.warn('[Dept] restoreFormerResident: falló histórico; revirtiendo unidades en almacenamiento al estado previo en memoria');
+                                try {
+                                    writeUnitsToStorage(appState.units);
+                                } catch (eRb) {
+                                    console.error('[Dept] restoreFormerResident: rollback de unidades falló', eRb);
+                                }
+                                throw new Error('No se pudieron guardar residentes anteriores');
+                            }
                             
-                            await saveFormerResidentsToCloud();
+                            appState.units = nextUnits;
+                            appState.formerResidents = nextFormer;
+                            console.log('[Dept] restoreFormerResident: memoria y disco alineados');
                             
-                            // Actualizar UI
                             updateAllUI();
                             
-                            // Remover indicador de carga
                             loadingIndicator.remove();
                             
                             confirmModal.remove();
-                            showNotification('success', `✅ ${formerResident.name} restaurado correctamente a la unidad ${formerResident.unitNumber}`);
+                            showNotification('success', `✅ ${frSnap.name} restaurado correctamente a la unidad ${frSnap.unitNumber}`);
                         } catch (error) {
                             console.error('Error restaurando residente:', error);
                             if (loadingIndicator && loadingIndicator.parentNode) {
@@ -24091,6 +24255,111 @@ function __deptUnitsStorageKey() {
     return { importedUnits: importedUnits, warnings: warnings, previewHtml: previewHtml.join("") };
   }
 
+  function __deptImportDeepClone(obj) {
+    try {
+      return JSON.parse(JSON.stringify(obj));
+    } catch (eDC) {
+      return obj;
+    }
+  }
+
+  /**
+   * Merge de residentes al aplicar Excel (conservador).
+   * - Clave de emparejamiento: RUT normalizado (sin puntos ni guión) si tiene ≥7 caracteres; si no, nombre normalizado + tipo.
+   * - Cada fila del Excel actualiza o crea un residente: se toman name, rut, email, phone, type, registeredAt desde el import; el resto de propiedades del objeto local se conservan (metadatos internos).
+   * - Residentes solo en la app (sin fila equivalente en Excel) se mantienen al final, sin borrar.
+   * - Orden: primero filas del Excel en su orden, luego residentes locales no emparejados.
+   */
+  function __deptImportMergeResidentsForApply(localRes, impRes) {
+    localRes = Array.isArray(localRes) ? localRes : [];
+    impRes = Array.isArray(impRes) ? impRes : [];
+    function keyOf(r) {
+      var rut = String(r.rut || "")
+        .replace(/\./g, "")
+        .replace(/-/g, "")
+        .trim()
+        .toLowerCase();
+      var name = String(r.name || "")
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
+      var type = String(r.type || "").trim();
+      if (rut.length >= 7) return "rut:" + rut;
+      return "nt:" + name + "\t" + type;
+    }
+    var matched = {};
+    var out = [];
+    var i;
+    for (i = 0; i < impRes.length; i++) {
+      var ir = impRes[i];
+      var ik = keyOf(ir);
+      var li = -1;
+      var j;
+      for (j = 0; j < localRes.length; j++) {
+        if (matched[j]) continue;
+        if (keyOf(localRes[j]) === ik) {
+          li = j;
+          break;
+        }
+      }
+      if (li >= 0) {
+        matched[li] = true;
+        var base = __deptImportDeepClone(localRes[li]);
+        base.name = ir.name;
+        if (ir.rut != null) base.rut = ir.rut;
+        if (ir.email != null) base.email = ir.email;
+        if (ir.phone != null) base.phone = ir.phone;
+        if (ir.type != null) base.type = ir.type;
+        if (ir.registeredAt) base.registeredAt = ir.registeredAt;
+        out.push(base);
+      } else {
+        out.push(__deptImportDeepClone(ir));
+      }
+    }
+    for (j = 0; j < localRes.length; j++) {
+      if (!matched[j]) out.push(__deptImportDeepClone(localRes[j]));
+    }
+    return out;
+  }
+
+  /**
+   * Fusiona una unidad existente con el objeto generado desde Excel sin sustituir el registro completo.
+   * - Base: copia profunda de la unidad local (conserva id, createdAt, rentalParkingNumber, hasRentalContract, registradoPor, bodegaCodes y cualquier clave solo-local).
+   * - Desde Excel se aplican uso, estacionamientos/bodegas/bicis y lista de residentes (vía merge de residentes).
+   * - unitNote: solo se sobrescribe si el import trae texto (trim no vacío); si el Excel no aporta nota, se mantiene la nota local.
+   * - unitUse: solo se sobrescribe si el import trae valor no vacío.
+   */
+  function __deptImportMergeUnitsConservative(localUnit, importUnit) {
+    var out = __deptImportDeepClone(localUnit);
+    var imp = importUnit;
+    if (!imp || typeof imp !== "object") return out;
+
+    var unLoc = String(out.unitNumber || "").trim();
+    var unImp = String(imp.unitNumber || "").trim();
+    if (!unLoc && unImp) out.unitNumber = unImp;
+
+    if (imp.unitUse != null && String(imp.unitUse).trim() !== "") out.unitUse = imp.unitUse;
+
+    if (imp.parkingNumber != null) out.parkingNumber = imp.parkingNumber;
+    if (Array.isArray(imp.parkingNumbers)) out.parkingNumbers = imp.parkingNumbers.slice();
+
+    if (imp.storageNumber != null) out.storageNumber = imp.storageNumber;
+    if (Array.isArray(imp.storageNumbers)) out.storageNumbers = imp.storageNumbers.slice();
+
+    if (Array.isArray(imp.bikeStorageNumbers)) {
+      out.bikeStorageNumbers = imp.bikeStorageNumbers.slice();
+      out.bikeStorageDetails = Array.isArray(imp.bikeStorageDetails) ? imp.bikeStorageDetails.slice() : [];
+      if (imp.bikeStorageNumber != null) out.bikeStorageNumber = imp.bikeStorageNumber;
+      if (imp.bikeStorageDetail != null) out.bikeStorageDetail = imp.bikeStorageDetail;
+    }
+
+    var impNote = String(imp.unitNote == null ? "" : imp.unitNote).trim();
+    if (impNote !== "") out.unitNote = imp.unitNote;
+
+    out.residents = __deptImportMergeResidentsForApply(out.residents, imp.residents);
+    return out;
+  }
+
   A.applyDepartamentosImportedUnits = function (importedUnits, warnings, stats) {
     if (!importedUnits || !importedUnits.length) {
       G.toast("No hay unidades para importar.", "warn");
@@ -24101,14 +24370,35 @@ function __deptUnitsStorageKey() {
     var rawAll = G.persist.localGetRaw(LS_U);
     var existingAll = G.persist.parseJson(rawAll || "[]", []);
     if (!Array.isArray(existingAll)) existingAll = [];
-    var replaceKey = {};
+    var importByKey = {};
     importedUnits.forEach(function (u) {
-      replaceKey[G.normalizeUnitNumberKey(u.unitNumber)] = true;
+      if (u && u.unitNumber) importByKey[G.normalizeUnitNumberKey(u.unitNumber)] = u;
     });
-    var kept = existingAll.filter(function (u) {
-      return !(u && u.unitNumber && replaceKey[G.normalizeUnitNumberKey(u.unitNumber)]);
+    var merged = [];
+    var appliedImportKeys = {};
+    existingAll.forEach(function (ex) {
+      if (ex == null) {
+        merged.push(ex);
+        return;
+      }
+      if (!ex.unitNumber) {
+        merged.push(ex);
+        return;
+      }
+      var k = G.normalizeUnitNumberKey(ex.unitNumber);
+      var imp = importByKey[k];
+      if (imp) {
+        merged.push(__deptImportMergeUnitsConservative(ex, imp));
+        appliedImportKeys[k] = true;
+      } else {
+        merged.push(ex);
+      }
     });
-    var merged = kept.concat(importedUnits);
+    importedUnits.forEach(function (u) {
+      if (!u || !u.unitNumber) return;
+      var k2 = G.normalizeUnitNumberKey(u.unitNumber);
+      if (!appliedImportKeys[k2]) merged.push(__deptImportDeepClone(u));
+    });
     var strMerged = G.persist.stringifyForStorage(merged);
     if (!strMerged || !G.persist.localSetRaw(LS_U, strMerged)) {
       G.toast("No se pudo guardar la importación.", "error");
@@ -24304,6 +24594,46 @@ function __deptUnitsStorageKey() {
   };
 
   /**
+   * ID estable para buildingResidents derivado del registro wm815 (no del índice en el array).
+   * - Evita que reordenar residentes en JSON genere IDs distintos y dispare limpiezas falsas en sync.
+   * - Formato: vwm815_{unitId}_r_{hash}; colisión → sufijo _i{idx}.
+   * - Si en el futuro se persiste `deptVincResidentId` en cada residente, se respeta (compatibilidad).
+   * Nota: la primera ejecución tras este cambio puede diferir de IDs antiguos `..._r0`, `..._r1`; los viejos quedan obsoletos y el flujo de pending-delete los retira como antes.
+   */
+  function __deptStableVincResidentId(unitId, vr, idx, usedIds) {
+    if (!unitId || !vr) return "vwm815_" + String(unitId || "x") + "_r_i" + idx;
+    if (vr.deptVincResidentId && String(vr.deptVincResidentId).trim()) {
+      return String(vr.deptVincResidentId).trim();
+    }
+    var nm = String(vr.name || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+    var tp = String(vr.type || "").trim();
+    var rut = String(vr.rut || "")
+      .replace(/\./g, "")
+      .replace(/-/g, "")
+      .trim()
+      .toLowerCase();
+    var em = String(vr.email || "")
+      .trim()
+      .toLowerCase();
+    var reg = String(vr.registeredAt || "").trim();
+    var payload = String(unitId) + "\n" + nm + "\n" + tp + "\n" + rut + "\n" + em + "\n" + reg;
+    var h = 2166136261 >>> 0;
+    var i;
+    for (i = 0; i < payload.length; i++) {
+      h ^= payload.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    var hex = h.toString(16);
+    var rid = "vwm815_" + unitId + "_r_" + hex;
+    if (usedIds[rid]) rid = "vwm815_" + unitId + "_r_" + hex + "_i" + idx;
+    usedIds[rid] = true;
+    return rid;
+  }
+
+  /**
    * Lee el registro de unidades (G.LS + wm815_units / wm815_former_residents) y reconstruye building* + departments.
    * La primera vez copia datos desde vinculacion_wm815_* si existían (migrateDeptStorageKeysOnce).
    */
@@ -24341,6 +24671,7 @@ function __deptUnitsStorageKey() {
 
     var residentsOut = [];
     var unitsOut = [];
+    var vincResidentIdUsed = {};
 
     units.forEach(function (vu) {
       if (!vu || !vu.id || !String(vu.unitNumber || "").trim()) return;
@@ -24351,7 +24682,7 @@ function __deptUnitsStorageKey() {
       var resIds = [];
       (vu.residents || []).forEach(function (vr, idx) {
         if (!vr || !String(vr.name || "").trim()) return;
-        var rid = "vwm815_" + vu.id + "_r" + idx;
+        var rid = __deptStableVincResidentId(vu.id, vr, idx, vincResidentIdUsed);
         resIds.push(rid);
         residentsOut.push({
           id: rid,
@@ -34745,3 +35076,5 @@ function __deptUnitsStorageKey() {
   </script>
 </body>
 </html>
+
+  
