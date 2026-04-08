@@ -814,6 +814,16 @@
           if (!wn && ln) return Object.assign({}, winner, { note: loser.note });
           return winner;
         }
+        function textTrimmed(n) {
+          return String(n == null || n.text == null ? "" : n.text).trim();
+        }
+        /** Misma idea que nota: snapshot remoto con descripción vacía no borra texto local por desfase. */
+        function novedadMergeText(winner, loser) {
+          var wt = textTrimmed(winner);
+          var lt = textTrimmed(loser);
+          if (!wt && lt) return Object.assign({}, winner, { text: loser.text });
+          return winner;
+        }
         var byId = Object.create(null);
         function ingest(arr) {
           var i;
@@ -828,9 +838,9 @@
               continue;
             }
             if (novedadWinsOver(m, ex)) {
-              byId[id] = novedadMergeNotes(m, ex);
+              byId[id] = novedadMergeText(novedadMergeNotes(m, ex), ex);
             } else {
-              byId[id] = novedadMergeNotes(ex, m);
+              byId[id] = novedadMergeText(novedadMergeNotes(ex, m), m);
             }
           }
         }
@@ -843,6 +853,62 @@
         }
         out.sort(function (a, b) {
           return atMs(b) - atMs(a);
+        });
+        return out;
+      }
+
+      /**
+       * Tramos de turno: unión por id (evita LWW del documento completo en Firestore).
+       * Regla: cerrado gana sobre abierto; si ambos cerrados, mayor endAt; si ambos abiertos, mayor startAt.
+       * Respeta __cgPendingDeleted.shiftLogs (admin eliminó fila).
+       */
+      function mergeShiftLogs(remoteArr, localArr) {
+        if (!Array.isArray(remoteArr)) remoteArr = [];
+        if (!Array.isArray(localArr)) localArr = [];
+        var pendDel = __cgReadPendingDeletedIdsForKey("shiftLogs");
+        function startMs(s) {
+          if (!s || s.startAt == null) return 0;
+          var t = new Date(s.startAt).getTime();
+          return t !== t ? 0 : t;
+        }
+        function endMs(s) {
+          if (!s || s.endAt == null || s.endAt === "") return null;
+          var t = new Date(s.endAt).getTime();
+          return t !== t ? null : t;
+        }
+        function pickBetter(a, b) {
+          var ea = endMs(a);
+          var eb = endMs(b);
+          if (ea != null && eb == null) return a;
+          if (eb != null && ea == null) return b;
+          if (ea != null && eb != null) return ea >= eb ? a : b;
+          return startMs(a) >= startMs(b) ? a : b;
+        }
+        var byId = Object.create(null);
+        function ingest(arr) {
+          var i, m, id, ex;
+          for (i = 0; i < arr.length; i++) {
+            m = arr[i];
+            if (!m || m.id == null || String(m.id) === "") continue;
+            id = String(m.id);
+            if (pendDel[id]) continue;
+            ex = byId[id];
+            if (!ex) {
+              byId[id] = m;
+              continue;
+            }
+            byId[id] = pickBetter(m, ex);
+          }
+        }
+        ingest(remoteArr);
+        ingest(localArr);
+        var out = [];
+        var k;
+        for (k in byId) {
+          if (Object.prototype.hasOwnProperty.call(byId, k)) out.push(byId[k]);
+        }
+        out.sort(function (a, b) {
+          return startMs(a) - startMs(b);
         });
         return out;
       }
@@ -1205,12 +1271,13 @@
           var curMem0 = window.__cgFsMem[shortKey];
           var inflC = window.__cgFsPushInFlightCount && window.__cgFsPushInFlightCount[shortKey];
           var writeTimerPending = window.__cgFsWriteTimers && window.__cgFsWriteTimers[shortKey];
-          /* novedades y visits: siempre pasar al merge aunque haya push en vuelo; si no, se pierden
+          /* novedades, visits, shiftLogs: siempre pasar al merge aunque haya push en vuelo; si no, se pierden
            * cambios remotos (otros equipos) o la fusión con memoria local durante la subida. */
           if (
             shortKey !== "staffChatMessages" &&
             shortKey !== "novedades" &&
             shortKey !== "visits" &&
+            shortKey !== "shiftLogs" &&
             typeof curMem0 === "string" &&
             curMem0 !== next &&
             (inflC > 0 || writeTimerPending)
@@ -1233,7 +1300,9 @@
                   next = JSON.stringify(merged);
                 }
               }
-            } catch (eVisMerge) {}
+            } catch (eVisMerge) {
+              console.warn("[CG][Firestore] merge visits falló:", eVisMerge && eVisMerge.message ? eVisMerge.message : eVisMerge);
+            }
             if (window.__cgFsMem[shortKey] === next) {
               return;
             }
@@ -1282,7 +1351,9 @@
               } else {
                 next = remoteSnapshot;
               }
-            } catch (eChatMerge) {}
+            } catch (eChatMerge) {
+              console.warn("[CG][Firestore] merge staffChat falló:", eChatMerge && eChatMerge.message ? eChatMerge.message : eChatMerge);
+            }
             if (window.__cgFsMem[shortKey] === next) {
               return;
             }
@@ -1303,7 +1374,32 @@
               if (Array.isArray(remNov)) {
                 next = JSON.stringify(mergeNovedades(remNov, locNov));
               }
-            } catch (eNovMerge) {}
+            } catch (eNovMerge) {
+              console.warn("[CG][Firestore] merge novedades falló:", eNovMerge && eNovMerge.message ? eNovMerge.message : eNovMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
+          if (shortKey === "shiftLogs") {
+            try {
+              var prevStrSl = window.__cgFsMem[shortKey];
+              if (typeof prevStrSl !== "string" || !prevStrSl) {
+                prevStrSl = tryLocalStorageGet(full);
+              }
+              var locSl = [];
+              if (typeof prevStrSl === "string" && prevStrSl) {
+                var locParsedSl = JSON.parse(prevStrSl);
+                if (Array.isArray(locParsedSl)) locSl = locParsedSl;
+              }
+              var remSl = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remSl)) {
+                next = JSON.stringify(mergeShiftLogs(remSl, locSl));
+              }
+            } catch (eSlMerge) {
+              console.warn("[CG][Firestore] merge shiftLogs falló:", eSlMerge && eSlMerge.message ? eSlMerge.message : eSlMerge);
+            }
             if (window.__cgFsMem[shortKey] === next) {
               return;
             }
@@ -1314,7 +1410,10 @@
           tryLocalStorageSet(full, next);
           cgDispatchCloudStorageApplied(shortKey, "modified");
           if (
-            (shortKey === "visits" || shortKey === "staffChatMessages" || shortKey === "novedades") &&
+            (shortKey === "visits" ||
+              shortKey === "staffChatMessages" ||
+              shortKey === "novedades" ||
+              shortKey === "shiftLogs") &&
             next !== remoteSnapshot &&
             window.cgFsBridge &&
             typeof window.cgFsBridge.pushImmediate === "function"
@@ -9806,20 +9905,17 @@
       if (!u || u.role !== "conserje") return false;
       var list = load("shiftLogs", []);
       if (!Array.isArray(list) || list.length === 0) return false;
-      var openId = null;
+      var openIds = Object.create(null);
       var i;
       for (i = 0; i < list.length; i++) {
         var s = list[i];
         if (!s || !shiftLogTramoIsOpen(s)) continue;
-        if (sameUserId(s.userId, u.id)) {
-          openId = s.id;
-          break;
-        }
+        if (sameUserId(s.userId, u.id)) openIds[s.id] = true;
       }
-      if (!openId) return false;
+      if (!Object.keys(openIds).length) return false;
       var now = new Date().toISOString();
       var newList = list.map(function (x) {
-        if (!x || x.id !== openId) return x;
+        if (!x || !openIds[x.id]) return x;
         return Object.assign({}, x, { endAt: now, endReason: "logout" });
       });
       state.shiftLogs = newList;
@@ -9827,6 +9923,21 @@
         window.CG.cloudPushKeyImmediate("shiftLogs");
       }
       return true;
+    }
+
+    /** Diagnóstico manual (consola): cuántos tramos abiertos hay por userId — útil si hay bloqueos de relevo. */
+    function __cgDiagnoseShiftLogsOpenByUser() {
+      var list = load("shiftLogs", []);
+      if (!Array.isArray(list)) return { error: "shiftLogs no es array", openByUserId: {} };
+      var openByUserId = Object.create(null);
+      var i, s, uid;
+      for (i = 0; i < list.length; i++) {
+        s = list[i];
+        if (!s || !shiftLogTramoIsOpen(s)) continue;
+        uid = String(s.userId != null ? s.userId : "?");
+        openByUserId[uid] = (openByUserId[uid] || 0) + 1;
+      }
+      return { segmentCount: list.length, openSegmentsByUserId: openByUserId };
     }
 
     /**
@@ -12808,7 +12919,7 @@
       authEnsureReady, authValidateDeptGateNewPassword, authVerifyLoginPassword, authCreatePasswordVerifier, authDeptGateExists, authVerifyDeptGate, authSetDeptGateFromPasswords, authSetDeptGateInitial,
       shiftLogTramoIsOpen,
       conserjeShiftBlockerFor,
-      currentUser, setSession, clearSession, rehydrateSessionFromStorage, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict, closeOpenConserjeShiftBeforeLogout,
+      currentUser, setSession, clearSession, rehydrateSessionFromStorage, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict, closeOpenConserjeShiftBeforeLogout, __cgDiagnoseShiftLogsOpenByUser,
       cleanupStaffDirectoryAndShiftOrphans,
       canSeeModule, toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, reservaOcurreEnDiaChile, reservaEnCursoAhora, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, proveedorServicioIconClass, proveedorServicioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
@@ -15581,6 +15692,11 @@ function __deptUnitsStorageKey() {
             smallReg.style.cssText = 'color: var(--secondary-text); font-size: 0.8rem; margin-top: 4px; display: block;';
             if (registrationDate) smallReg.setAttribute('data-registration-date', registrationDate);
             smallReg.textContent = '📅 Registrado: ' + formattedDate;
+            var cgLineId =
+              resident && resident.cgResLineId && String(resident.cgResLineId).trim()
+                ? String(resident.cgResLineId).trim()
+                : "cgRes_" + Date.now() + "_" + Math.random().toString(36).slice(2, 11);
+            residentItem.setAttribute("data-cg-res-line-id", cgLineId);
             residentItem.appendChild(row1);
             residentItem.appendChild(row2);
             residentItem.appendChild(smallReg);
@@ -16137,13 +16253,18 @@ function __deptUnitsStorageKey() {
                             }
                         }
                         
+                        var rowLineId = item.getAttribute("data-cg-res-line-id") || "";
+                        if (!rowLineId.trim()) {
+                            rowLineId = "cgRes_" + Date.now() + "_" + Math.random().toString(36).slice(2, 11);
+                        }
                         formData.residents.push({
                             name: formatName(name),
                             rut: rut,
                             email: formatText(email),
                             phone: formatText(phone),
                             type: formatText(type),
-                            registeredAt: registeredAt.toISOString() // Fecha de registro individual del residente
+                            registeredAt: registeredAt.toISOString(),
+                            cgResLineId: rowLineId
                         });
                     }
                 });
@@ -16306,8 +16427,22 @@ function __deptUnitsStorageKey() {
         // ===== FUNCIÓN PARA DAR SALIDA A ARRENDATARIOS =====
         // Bandera para evitar ejecuciones múltiples simultáneas
         let isProcessingExit = false;
+
+        /** Identificador estable por fila (cgResLineId) si existe; si no, nombre+tipo+rut como antes. */
+        function deptResidentRowMatchesSnapshot(r, snap, lineKey) {
+            var lk = lineKey != null ? String(lineKey).trim() : "";
+            if (lk) {
+                var rid = r.cgResLineId != null ? String(r.cgResLineId).trim() : "";
+                if (rid) return rid === lk;
+            }
+            return (
+                r.name === snap.name &&
+                r.type === snap.type &&
+                (r.rut === snap.rut || (!r.rut && !snap.rut))
+            );
+        }
         
-        window.giveResidentExit = async function(unitId, residentIndex) {
+        window.giveResidentExit = async function(unitId, residentIndex, resLineOpt) {
             // Prevenir ejecuciones múltiples
             if (isProcessingExit) {
                 console.warn('⚠️ Ya hay una operación de salida en proceso, esperando...');
@@ -16329,6 +16464,11 @@ function __deptUnitsStorageKey() {
                 return;
             }
             
+            const lineKey =
+                (resident && resident.cgResLineId && String(resident.cgResLineId).trim()) ||
+                (resLineOpt != null && String(resLineOpt).trim()) ||
+                "";
+            
             // Guardar datos en variables locales para el closure
             const residentData = {
                 name: resident.name,
@@ -16337,7 +16477,8 @@ function __deptUnitsStorageKey() {
                 rut: resident.rut || '',
                 type: resident.type,
                 registeredAt: resident.registeredAt || new Date().toISOString(),
-                originalData: { ...resident }
+                originalData: { ...resident },
+                cgResLineId: lineKey || undefined
             };
             const unitData = {
                 id: unit.id,
@@ -16419,10 +16560,8 @@ function __deptUnitsStorageKey() {
                             }
                             
                             // Buscar el índice actual del residente
-                            const currentResidentIndex = currentUnit.residents.findIndex(r => 
-                                r.name === residentData.name && 
-                                r.type === residentData.type &&
-                                (r.rut === residentData.rut || (!r.rut && !residentData.rut))
+                            const currentResidentIndex = currentUnit.residents.findIndex(r =>
+                                deptResidentRowMatchesSnapshot(r, residentData, lineKey)
                             );
                             
                             if (currentResidentIndex === -1) {
@@ -16492,10 +16631,8 @@ function __deptUnitsStorageKey() {
                             if (!nu || !Array.isArray(nu.residents)) {
                                 throw new Error('Unidad inválida en copia de trabajo');
                             }
-                            const ixSnap = nu.residents.findIndex(r => 
-                                r.name === residentData.name && 
-                                r.type === residentData.type &&
-                                (r.rut === residentData.rut || (!r.rut && !residentData.rut))
+                            const ixSnap = nu.residents.findIndex(r =>
+                                deptResidentRowMatchesSnapshot(r, residentData, lineKey)
                             );
                             if (ixSnap === -1) {
                                 throw new Error('Residente no encontrado en copia de trabajo');
@@ -17989,7 +18126,8 @@ function __deptUnitsStorageKey() {
                                 <div style="display: flex; gap: 3px; flex-shrink: 0; align-items: center;">
                                     <button type="button" class="btn btn-sm btn-secondary" data-cg-win="closeMapModalAndEditResident" data-cg-id="${escapedUnitId}" data-cg-idx="${index}" style="padding: 2px 5px; font-size: 0.7rem; white-space: nowrap;" title="Editar residente">✏️ Editar</button>`;
                         if (r.type === 'Arrendatario' || r.type === 'Visita Autorizada') {
-                            residentInfo += `<button type="button" class="btn btn-sm btn-danger" data-cg-win="giveResidentExit" data-cg-id="${unit.id}" data-cg-idx="${index}" style="padding: 2px 5px; font-size: 0.7rem; white-space: nowrap;">🚪 Salida</button>`;
+                            var rlEnc = r.cgResLineId ? encodeURIComponent(String(r.cgResLineId)) : "";
+                            residentInfo += `<button type="button" class="btn btn-sm btn-danger" data-cg-win="giveResidentExit" data-cg-id="${unit.id}" data-cg-idx="${index}" data-cg-res-line="${rlEnc}" style="padding: 2px 5px; font-size: 0.7rem; white-space: nowrap;">🚪 Salida</button>`;
                         }
                         residentInfo += `</div></div></li>`;
                         return residentInfo;
@@ -30077,12 +30215,23 @@ function __deptUnitsStorageKey() {
     return !!(s && (s.endAt == null || s.endAt === ""));
   }
 
+  /** Tramo abierto “actual”: el de startAt más reciente (evita datos corruptos con varios abiertos para el mismo usuario). */
   function shiftFindOpen(list, userId) {
-    var i;
+    if (!Array.isArray(list)) return null;
+    var best = null;
+    var bestStart = -Infinity;
+    var i, s, t;
     for (i = 0; i < list.length; i++) {
-      if (G.sameUserId(list[i].userId, userId) && shiftTramoAbiertoSeg(list[i])) return list[i];
+      s = list[i];
+      if (!s || !G.sameUserId(s.userId, userId) || !shiftTramoAbiertoSeg(s)) continue;
+      t = new Date(s.startAt || 0).getTime();
+      if (t !== t) t = 0;
+      if (t >= bestStart) {
+        bestStart = t;
+        best = s;
+      }
     }
-    return null;
+    return best;
   }
 
   /**
@@ -30259,20 +30408,24 @@ function __deptUnitsStorageKey() {
       G.toast("El administrador no registra cierres de turno. Si queda un tramo antiguo suyo, elimínelo en Administración → Turnos.", "warn");
       return;
     }
-    var open = shiftFindOpen(G.state.shiftLogs || [], u.id);
+    var base = G.state.shiftLogs || [];
+    var open = shiftFindOpen(base, u.id);
     if (!open) {
       G.toast("No hay turno abierto", "warn");
       return;
     }
+    var openIds = Object.create(null);
+    var ji, seg;
+    for (ji = 0; ji < base.length; ji++) {
+      seg = base[ji];
+      if (!seg || !G.sameUserId(seg.userId, u.id) || !shiftTramoAbiertoSeg(seg)) continue;
+      openIds[seg.id] = true;
+    }
     var now = new Date().toISOString();
-    var list = (G.state.shiftLogs || []).map(function (x) {
-      if (x.id !== open.id) return x;
+    var list = base.map(function (x) {
+      if (!x || !openIds[x.id]) return x;
       return Object.assign({}, x, { endAt: now, endReason: "cierre_turno" });
     });
-    G.state.shiftLogs = list;
-    if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
-      window.CG.cloudPushKeyImmediate("shiftLogs");
-    }
     var novRec = {
       id: G.uid(),
       seq: nextNovedadSeq(),
@@ -30284,8 +30437,11 @@ function __deptUnitsStorageKey() {
       text: "Turno cerrado.",
       shiftSegmentId: open.id
     };
-    G.state.novedades = (Array.isArray(G.state.novedades) ? G.state.novedades : []).concat([novRec]);
+    var novBase = Array.isArray(G.state.novedades) ? G.state.novedades : [];
+    G.state.shiftLogs = list;
+    G.state.novedades = novBase.concat([novRec]);
     if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
+      window.CG.cloudPushKeyImmediate("shiftLogs");
       window.CG.cloudPushKeyImmediate("novedades");
     }
     G.logConserjeActivity("turno_cerrar", "Cerró turno de conserjería (control horario)");
@@ -34419,31 +34575,39 @@ function __deptUnitsStorageKey() {
         act === "visitParteOpenMailtoMark";
       if (!cgActsMailtoPreserveGesture && e && typeof e.preventDefault === "function") e.preventDefault();
       if (actEl.getAttribute("data-cg-close-modal") === "1" && UI.closeModal) UI.closeModal();
-      if (act === "parkingMapCellClick") {
-        fn(
-          actEl.getAttribute("data-cg-p0") || "",
-          actEl.getAttribute("data-cg-p1") || "",
-          actEl.getAttribute("data-cg-p2") || ""
-        );
+      try {
+        if (act === "parkingMapCellClick") {
+          fn(
+            actEl.getAttribute("data-cg-p0") || "",
+            actEl.getAttribute("data-cg-p1") || "",
+            actEl.getAttribute("data-cg-p2") || ""
+          );
+          return true;
+        }
+        var empty = actEl.getAttribute("data-cg-empty");
+        var id = actEl.getAttribute("data-cg-id");
+        var param = actEl.getAttribute("data-cg-param");
+        var param2 = actEl.getAttribute("data-cg-param2");
+        if (empty === "1") {
+          fn();
+          return true;
+        }
+        var hasId = id != null && id !== "";
+        var hasParam = param != null && param !== "";
+        var hasParam2 = param2 != null && param2 !== "";
+        if (hasId && hasParam && hasParam2) fn(id, param, param2);
+        else if (hasId && hasParam) fn(id, param);
+        else if (hasId) fn(id);
+        else if (hasParam) fn(param);
+        else fn();
+        return true;
+      } catch (errAct) {
+        console.error("[CG_ACTIONS]", act, errAct);
+        if (window.CG && typeof window.CG.toast === "function") {
+          window.CG.toast("Error al ejecutar la acción. Revise la consola (F12).", "error");
+        }
         return true;
       }
-      var empty = actEl.getAttribute("data-cg-empty");
-      var id = actEl.getAttribute("data-cg-id");
-      var param = actEl.getAttribute("data-cg-param");
-      var param2 = actEl.getAttribute("data-cg-param2");
-      if (empty === "1") {
-        fn();
-        return true;
-      }
-      var hasId = id != null && id !== "";
-      var hasParam = param != null && param !== "";
-      var hasParam2 = param2 != null && param2 !== "";
-      if (hasId && hasParam && hasParam2) fn(id, param, param2);
-      else if (hasId && hasParam) fn(id, param);
-      else if (hasId) fn(id);
-      else if (hasParam) fn(param);
-      else fn();
-      return true;
     }
     document.body.addEventListener("click", function (e) {
       var t = e.target;
@@ -34514,9 +34678,26 @@ function __deptUnitsStorageKey() {
           var wid = winFn.getAttribute("data-cg-id");
           var widx = winFn.getAttribute("data-cg-idx");
           var idxNum = parseInt(widx, 10);
-          if (widx != null && widx !== "" && wid != null && wid !== "" && !isNaN(idxNum)) wf(wid, idxNum);
-          else if (wid != null && wid !== "") wf(wid);
-          else wf();
+          var wResLine = winFn.getAttribute("data-cg-res-line");
+          if (wResLine) {
+            try {
+              wResLine = decodeURIComponent(wResLine);
+            } catch (eRL) {
+              wResLine = "";
+            }
+          } else wResLine = "";
+          try {
+            if (name === "giveResidentExit" && widx != null && widx !== "" && wid != null && wid !== "" && !isNaN(idxNum)) {
+              wf(wid, idxNum, wResLine);
+            } else if (widx != null && widx !== "" && wid != null && wid !== "" && !isNaN(idxNum)) wf(wid, idxNum);
+            else if (wid != null && wid !== "") wf(wid);
+            else wf();
+          } catch (errWin) {
+            console.error("[CG][data-cg-win]", name, errWin);
+            if (window.CG && typeof window.CG.toast === "function") {
+              window.CG.toast("Error al abrir la acción. Revise la consola (F12).", "error");
+            }
+          }
         }
         return;
       }
