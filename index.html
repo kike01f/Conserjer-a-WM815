@@ -15859,6 +15859,7 @@ function __deptUnitsStorageKey() {
 
         function addResident(resident = null) {
             const residentsList = document.getElementById('residentsList');
+            if (!residentsList) return;
             const residentItem = document.createElement('div');
             let tipo = (resident && resident.type) ? resident.type.toLowerCase() : '';
             residentItem.className = 'resident-item';
@@ -16061,6 +16062,7 @@ function __deptUnitsStorageKey() {
         // Función para agregar campo de estacionamiento
         function addParkingField(value = '') {
             const parkingList = document.getElementById('parkingList');
+            if (!parkingList) return;
             const parkingItem = document.createElement('div');
             parkingItem.className = 'parking-item';
             parkingItem.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-bottom: 8px;';
@@ -16117,6 +16119,7 @@ function __deptUnitsStorageKey() {
         // Función para agregar campo de bodega
         function addStorageField(value = '') {
             const storageList = document.getElementById('storageList');
+            if (!storageList) return;
             const storageItem = document.createElement('div');
             storageItem.className = 'storage-item';
             storageItem.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-bottom: 8px;';
@@ -16160,6 +16163,7 @@ function __deptUnitsStorageKey() {
         function addBikeField(numberValue = '', detailValue = '') {
             const bikeList = document.getElementById('bikeList');
             const addBikeBtn = document.getElementById('addBikeBtn');
+            if (!bikeList) return;
             if (bikeList.children.length >= MAX_BIKE_STORAGES) return;
             const bikeItem = document.createElement('div');
             bikeItem.className = 'bike-item';
@@ -16624,12 +16628,17 @@ function __deptUnitsStorageKey() {
         }
 
         function resetForm() {
-            document.getElementById('unitForm').reset();
-            document.getElementById('residentsList').innerHTML = '';
+            var unitFormEl = document.getElementById('unitForm');
+            if (unitFormEl && typeof unitFormEl.reset === 'function') unitFormEl.reset();
+            var residentsListEl = document.getElementById('residentsList');
+            if (residentsListEl) residentsListEl.innerHTML = '';
             addResident();
-            document.getElementById('parkingList').innerHTML = '';
-            document.getElementById('storageList').innerHTML = '';
-            document.getElementById('bikeList').innerHTML = '';
+            var parkingListEl = document.getElementById('parkingList');
+            if (parkingListEl) parkingListEl.innerHTML = '';
+            var storageListEl = document.getElementById('storageList');
+            if (storageListEl) storageListEl.innerHTML = '';
+            var bikeListEl = document.getElementById('bikeList');
+            if (bikeListEl) bikeListEl.innerHTML = '';
             const addBikeBtn = document.getElementById('addBikeBtn');
             if (addBikeBtn) addBikeBtn.style.display = '';
             // Limpiar el estado de edición
@@ -16936,11 +16945,14 @@ function __deptUnitsStorageKey() {
                             loadingIndicator.remove();
                             
                             confirmModal.remove();
-                            // Cerrar modal de detalles si está abierto
-                            const detailModal = document.querySelector('.modal');
-                            if (detailModal) {
-                                detailModal.remove();
-                            }
+                            /* Cerrar solo la ficha del mapa; no el primer .modal genérico (podría ser otro diálogo). */
+                            try {
+                                if (typeof cgCloseBuildingUnitFichaOverlay === "function") {
+                                    cgCloseBuildingUnitFichaOverlay();
+                                }
+                            } catch (eFicha) {}
+                            var fichaOv = document.querySelector(".modal.cg-building-unit-ficha-modal");
+                            if (fichaOv) fichaOv.remove();
                             
                             showNotification('success', `✅ ${residentData.type} dado de salida correctamente`);
 
@@ -17711,6 +17723,9 @@ function __deptUnitsStorageKey() {
         function updateUnitsTable() {
             const tableBody = document.getElementById('unitsTableBody');
             const emptyState = document.getElementById('unitsEmptyState');
+            if (!tableBody || !emptyState) {
+                return;
+            }
             const filterInput = document.getElementById('unitsFilter');
             const filterValue = filterInput ? filterInput.value.toLowerCase() : '';
             
@@ -17725,10 +17740,14 @@ function __deptUnitsStorageKey() {
                     (unit.storageNumber && unit.storageNumber.toLowerCase().includes(filterValue)) ||
                     (unit.bikeStorageNumber && unit.bikeStorageNumber.toLowerCase().includes(filterValue)) ||
                     (unit.bikeStorageDetail && unit.bikeStorageDetail.toLowerCase().includes(filterValue)) ||
-                    unit.residents.some(resident => 
-                        resident.name.toLowerCase().includes(filterValue) ||
-                        resident.type.toLowerCase().includes(filterValue)
-                    )
+                    (Array.isArray(unit.residents) &&
+                        unit.residents.some(function (resident) {
+                            if (!resident) return false;
+                            return (
+                                (resident.name && resident.name.toLowerCase().includes(filterValue)) ||
+                                (resident.type && resident.type.toLowerCase().includes(filterValue))
+                            );
+                        }))
                 );
             }
             
@@ -17848,11 +17867,15 @@ function __deptUnitsStorageKey() {
         function updateResidentsTable() {
             const tableBody = document.getElementById('residentsTableBody');
             const emptyState = document.getElementById('residentsEmptyState');
+            if (!tableBody || !emptyState) {
+                return;
+            }
             const filterInput = document.getElementById('residentsFilter');
             const filterValue = filterInput ? filterInput.value.toLowerCase() : '';
             
             const allResidents = [];
             appState.units.forEach(unit => {
+                if (!unit.residents || !Array.isArray(unit.residents)) return;
                 unit.residents.forEach(resident => {
                     // Filtrar propietarios de unidades de arriendo
                     if (resident.type === 'Propietario' && unit.unitUse === 'Arriendo') {
@@ -18269,11 +18292,15 @@ function __deptUnitsStorageKey() {
         function updateOwnersTable() {
             const tableBody = document.getElementById('ownersTableBody');
             const emptyState = document.getElementById('ownersEmptyState');
+            if (!tableBody || !emptyState) {
+                return;
+            }
             const filterInput = document.getElementById('ownersFilter');
             const filterValue = filterInput ? filterInput.value.toLowerCase() : '';
             
             const allOwners = [];
             appState.units.forEach(unit => {
+                if (!unit.residents || !Array.isArray(unit.residents)) return;
                 const owners = unit.residents.filter(r => r.type === 'Propietario');
                 owners.forEach(owner => {
                     allOwners.push({
@@ -18677,6 +18704,9 @@ function __deptUnitsStorageKey() {
 
         function updateBuildingMap() {
             const buildingMap = document.getElementById('buildingMap');
+            if (!buildingMap) {
+                return;
+            }
             const filterInput = document.getElementById('buildingMapFilter');
             const filterValue = filterInput ? filterInput.value.toLowerCase().trim() : '';
             
@@ -22925,7 +22955,8 @@ function __deptUnitsStorageKey() {
           ex.setAttribute("aria-hidden", "true");
           document.body.style.overflow = "";
         }
-        document.getElementById("cg-user-manual-close").addEventListener("click", closeOv);
+        var manualCloseBtn = ex.querySelector("#cg-user-manual-close");
+        if (manualCloseBtn) manualCloseBtn.addEventListener("click", closeOv);
         ex.addEventListener("click", function (ev) {
           if (ev.target === ex) closeOv();
         });
@@ -22946,7 +22977,8 @@ function __deptUnitsStorageKey() {
       ex.removeAttribute("aria-hidden");
       document.body.style.overflow = "hidden";
       try {
-        document.getElementById("cg-user-manual-close").focus();
+        var manualCloseFocus = document.getElementById("cg-user-manual-close");
+        if (manualCloseFocus && typeof manualCloseFocus.focus === "function") manualCloseFocus.focus();
       } catch (eFm) {}
     }
 
@@ -23174,7 +23206,8 @@ function __deptUnitsStorageKey() {
         document.removeEventListener("keydown", window.__cgModalBoundHandler, true);
         window.__cgModalBoundHandler = null;
       }
-      document.getElementById("modal-root").innerHTML = "";
+      var modalRoot = document.getElementById("modal-root");
+      if (modalRoot) modalRoot.innerHTML = "";
       var prev = window.__cgModalPreviousFocus;
       window.__cgModalPreviousFocus = null;
       if (prev && typeof prev.focus === "function") {
@@ -35195,7 +35228,8 @@ function __deptUnitsStorageKey() {
     );
   })();
 
-  document.getElementById("login-form").addEventListener("submit", async function (e) {
+  var cgLoginFormEl = document.getElementById("login-form");
+  if (cgLoginFormEl) cgLoginFormEl.addEventListener("submit", async function (e) {
     e.preventDefault();
     try {
       await G.authEnsureReady();
@@ -35432,7 +35466,8 @@ function __deptUnitsStorageKey() {
     });
   })();
 
-  document.getElementById("btn-logout").addEventListener("click", function () {
+  var cgBtnLogout = document.getElementById("btn-logout");
+  if (cgBtnLogout) cgBtnLogout.addEventListener("click", function () {
     var cerrTurno =
       typeof G.closeOpenConserjeShiftBeforeLogout === "function" && G.closeOpenConserjeShiftBeforeLogout();
     G.clearSession();
@@ -35448,15 +35483,20 @@ function __deptUnitsStorageKey() {
     );
   });
 
-  document.getElementById("menu-toggle").addEventListener("click", function () {
-    document.getElementById("sidebar").classList.toggle("open");
-    document.getElementById("sidebar-overlay").classList.toggle("show");
-    var open = document.getElementById("sidebar").classList.contains("open");
-    document.getElementById("menu-toggle").setAttribute("aria-expanded", open ? "true" : "false");
+  var cgMenuToggle = document.getElementById("menu-toggle");
+  if (cgMenuToggle) cgMenuToggle.addEventListener("click", function () {
+    var sb = document.getElementById("sidebar");
+    var ov = document.getElementById("sidebar-overlay");
+    if (sb) sb.classList.toggle("open");
+    if (ov) ov.classList.toggle("show");
+    var open = sb && sb.classList.contains("open");
+    cgMenuToggle.setAttribute("aria-expanded", open ? "true" : "false");
   });
-  document.getElementById("sidebar-overlay").addEventListener("click", function () {
-    document.getElementById("sidebar").classList.remove("open");
-    document.getElementById("sidebar-overlay").classList.remove("show");
+  var cgSidebarOverlay = document.getElementById("sidebar-overlay");
+  if (cgSidebarOverlay) cgSidebarOverlay.addEventListener("click", function () {
+    var sb = document.getElementById("sidebar");
+    if (sb) sb.classList.remove("open");
+    cgSidebarOverlay.classList.remove("show");
     var mt = document.getElementById("menu-toggle");
     if (mt) mt.setAttribute("aria-expanded", "false");
   });
