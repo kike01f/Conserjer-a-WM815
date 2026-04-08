@@ -9217,52 +9217,77 @@
           } catch (eU) {}
           window.__cgFsListenerUnsub = null;
         }
-        var col = window.cgFsBridge.kvCol();
-        window.__cgFsListenerUnsub = col.onSnapshot(
-          function (snapshot) {
-            snapshot.docChanges().forEach(function (chg) {
-              var id = chg.doc.id;
-              var d = chg.doc.data();
-              var js = d && d.json != null ? String(d.json) : null;
-              var meta =
-                id === "staffChatMessages" && d && typeof window.__cgStaffChatRevPullMeta === "function"
-                  ? window.__cgStaffChatRevPullMeta(d)
-                  : null;
-              window.cgFsBridge.applyRemoteDoc(id, js, chg.type, meta);
-            });
-            window.__cgFsRemoteReady = true;
-            window.__cgCloudKvHydratedOnce = true;
+        /* Lectura explícita de toda la colección kv antes del listener: admin y conserje ven el mismo estado
+         * de Firestore de inmediato; sin esto, la UI puede pintar datos viejos del navegador hasta el 1.er snapshot. */
+        return cloudPullAllOnce().then(function () {
+          if (gen !== __cgFsInitGeneration) {
+            return { ok: false, reason: "superseded", partial: false, phases: { pull: true }, listenerStarted: false };
+          }
+          var col = window.cgFsBridge.kvCol();
+          window.__cgFsListenerUnsub = col.onSnapshot(
+            function (snapshot) {
+              snapshot.docChanges().forEach(function (chg) {
+                var id = chg.doc.id;
+                var d = chg.doc.data();
+                var js = d && d.json != null ? String(d.json) : null;
+                var meta =
+                  id === "staffChatMessages" && d && typeof window.__cgStaffChatRevPullMeta === "function"
+                    ? window.__cgStaffChatRevPullMeta(d)
+                    : null;
+                window.cgFsBridge.applyRemoteDoc(id, js, chg.type, meta);
+              });
+              window.__cgFsRemoteReady = true;
+              window.__cgCloudKvHydratedOnce = true;
+              try {
+                if (window.CG && typeof window.CG.ensureCloudInstallBaseline === "function") {
+                  window.CG.ensureCloudInstallBaseline();
+                }
+              } catch (eBlSnap) {}
+            },
+            function (err) {
+              window.__cgFsLastError = err;
+              __cgSyncLog("warn", "firestore_listener", err);
+              setTimeout(function () {
+                if (window.CG && typeof window.CG.toast === "function") {
+                  window.CG.toast("Error de sincronización con la nube. Revise red y reglas Firestore.", "error");
+                }
+              }, 0);
+            }
+          );
+          var rOk = {
+            ok: true,
+            reason: "firestore",
+            partial: false,
+            phases: { pull: true, listener: true },
+            listenerStarted: true
+          };
+          window.__cgCloudSyncLastInitResult = rOk;
+          attachStaffChatRemoteSync();
+          try {
+            if (window.cgFsBridge && typeof window.cgFsBridge.replaySyncOutbox === "function") {
+              window.cgFsBridge.replaySyncOutbox();
+            }
+          } catch (eReplay) {}
+          if (!window.__cgCloudVisibilityPullBound) {
+            window.__cgCloudVisibilityPullBound = true;
             try {
-              if (window.CG && typeof window.CG.ensureCloudInstallBaseline === "function") {
-                window.CG.ensureCloudInstallBaseline();
-              }
-            } catch (eBlSnap) {}
-          },
-          function (err) {
-            window.__cgFsLastError = err;
-            __cgSyncLog("warn", "firestore_listener", err);
-            setTimeout(function () {
-              if (window.CG && typeof window.CG.toast === "function") {
-                window.CG.toast("Error de sincronización con la nube. Revise red y reglas Firestore.", "error");
-              }
-            }, 0);
+              document.addEventListener("visibilitychange", function () {
+                if (document.visibilityState !== "visible") return;
+                if (!__cgFsCoreActive()) return;
+                try {
+                  if (!window.CG || typeof window.CG.load !== "function" || !window.CG.load("session", null)) return;
+                } catch (eSess) {
+                  return;
+                }
+                if (window.__cgVisibilityPullTimer) clearTimeout(window.__cgVisibilityPullTimer);
+                window.__cgVisibilityPullTimer = setTimeout(function () {
+                  cloudPullAllOnce().catch(function () {});
+                }, 500);
+              });
+            } catch (eVis) {}
           }
-        );
-        var rOk = {
-          ok: true,
-          reason: "firestore",
-          partial: false,
-          phases: { listener: true },
-          listenerStarted: true
-        };
-        window.__cgCloudSyncLastInitResult = rOk;
-        attachStaffChatRemoteSync();
-        try {
-          if (window.cgFsBridge && typeof window.cgFsBridge.replaySyncOutbox === "function") {
-            window.cgFsBridge.replaySyncOutbox();
-          }
-        } catch (eReplay) {}
-        return rOk;
+          return rOk;
+        });
       });
     }
 
