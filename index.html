@@ -35024,6 +35024,14 @@ function __deptUnitsStorageKey() {
       return;
     }
     var user = cand;
+    /* Turnos remotos: sin esto, loginBlocked mira solo shiftLogs locales (desfasados) y el relevo falla o bloquea mal. */
+    if (user.role === "conserje" && typeof G.cloudPullSingleLsKey === "function") {
+      try {
+        await G.cloudPullSingleLsKey("shiftLogs");
+      } catch (ePullSlLogin) {
+        console.warn("[CG] shiftLogs pull antes de login conserje:", ePullSlLogin);
+      }
+    }
     if (user.role === "conserje" && typeof G.loginBlockedByOpenConserjeShift === "function") {
       var bl = G.loginBlockedByOpenConserjeShift(user.id);
       if (bl) {
@@ -35283,48 +35291,61 @@ function __deptUnitsStorageKey() {
   }
 
   if (G.load("session", null) && G.currentUser()) {
-    var kickedOnRestore =
-      typeof G.kickConserjeIfOpenShiftConflict === "function" && G.kickConserjeIfOpenShiftConflict();
-    if (!kickedOnRestore) {
-      UI.showApp();
-      if (typeof G.initCloudSync === "function") {
-        G.initCloudSync()
-          .then(function (r) {
-            if (r && r.reason === "superseded") return;
-            if (r && r.ok && r.partial) {
-              if (r.partialPushFailed) {
-                G.toast(
-                  "Sesión restaurada con descarga remota correcta. Algunos cambios locales pendientes no se pudieron subir todavía; se reintentará automáticamente.",
-                  "warn"
-                );
-              } else if (!r.partialPullFailed) {
-                G.toast(
-                  "Sincronización parcial tras restaurar sesión por una incidencia temporal. Se mantendrán reintentos automáticos.",
-                  "warn"
-                );
-              }
-            } else if (
-              !(r && r.ok) &&
-              !(r && (r.reason === "disabled" || r.reason === "local_only")) &&
-              r &&
-              !r.ok
-            ) {
-              var code = r.err && r.err.code ? r.err.code : "";
-              var msg =
-                code === "permission-denied"
-                  ? "Sin permiso para sincronizar con el servidor remoto. Revise políticas de acceso."
-                  : r.reason === "no-db" || r.reason === "no-fieldvalue"
-                    ? "Servidor remoto no disponible para sincronizar."
-                    : "Error al sincronizar (consola F12). Los datos locales siguen en uso.";
-              G.toast(msg, "warn");
-            }
-            if (typeof G.kickConserjeIfOpenShiftConflict === "function") G.kickConserjeIfOpenShiftConflict();
-          })
-          .catch(function (eSync) {
-            console.warn("[CG] initCloudSync rechazó inesperadamente:", eSync);
-          });
+    (async function cgRestoreSessionWithShiftSync() {
+      try {
+        if (typeof G.cloudPullSingleLsKey === "function") {
+          await G.cloudPullSingleLsKey("shiftLogs");
+        }
+      } catch (eSlRestore) {
+        console.warn("[CG] shiftLogs pull al restaurar sesión:", eSlRestore);
       }
-    }
+      /* Si cg-cloud-storage-applied ya ejecutó kick durante el pull, no reabrir la app. */
+      if (!G.load("session", null) || !G.currentUser()) {
+        return;
+      }
+      var kickedOnRestore =
+        typeof G.kickConserjeIfOpenShiftConflict === "function" && G.kickConserjeIfOpenShiftConflict();
+      if (!kickedOnRestore) {
+        UI.showApp();
+        if (typeof G.initCloudSync === "function") {
+          G.initCloudSync()
+            .then(function (r) {
+              if (r && r.reason === "superseded") return;
+              if (r && r.ok && r.partial) {
+                if (r.partialPushFailed) {
+                  G.toast(
+                    "Sesión restaurada con descarga remota correcta. Algunos cambios locales pendientes no se pudieron subir todavía; se reintentará automáticamente.",
+                    "warn"
+                  );
+                } else if (!r.partialPullFailed) {
+                  G.toast(
+                    "Sincronización parcial tras restaurar sesión por una incidencia temporal. Se mantendrán reintentos automáticos.",
+                    "warn"
+                  );
+                }
+              } else if (
+                !(r && r.ok) &&
+                !(r && (r.reason === "disabled" || r.reason === "local_only")) &&
+                r &&
+                !r.ok
+              ) {
+                var code = r.err && r.err.code ? r.err.code : "";
+                var msg =
+                  code === "permission-denied"
+                    ? "Sin permiso para sincronizar con el servidor remoto. Revise políticas de acceso."
+                    : r.reason === "no-db" || r.reason === "no-fieldvalue"
+                      ? "Servidor remoto no disponible para sincronizar."
+                      : "Error al sincronizar (consola F12). Los datos locales siguen en uso.";
+                G.toast(msg, "warn");
+              }
+              if (typeof G.kickConserjeIfOpenShiftConflict === "function") G.kickConserjeIfOpenShiftConflict();
+            })
+            .catch(function (eSync) {
+              console.warn("[CG] initCloudSync rechazó inesperadamente:", eSync);
+            });
+        }
+      }
+    })();
   } else {
     (function cgBootLoginPullCloudFirst() {
       var btn = document.getElementById("login-submit");
