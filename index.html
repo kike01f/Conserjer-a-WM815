@@ -512,7 +512,9 @@
       appId: "1:470166692685:web:80da0c3beccf001d4b0d04",
       /** Mismo valor en todos los dispositivos; si gestiona varios edificios en un solo proyecto, use un id por edificio. */
       siteId: "conserjeriawm2",
-      /** true: signInAnonymously() antes de leer/escribir Firestore (recomendado si las reglas usan request.auth). */
+      /** true: signInAnonymously() antes de leer/escribir Firestore (recomendado si las reglas usan request.auth).
+       *  Requiere en Firebase Console: Authentication → Comenzar → Sign-in method → Anónimo → Activar.
+       *  Si aparece auth/configuration-not-found, Authentication no está habilitado en ese proyecto. */
       useAnonymousAuth: true,
       /** La copia en disco de datos de negocio con Firestore activo es siempre obligatoria (local-first); este flag queda por compatibilidad. */
       useLocalStorageCache: false,
@@ -9707,13 +9709,34 @@
       if (typeof str === "string") window.cgFsBridge.pushImmediate(shortKey, str);
     }
 
+    var __cgAnonymousAuthPromise = null;
+    /** Si Identity Toolkit falló por configuración, no reintentar en bucle (ahorra POST 400 repetidos). */
+    var __cgAnonymousAuthConfigMissing = false;
+
     function __cgMaybeAnonymousAuth() {
       var c = window.CG_FIREBASE_CONFIG || {};
       if (!c.useAnonymousAuth || !window.cgAuth) return Promise.resolve();
       if (window.cgAuth.currentUser) return Promise.resolve();
-      return window.cgAuth.signInAnonymously().catch(function (e) {
-        console.warn("[CG][Auth] Anónimo:", e);
-      });
+      if (__cgAnonymousAuthConfigMissing) return Promise.resolve();
+      if (__cgAnonymousAuthPromise) return __cgAnonymousAuthPromise;
+      __cgAnonymousAuthPromise = window.cgAuth
+        .signInAnonymously()
+        .catch(function (e) {
+          console.warn("[CG][Auth] Anónimo:", e);
+          var code = e && e.code != null ? String(e.code) : "";
+          if (code === "auth/configuration-not-found" || /configuration-not-found/i.test(String(e && e.message))) {
+            __cgAnonymousAuthConfigMissing = true;
+            console.warn(
+              "[CG][Auth] Firebase Authentication no está disponible para este proyecto o falta el proveedor Anónimo. " +
+                "En https://console.firebase.google.com → su proyecto → Authentication → Comenzar → Sign-in method → Anónimo → Activar. " +
+                "Sin eso, signInAnonymously falla con auth/configuration-not-found."
+            );
+          }
+        })
+        .then(function () {
+          __cgAnonymousAuthPromise = null;
+        });
+      return __cgAnonymousAuthPromise;
     }
 
     window.__cgFsSyncHealth = {
@@ -10180,6 +10203,18 @@
       if (a == null && b == null) return true;
       if (a == null || b == null) return false;
       return String(a) === String(b);
+    }
+
+    /**
+     * Normaliza rol para RBAC (import Excel/JSON, datos viejos o espacios).
+     * Sin esto, "Admin" o " admin " no coincide con === "admin" y Administración queda roto.
+     */
+    function normalizeRoleForAuth(role) {
+      if (role == null || role === "") return role;
+      var s = String(role).trim().toLowerCase();
+      if (s === "admin" || s === "administrator") return "admin";
+      if (s === "conserje") return "conserje";
+      return role;
     }
 
     /* ┌─ 4. Autenticación (PBKDF2, verificadores, puerta módulo Estadística) ──────────── */
@@ -10716,7 +10751,12 @@
       var uid = state.session.userId;
       var i;
       for (i = 0; i < users.length; i++) {
-        if (users[i] && sameUserId(users[i].id, uid)) return users[i];
+        if (users[i] && sameUserId(users[i].id, uid)) {
+          var raw = users[i];
+          var nr = normalizeRoleForAuth(raw.role);
+          if (nr !== raw.role) return Object.assign({}, raw, { role: nr });
+          return raw;
+        }
       }
       return null;
     }
@@ -10729,7 +10769,7 @@
       state.session = { userId: user.id, at: new Date().toISOString() };
       save("session", state.session);
       try {
-        window.__cgPermSnapshot = { userId: user.id, role: user.role };
+        window.__cgPermSnapshot = { userId: user.id, role: normalizeRoleForAuth(user.role) };
       } catch (eSessSnap) {}
     }
     function rehydrateSessionFromStorage() {
@@ -11393,7 +11433,8 @@
       var snap = window.__cgPermSnapshot;
       if (
         snap &&
-        (String(snap.userId) !== String(u.id) || String(snap.role || "") !== String(u.role || ""))
+        (String(snap.userId) !== String(u.id) ||
+          String(normalizeRoleForAuth(snap.role) || "") !== String(normalizeRoleForAuth(u.role) || ""))
       ) {
         clearSession();
         if (appVisible && typeof UI.showLogin === "function") UI.showLogin();
@@ -14263,7 +14304,7 @@
       toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, reservaOcurreEnDiaChile, reservaEnCursoAhora, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, proveedorServicioIconClass, proveedorServicioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
       proveedorSelectOptionsHtml,
-      uid, sameUserId, load, save, LS, persist: P,
+      uid, sameUserId, normalizeRoleForAuth, load, save, LS, persist: P,
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
       CG_DASH_QUICKLINKS_MAX,
       CG_STAFF_CHAT_VOICE_PHRASE_MAX, CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE, normalizeStaffChatVoicePhrase,
