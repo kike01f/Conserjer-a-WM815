@@ -24899,9 +24899,8 @@ function __deptUnitsStorageKey() {
 
     /**
      * Refresco reactivo tras `cg-cloud-storage-applied` (pull/listener Firestore).
-     * Tabla central: __CG_REMOTE_REFRESH_KEY_TO_VIEWS + __cgRemoteRefreshShouldRemountDashboard +
-     * __cgRemoteRefreshDeptKeysArr / parking. Ver CG_UI.getRemoteRefreshRegistry() y
-     * CG_UI.remoteRefreshManualTests (pruebas manuales por clave crítica).
+     * __CG_REMOTE_REFRESH_KEY_TO_VIEWS documenta qué módulos toca cada clave; el repintado real
+     * está en refreshAfterRemoteLsKey (render*, sync embebido). Ver getRemoteRefreshRegistry().
      */
     var __CG_REMOTE_REFRESH_KEY_TO_VIEWS = {
       visits: ["visitas"],
@@ -24932,12 +24931,6 @@ function __deptUnitsStorageKey() {
       return k === "buildingParking" || k === "buildingUnits" || k === "parkingSlots" || k === "parkingConfig";
     }
 
-    function __cgRemoteRefreshAppendDeptViews(want) {
-      ["departamentos", "mapaEdificio", "visitas"].forEach(function (v) {
-        if (want.indexOf(v) < 0) want.push(v);
-      });
-    }
-
     function __cgRemoteRefreshShouldRemountDashboard(k) {
       /* Nunca sustituir todo el HTML del panel por sync remoto: provocaba saltos y pérdida de foco.
        * refreshAfterRemoteLsKey ya actualiza gráficos, KPIs, listas y widgets por clave sin innerHTML total. */
@@ -24950,16 +24943,10 @@ function __deptUnitsStorageKey() {
           navigate("dashboard", true);
           return true;
         }
-        var want = (__CG_REMOTE_REFRESH_KEY_TO_VIEWS[k] || []).slice();
-        if (__cgRemoteRefreshDeptKeysArr().indexOf(k) >= 0) __cgRemoteRefreshAppendDeptViews(want);
-        if (__cgRemoteRefreshParkingKeys(k)) {
-          if (want.indexOf("estacionamientos") < 0) want.push("estacionamientos");
-          if (want.indexOf("departamentos") < 0) want.push("departamentos");
-        }
-        if (view && want.indexOf(view) >= 0) {
-          navigate(view, true);
-          return true;
-        }
+        /* No llamar navigate(view) aquí: cada sync Firestore que coincidía con la vista activa
+         * hacía innerHTML completo, remountedMain=true y se saltaban renderVisitas/renderEncomiendas/
+         * etc. (!remountedMain) — parpadeo continuo e interfaz inusable. Los bloques de
+         * refreshAfterRemoteLsKey repintan por clave sin destruir el árbol del módulo. */
       } catch (eNavRem) {}
       return false;
     }
@@ -24970,7 +24957,7 @@ function __deptUnitsStorageKey() {
         clave: "users",
         pruebas: [
           "Admin: editar usuario en Personal con conserje ya logueado en otro equipo.",
-          "Sin F5: conserje debe reflejar cambios en listas/admin al volver a pestañas afectadas; dashboard si está activo se remonta."
+          "Sin F5: conserje debe reflejar cambios en listas/admin al volver a pestañas afectadas; dashboard activo se actualiza por clave."
         ]
       },
       {
@@ -24983,7 +24970,7 @@ function __deptUnitsStorageKey() {
       {
         clave: "shiftLogs",
         pruebas: [
-          "Conserje A cierra turno; conserje B en Libro de novedades debe ver panel de turno actualizado (remount novedades o sync).",
+          "Conserje A cierra turno; conserje B en Libro de novedades debe ver panel de turno actualizado (render/sync).",
           "Admin en Turnos con pestaña activa: tabla se refresca."
         ]
       },
@@ -24991,7 +24978,7 @@ function __deptUnitsStorageKey() {
         clave: "visits (+ visitVehAlertLog)",
         pruebas: [
           "Admin registra o modifica visita; conserje en Visitas debe ver lista/historial al día sin F5.",
-          "Con dashboard activo, gráficos y alertas vehiculares se actualizan al remontar panel."
+          "Con dashboard activo, gráficos y alertas vehiculares se actualizan sin recargar la página."
         ]
       },
       {
@@ -25003,13 +24990,13 @@ function __deptUnitsStorageKey() {
       {
         clave: "encomiendas",
         pruebas: [
-          "Cambio remoto en encomiendas: vista Encomiendas activa debe remontarse; contadores del módulo coherentes."
+          "Cambio remoto en encomiendas: con Encomiendas activa, lista y contadores coherentes sin parpadeo total."
         ]
       },
       {
         clave: "wm815_units / wm815_former_residents",
         pruebas: [
-          "Sincronizar unidades o residentes anteriores: vistas Residentes, Departamentos y selects de Visitas deben alinearse (remount o sync embebido)."
+          "Sincronizar unidades o residentes anteriores: vistas Residentes, Departamentos y selects de Visitas deben alinearse (sync/render embebido)."
         ]
       }
     ];
@@ -25017,7 +25004,7 @@ function __deptUnitsStorageKey() {
     function getRemoteRefreshRegistry() {
       return {
         descripcion:
-          "Si la vista activa está en el conjunto derivado de la clave remota, se llama navigate(vista, true) para remontar datos, formularios y contadores del módulo. Si la vista activa es dashboard y la clave afecta al panel, se remonta dashboard entero.",
+          "Tras sync remoto, refreshAfterRemoteLsKey actualiza listas, KPIs y widgets según la clave sin sustituir todo el HTML del módulo (evita parpadeo y pérdida de foco). La tabla keyToViews indica qué vistas se repintan con los render* correspondientes.",
         keyToViews: __CG_REMOTE_REFRESH_KEY_TO_VIEWS,
         deptKeys: __cgRemoteRefreshDeptKeysArr(),
         parkingKeysNote: "buildingParking | buildingUnits | parkingSlots | parkingConfig → estacionamientos + departamentos si aplica.",
