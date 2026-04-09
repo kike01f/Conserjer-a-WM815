@@ -1100,6 +1100,9 @@
        * Tramos de turno: unión por id (evita LWW del documento completo en Firestore).
        * Política determinista (mismo id):
        * - Tumbas / pendingDeleted: el id se omite en el resultado.
+       * - Si el remoto trae al menos una fila: los ids que solo existen en local y no en el snapshot remoto
+       *   se descartan (admin borró en la nube; el remoto es la ley), salvo escritura pendiente en outbox
+       *   shiftLogs (subida en curso; el remoto puede ir desfasado).
        * - Cualquier copia cerrada gana sobre abierta.
        * - Ambas cerradas: mayor endAt; empate en endAt: id lexicográfico mayor (estable).
        * - Ambas abiertas: mayor startAt; empate: id lexicográfico mayor.
@@ -1110,6 +1113,16 @@
         if (!Array.isArray(localArr)) localArr = [];
         var pendDel = __cgReadPendingDeletedIdsForKey("shiftLogs");
         var tombIds = __cgReadShiftLogTombstoneIdSet();
+        var remoteIds = Object.create(null);
+        var rxi;
+        for (rxi = 0; rxi < remoteArr.length; rxi++) {
+          var rrw = remoteArr[rxi];
+          if (rrw && rrw.id != null && String(rrw.id) !== "") remoteIds[String(rrw.id)] = true;
+        }
+        var remoteNonEmpty = remoteArr.length > 0;
+        var outboxSl =
+          typeof window.__cgFsOutboxHasPendingWrite === "function" &&
+          window.__cgFsOutboxHasPendingWrite("shiftLogs");
         function skipId(id) {
           return !!(id != null && (pendDel[String(id)] || tombIds[String(id)]));
         }
@@ -1143,12 +1156,13 @@
           return idKey(a) >= idKey(b) ? a : b;
         }
         var byId = Object.create(null);
-        function ingest(arr) {
+        function ingest(arr, fromLocal) {
           var i, m, id, ex;
           for (i = 0; i < arr.length; i++) {
             m = arr[i];
             if (!m || m.id == null || String(m.id) === "") continue;
             id = String(m.id);
+            if (fromLocal && remoteNonEmpty && !remoteIds[id] && !outboxSl) continue;
             if (skipId(id)) continue;
             ex = byId[id];
             if (!ex) {
@@ -1158,8 +1172,8 @@
             byId[id] = pickBetter(m, ex);
           }
         }
-        ingest(remoteArr);
-        ingest(localArr);
+        ingest(remoteArr, false);
+        ingest(localArr, true);
         var out = [];
         var k;
         for (k in byId) {
