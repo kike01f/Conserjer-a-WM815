@@ -1203,9 +1203,10 @@
        *
        * Reglas:
        * - Origen remoto se ingiere primero; luego el disco/local (mismo id: conflicto).
-       * - Mayor _deptSyncMs gana; si no hay, unitNoteUpdatedAt (ms).
-       * - Empate numérico: gana la copia ya presente en byId (la remota / primera), no la “más larga” en JSON
-       *   (evita conservar copias locales obsoletas cuando los timestamps no avanzaron).
+       * - Mayor _deptSyncMs gana el “caparazón” de la unidad (nota, estacionamiento, etc.); las listas `residents`
+       *   se unen por cgResLineId / clave estable para no perder altas en otro dispositivo cuando aquí solo se
+       *   tocó nota (nota sube _deptSyncMs pero la lista en memoria podía estar desactualizada).
+       * - Empate numérico en unidad: gana la copia ya presente en byId (la remota / primera).
        * - Filas solo en local cuyo id no aparece en el snapshot remoto:
        *   - Si el remoto trae al menos una fila y hay escritura pendiente en outbox para esta clave KV,
        *     se conservan (subida en curso; el remoto puede estar desfasado).
@@ -1237,12 +1238,79 @@
           }
           return 0;
         }
-        function pickUnit(a, b) {
-          var ma = unitMs(a);
-          var mb = unitMs(b);
-          if (mb > ma) return b;
-          if (ma > mb) return a;
-          return a;
+        function __wm815ResidentMergeKey(r) {
+          if (!r || typeof r !== "object") return "";
+          var lid = r.cgResLineId != null ? String(r.cgResLineId).trim() : "";
+          if (lid) return "line:" + lid;
+          var n = String(r.name || "")
+            .trim()
+            .toLowerCase();
+          var rut = String(r.rut || "").trim();
+          var em = String(r.email || "")
+            .trim()
+            .toLowerCase();
+          return "mk:" + n + "|" + rut + "|" + em;
+        }
+        function mergeWm815ResidentsArrays(a, b) {
+          a = Array.isArray(a) ? a : [];
+          b = Array.isArray(b) ? b : [];
+          var byKey = Object.create(null);
+          var order = [];
+          function bump(r) {
+            if (!r || typeof r !== "object") return;
+            var k = __wm815ResidentMergeKey(r);
+            if (!k) {
+              k = "anon:" + order.length + "_" + Math.random().toString(36).slice(2, 9);
+            }
+            if (!byKey[k]) {
+              byKey[k] = r;
+              order.push(k);
+              return;
+            }
+            var ex = byKey[k];
+            var t1 = new Date(ex && ex.registeredAt ? ex.registeredAt : 0).getTime();
+            var t2 = new Date(r && r.registeredAt ? r.registeredAt : 0).getTime();
+            t1 = isFinite(t1) ? t1 : 0;
+            t2 = isFinite(t2) ? t2 : 0;
+            byKey[k] = t2 >= t1 ? r : ex;
+          }
+          a.forEach(bump);
+          b.forEach(bump);
+          var out = [];
+          var oi;
+          for (oi = 0; oi < order.length; oi++) {
+            out.push(byKey[order[oi]]);
+          }
+          return out;
+        }
+        function mergeWm815UnitPair(ex, u) {
+          var ma = unitMs(ex);
+          var mb = unitMs(u);
+          var primary;
+          var secondary;
+          if (mb > ma) {
+            primary = u;
+            secondary = ex;
+          } else if (ma > mb) {
+            primary = ex;
+            secondary = u;
+          } else {
+            primary = ex;
+            secondary = u;
+          }
+          try {
+            var out = JSON.parse(JSON.stringify(primary));
+            out.residents = mergeWm815ResidentsArrays(primary.residents, secondary.residents);
+            var ms = Math.max(ma, mb);
+            if (ms > 0) out._deptSyncMs = ms;
+            return out;
+          } catch (eMergeU) {
+            var ma2 = unitMs(ex);
+            var mb2 = unitMs(u);
+            if (mb2 > ma2) return u;
+            if (ma2 > mb2) return ex;
+            return ex;
+          }
         }
         var byId = Object.create(null);
         var i, u, id, ex;
@@ -1256,7 +1324,7 @@
             byId[id] = u;
             continue;
           }
-          byId[id] = pickUnit(ex, u);
+          byId[id] = mergeWm815UnitPair(ex, u);
         }
         for (i = 0; i < localArr.length; i++) {
           u = localArr[i];
@@ -1271,7 +1339,7 @@
             byId[id] = u;
             continue;
           }
-          byId[id] = pickUnit(ex, u);
+          byId[id] = mergeWm815UnitPair(ex, u);
         }
         var out = [];
         var k;
