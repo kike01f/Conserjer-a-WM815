@@ -17878,8 +17878,11 @@ function __deptUnitsStorageKey() {
                     try {
                         var cu = window.CG && typeof window.CG.currentUser === "function" ? window.CG.currentUser() : null;
                         formData.registradoPor = cu && cu.name ? String(cu.name).trim() : "";
+                        formData.registradoPorUserId =
+                            cu && cu.id != null && String(cu.id).trim() !== "" ? String(cu.id).trim() : "";
                     } catch (eRp) {
                         formData.registradoPor = "";
+                        formData.registradoPorUserId = "";
                     }
                 }
                 
@@ -22547,8 +22550,11 @@ function __deptUnitsStorageKey() {
       var monthIdx = pm.m;
       var monthTitle = new Date(y, monthIdx, 1).toLocaleDateString("es-CL", { month: "long", year: "numeric" });
       var norm = G.normalizeActivityName;
+      /* Incluir conserje, cuenta dual (ambos) y admin: antes solo roleIsConserje excluía a «ambos» y el panel no reflejaba registros de esos usuarios. */
       var conserjes = (G.state.users || []).filter(function (u) {
-        return u && G.roleIsConserje(u.role);
+        if (!u) return false;
+        var r = G.normalizeRoleForAuth(u.role);
+        return r === "conserje" || r === "ambos" || r === "admin";
       });
       var wm = wm815UnitsRaw();
       var visits = G.state.visits || [];
@@ -22564,6 +22570,12 @@ function __deptUnitsStorageKey() {
         wm.forEach(function (unit) {
           if (!unit || unit.id === G.ADMIN_UNIT_ID) return;
           if (!G.isInCalendarMonth(unit.createdAt, y, monthIdx)) return;
+          if (unit.registradoPorUserId != null && String(unit.registradoPorUserId).trim() !== "") {
+            if (G.sameUserId(unit.registradoPorUserId, u.id)) {
+              cUn++;
+              return;
+            }
+          }
           if (norm(unit.registradoPor) === key) cUn++;
         });
         visits.forEach(function (v) {
@@ -24045,7 +24057,12 @@ function __deptUnitsStorageKey() {
         }
         if (dash && !remountedMain) {
           try {
-            updateDashboardActivityAndNovBodiesOnly();
+            /* Actividad mensual + KPIs: los registros de unidades cuentan en el panel y deben verse al instante en admin. */
+            if (typeof updateDashboardChartsSummaryAndActivity === "function") {
+              updateDashboardChartsSummaryAndActivity();
+            } else {
+              updateDashboardActivityAndNovBodiesOnly();
+            }
           } catch (eDashDept) {}
         }
         /* Listados que muestran depto/unidad: si wm815 o espejo building cambió, repintar aunque la vista no sea Residentes. */
