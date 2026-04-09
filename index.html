@@ -16421,13 +16421,22 @@ function __deptUnitsStorageKey() {
                         ? window.__cgFabricaDeptKvFormer()
                         : "wm815_former_residents";
                 if (k !== ku && k !== kf) return;
-                if (appState.editingUnitId || isSaving) return;
+                /* Misma regla que refreshAfterRemoteLsKey / __cgRepaintActiveModuleForRemoteKey: aplazar solo en
+                 * Residentes/Departamentos con edición o guardado; si el usuario está en otra vista, aplicar kv fusionado. */
+                var ign = true;
+                try {
+                    if (typeof window.__cgDeptDeferSilentReloadForOpenEditor === "function") {
+                        ign = !window.__cgDeptDeferSilentReloadForOpenEditor();
+                    }
+                } catch (eIgnL) {
+                    ign = true;
+                }
                 try {
                     if (k === ku && typeof loadUnitsFromCloud === "function") {
-                        loadUnitsFromCloud(true, true).catch(function () {});
+                        loadUnitsFromCloud(true, ign).catch(function () {});
                     }
                     if (k === kf && typeof loadFormerResidentsFromCloud === "function") {
-                        loadFormerResidentsFromCloud(true, true).catch(function () {});
+                        loadFormerResidentsFromCloud(true, ign).catch(function () {});
                     }
                 } catch (eKv) {}
             });
