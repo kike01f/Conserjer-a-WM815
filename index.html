@@ -11668,6 +11668,15 @@
       if (!p) return false;
       return p.y === year && p.m - 1 === monthIndex;
     }
+    var CG_RESERVAS_DEFAULT_SPACES = ["Salón multipropósito", "Quincho / parrilla", "Sala reuniones", "Terraza o piscina"];
+    /** Si no hay espacios en configuración, aplica lista por defecto (instalación usable sin pasar por Admin). */
+    function ensureReservasCommonSpacesDefaults() {
+      var cfg = state.config && typeof state.config === "object" && !Array.isArray(state.config) ? state.config : {};
+      var cur = Array.isArray(cfg.commonSpaces) ? cfg.commonSpaces : [];
+      if (cur.length) return false;
+      state.config = Object.assign({}, cfg, { commonSpaces: CG_RESERVAS_DEFAULT_SPACES.slice() });
+      return true;
+    }
     function normalizeActivityName(s) {
       return String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
     }
@@ -13376,6 +13385,30 @@
         }
         return { ok: true, value: s };
       },
+      /** Misma sala y rangos [inicio, fin] que se cruzan (límites contiguos no cuentan como solape). */
+      reservaSinSolapeEnLista: function (space, startMs, endMs, lista, excludeId) {
+        var sp = String(space || "").trim();
+        if (!sp) return { ok: false, message: "Indique el espacio reservado." };
+        var ex = excludeId != null && String(excludeId) !== "" ? String(excludeId) : "";
+        var arr = Array.isArray(lista) ? lista : [];
+        var i;
+        for (i = 0; i < arr.length; i++) {
+          var r = arr[i];
+          if (!r || String(r.space || "").trim() !== sp) continue;
+          if (ex && String(r.id) === ex) continue;
+          var a = r.start != null ? new Date(r.start).getTime() : NaN;
+          var b = r.end != null ? new Date(r.end).getTime() : NaN;
+          if (!isFinite(a) || !isFinite(b)) continue;
+          if (a < endMs && b > startMs) {
+            return {
+              ok: false,
+              message:
+                "Ese espacio ya tiene otra reserva que se cruza con este horario. Cambie fecha/hora o elija otro espacio común."
+            };
+          }
+        }
+        return { ok: true };
+      },
       /**
        * Nombres en visitas: mayúscula inicial en cada palabra y tras guion (María José, Ana-María).
        * Usa reglas de mayúsculas en español (ñ, tildes).
@@ -14379,6 +14412,7 @@
       __cgHydrateMemLsFromLocalStorageBackup: __cgHydrateMemLsFromLocalStorageBackup,
       normalizeVisitPlateString: __cgNormalizeVisitPlateString,
       validate: CG_VALIDATE,
+      ensureReservasCommonSpacesDefaults: ensureReservasCommonSpacesDefaults,
       staffChatSpeakAnnouncementText: staffChatSpeakAnnouncementText
     };
     applyPersonalizationToDom();
@@ -24665,18 +24699,42 @@ function __deptUnitsStorageKey() {
     }
 
     function pageReservas() {
+      if (typeof G.ensureReservasCommonSpacesDefaults === "function") {
+        try {
+          G.ensureReservasCommonSpacesDefaults();
+        } catch (eResDef) {}
+      }
+      var csp = (G.state.config && Array.isArray(G.state.config.commonSpaces) && G.state.config.commonSpaces.length)
+        ? G.state.config.commonSpaces
+        : [];
+      var spOpts = csp
+        .map(function (s) {
+          return "<option value=\"" + G.escapeAttr(s) + "\">" + G.escapeHtml(s) + "</option>";
+        })
+        .join("");
       return (
         "<div class=\"cg-page-compact\" id=\"cg-page-reservas\" role=\"region\" aria-label=\"Reservas de espacios comunes\">" +
         "<h1 class=\"page-title\">Reservas — espacios comunes</h1>" +
         "<div id=\"cg-reservas-error\" class=\"hidden\" role=\"alert\"></div>" +
         "<div class=\"cg-module-intro\">" +
-        "<p class=\"page-desc\">Reserve salón, quincho u otros espacios definidos en <strong>Administración → Configuración</strong>. " +
-        "<strong>Fondo verde</strong> = en curso ahora; <strong>azul</strong> = próxima (aún no inicia); <strong>gris</strong> = finalizada.</p></div>" +
+        "<p class=\"page-desc\">Gestione turnos de salón, quincho y demás espacios. Si aún no definió nombres en <strong>Administración → Configuración</strong>, se usan espacios sugeridos. " +
+        "No se permiten dos reservas del <strong>mismo espacio</strong> con horarios que se crucen. " +
+        "<strong>Fondo verde</strong> = en curso ahora; <strong>azul</strong> = próxima; <strong>gris</strong> = finalizada.</p></div>" +
         "<div class=\"card cg-card-accent--res\"><div class=\"card-h\"><h3>Resumen y próximas</h3>" +
         "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"reservaOpen\" data-cg-empty=\"1\"><i class=\"fa-solid fa-plus\"></i> Nueva reserva</button></div>" +
         "<div class=\"card-b\"><div id=\"res-module-summary\" class=\"cg-reserva-summary\" aria-live=\"polite\"></div></div></div>" +
         "<div class=\"card cg-card-accent--res\"><div class=\"card-h\"><h3>Listado completo</h3>" +
-        "<div class=\"toolbar\"><input type=\"search\" id=\"flt-res-q\" placeholder=\"Filtrar por espacio, depto, nota o conserje…\" aria-label=\"Filtrar reservas\" /></div></div>" +
+        "<div class=\"toolbar\" style=\"flex-wrap:wrap;gap:0.5rem;align-items:center\">" +
+        "<select id=\"flt-res-vig\" aria-label=\"Filtrar por vigencia\" style=\"min-width:11.5rem\">" +
+        "<option value=\"all\">Todas (tiempo)</option>" +
+        "<option value=\"vig\" selected>Vigentes y próximas</option>" +
+        "<option value=\"past\">Solo finalizadas</option>" +
+        "</select>" +
+        "<select id=\"flt-res-space\" aria-label=\"Filtrar por espacio\" style=\"min-width:12rem\">" +
+        "<option value=\"\">Todos los espacios</option>" +
+        spOpts +
+        "</select>" +
+        "<input type=\"search\" id=\"flt-res-q\" placeholder=\"Buscar nota, depto, conserje…\" aria-label=\"Filtrar reservas\" style=\"min-width:12rem;flex:1;max-width:22rem\" /></div></div>" +
         "<div class=\"card-b\"><div id=\"tbl-res-wrap\" role=\"region\" aria-label=\"Tabla de reservas\"></div></div></div></div>"
       );
     }
@@ -31657,6 +31715,11 @@ function __deptUnitsStorageKey() {
   };
 
   A.reservaOpen = function (id) {
+    if (typeof G.ensureReservasCommonSpacesDefaults === "function") {
+      try {
+        G.ensureReservasCommonSpacesDefaults();
+      } catch (eRO) {}
+    }
     var resList = Array.isArray(G.state.reservas) ? G.state.reservas : [];
     var r = id
       ? resList.find(function (x) {
@@ -31708,9 +31771,10 @@ function __deptUnitsStorageKey() {
   };
 
   function deptSelectOpts(selId) {
-    return (Array.isArray(G.state.departments) ? G.state.departments : []).map(function (d) {
+    var opts = (Array.isArray(G.state.departments) ? G.state.departments : []).map(function (d) {
       return "<option value=\"" + G.escapeAttr(d.id) + "\"" + (String(d.id) === String(selId) ? " selected" : "") + ">" + G.escapeHtml(G.departmentSelectLabel(d)) + "</option>";
-    }).join("");
+    });
+    return "<option value=\"\">— Seleccione departamento —</option>" + opts.join("");
   }
 
   A.reservaSave = async function () {
@@ -31743,6 +31807,17 @@ function __deptUnitsStorageKey() {
     var ord = G.validate.dateOrderStartBeforeEnd(vStart.date.getTime(), vEnd.date.getTime());
     if (!ord.ok) {
       G.toast(ord.message, "error");
+      return;
+    }
+    var vSol = G.validate.reservaSinSolapeEnLista(
+      vs.value,
+      vStart.date.getTime(),
+      vEnd.date.getTime(),
+      G.state.reservas,
+      id
+    );
+    if (!vSol.ok) {
+      G.toast(vSol.message, "error");
       return;
     }
     var vnote = G.validate.textBlock(f.note.value, { label: "Nota de la reserva", min: 0, max: 2000 });
@@ -31860,6 +31935,23 @@ function __deptUnitsStorageKey() {
       errBanner.textContent = "";
     }
     try {
+    if (typeof G.ensureReservasCommonSpacesDefaults === "function") {
+      try {
+        G.ensureReservasCommonSpacesDefaults();
+      } catch (eDefR) {}
+    }
+    var selSp = document.getElementById("flt-res-space");
+    if (selSp) {
+      var prevSp = selSp.value;
+      var partsSp = ["<option value=\"\">Todos los espacios</option>"];
+      (G.state.config && Array.isArray(G.state.config.commonSpaces) ? G.state.config.commonSpaces : []).forEach(function (s) {
+        partsSp.push("<option value=\"" + G.escapeAttr(s) + "\">" + G.escapeHtml(s) + "</option>");
+      });
+      selSp.innerHTML = partsSp.join("");
+      if (prevSp && Array.prototype.some.call(selSp.options, function (o) { return o.value === prevSp; })) {
+        selSp.value = prevSp;
+      }
+    }
     var allR = Array.isArray(G.state.reservas) ? G.state.reservas : [];
     var sumEl = document.getElementById("res-module-summary");
     if (sumEl) {
@@ -31935,10 +32027,30 @@ function __deptUnitsStorageKey() {
       sumEl.innerHTML = chips + listHtml;
     }
     var q = ((document.getElementById("flt-res-q") || {}).value || "").toLowerCase();
+    var vigEl = document.getElementById("flt-res-vig");
+    var vigMode = vigEl && vigEl.value ? vigEl.value : "vig";
+    var spFilt = (selSp && selSp.value ? String(selSp.value).trim() : "") || "";
     var w = document.getElementById("tbl-res-wrap");
     if (!w) return;
     var isAdmRes = G.currentUser() && G.userIsAdmin(G.currentUser());
+    var nowF = new Date();
     var rows = allR.slice().sort(function (a, b) { return new Date(b.start) - new Date(a.start); });
+    if (vigMode === "vig") {
+      rows = rows.filter(function (r) {
+        var e = r && r.end != null ? new Date(r.end) : null;
+        return e && !isNaN(e.getTime()) && e >= nowF;
+      });
+    } else if (vigMode === "past") {
+      rows = rows.filter(function (r) {
+        var e = r && r.end != null ? new Date(r.end) : null;
+        return e && !isNaN(e.getTime()) && e < nowF;
+      });
+    }
+    if (spFilt) {
+      rows = rows.filter(function (r) {
+        return r && String(r.space || "").trim() === spFilt;
+      });
+    }
     if (q) {
       rows = rows.filter(function (r) {
         var depF = G.deptById(r.deptId);
@@ -36806,6 +36918,10 @@ function __deptUnitsStorageKey() {
         }
         if (el.id === "flt-vis-scope" && window.CG_ACTIONS && CG_ACTIONS.renderVisitas) {
           CG_ACTIONS.renderVisitas();
+          return;
+        }
+        if ((el.id === "flt-res-vig" || el.id === "flt-res-space") && window.CG_ACTIONS && CG_ACTIONS.renderReservas) {
+          CG_ACTIONS.renderReservas();
           return;
         }
         if (el.name === "visitIngreso" && el.closest && el.closest(".cg-vis-reg-form") && window.CG_ACTIONS && CG_ACTIONS.visitFormToggleTipoIngresoForm) {
