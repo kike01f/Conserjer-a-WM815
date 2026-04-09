@@ -2049,6 +2049,9 @@
                 resolvers[rj](okr);
               } catch (eOk) {}
             }
+            try {
+              if (typeof window.__cgPostKvWriteBroadcast === "function") window.__cgPostKvWriteBroadcast(shortKey);
+            } catch (eBc) {}
           })
           .catch(function (err) {
             decInflight();
@@ -2081,6 +2084,14 @@
           __cgFsPumpRunOne();
         }
       }
+
+      /** Misma pestaña u otras del mismo origen: aviso tras subida a Firestore para pull inmediato (refuerzo al listener). */
+      window.__cgPostKvWriteBroadcast = function (shortKey) {
+        try {
+          if (!shortKey || !window.__cgKvWriteBc) return;
+          window.__cgKvWriteBc.postMessage({ v: 1, k: String(shortKey), at: Date.now() });
+        } catch (e) {}
+      };
 
       window.cgFsBridge = {
         active: fsActive,
@@ -9801,46 +9812,93 @@
         window.__cgFsListenerUnsub = null;
       }
       var col = window.cgFsBridge.kvCol();
-      window.__cgFsListenerUnsub = col.onSnapshot(
-        function (snapshot) {
-          snapshot.docChanges().forEach(function (chg) {
-            var id = chg.doc.id;
-            var d = chg.doc.data();
-            var js = d && d.json != null ? String(d.json) : null;
-            var meta =
-              id === "staffChatMessages" && typeof window.__cgStaffChatRevPullMeta === "function"
-                ? window.__cgStaffChatRevPullMeta(d)
-                : null;
-            window.cgFsBridge.applyRemoteDoc(id, js, chg.type, meta);
-          });
-          window.__cgFsRemoteReady = true;
-          window.__cgCloudKvHydratedOnce = true;
-          __cgFsSyncHealthSet("synced", null, null);
-          __cgRefreshFirestoreSyncBanner();
+      function __cgKvSnapshotHandler(snapshot) {
+        snapshot.docChanges().forEach(function (chg) {
+          var id = chg.doc.id;
+          var d = chg.doc.data();
+          var js = d && d.json != null ? String(d.json) : null;
+          var meta =
+            id === "staffChatMessages" && typeof window.__cgStaffChatRevPullMeta === "function"
+              ? window.__cgStaffChatRevPullMeta(d)
+              : null;
+          window.cgFsBridge.applyRemoteDoc(id, js, chg.type, meta);
+        });
+        window.__cgFsRemoteReady = true;
+        window.__cgCloudKvHydratedOnce = true;
+        __cgFsSyncHealthSet("synced", null, null);
+        __cgRefreshFirestoreSyncBanner();
+        try {
+          if (window.CG && typeof window.CG.ensureCloudInstallBaseline === "function") {
+            window.CG.ensureCloudInstallBaseline();
+          }
+        } catch (eBlSnap) {}
+      }
+      function __cgKvListenerError(err) {
+        window.__cgFsLastError = err;
+        __cgFsSyncHealthFromError(err);
+        __cgRefreshFirestoreSyncBanner();
+        __cgSyncLog("warn", "firestore_listener", err);
+        try {
+          if (window.__cgFsListenerUnsub) {
+            window.__cgFsListenerUnsub();
+            window.__cgFsListenerUnsub = null;
+          }
+        } catch (eUn) {}
+        setTimeout(function () {
+          if (window.CG && typeof window.CG.toast === "function") {
+            var c = err && err.code ? String(err.code) : "";
+            window.CG.toast(
+              c === "permission-denied"
+                ? "Firestore rechazó la escucha en tiempo real (permission-denied). Revise reglas y autenticación."
+                : "Error de sincronización con la nube. Revise red y reglas Firestore.",
+              "error"
+            );
+          }
+        }, 0);
+        /* Reintento: el listener dejó de recibir deltas; consolidar con un solo temporizador. */
+        if (window.__cgFsListenerRetryTimer) clearTimeout(window.__cgFsListenerRetryTimer);
+        window.__cgFsListenerRetryTimer = setTimeout(function () {
+          window.__cgFsListenerRetryTimer = null;
           try {
-            if (window.CG && typeof window.CG.ensureCloudInstallBaseline === "function") {
-              window.CG.ensureCloudInstallBaseline();
+            if (!window.CG || typeof window.CG.load !== "function" || !window.CG.load("session", null)) return;
+            if (window.__cgFsListenerUnsub) return;
+            if (typeof window.CG.initCloudSync === "function") window.CG.initCloudSync().catch(function () {});
+          } catch (eR) {}
+        }, 4000);
+      }
+      try {
+        window.__cgFsListenerUnsub = col.onSnapshot({ includeMetadataChanges: true }, __cgKvSnapshotHandler, __cgKvListenerError);
+      } catch (eSnapSig) {
+        window.__cgFsListenerUnsub = col.onSnapshot(__cgKvSnapshotHandler, __cgKvListenerError);
+      }
+      if (!window.__cgKvBroadcastListenBound) {
+        window.__cgKvBroadcastListenBound = true;
+        try {
+          if (typeof BroadcastChannel !== "undefined") {
+            if (!window.__cgKvWriteBc) {
+              window.__cgKvWriteBc = new BroadcastChannel("cg-fabrica-kv-sync-v1");
             }
-          } catch (eBlSnap) {}
-        },
-        function (err) {
-          window.__cgFsLastError = err;
-          __cgFsSyncHealthFromError(err);
-          __cgRefreshFirestoreSyncBanner();
-          __cgSyncLog("warn", "firestore_listener", err);
-          setTimeout(function () {
-            if (window.CG && typeof window.CG.toast === "function") {
-              var c = err && err.code ? String(err.code) : "";
-              window.CG.toast(
-                c === "permission-denied"
-                  ? "Firestore rechazó la escucha en tiempo real (permission-denied). Revise reglas y autenticación."
-                  : "Error de sincronización con la nube. Revise red y reglas Firestore.",
-                "error"
-              );
-            }
-          }, 0);
-        }
-      );
+            var __cgKvBcLastPull = 0;
+            window.__cgKvWriteBc.onmessage = function (ev) {
+              try {
+                var p = ev && ev.data;
+                if (!p || p.v !== 1) return;
+                if (!window.CG || typeof window.CG.load !== "function" || !window.CG.load("session", null)) return;
+                if (!window.cgFsBridge || typeof window.cgFsBridge.active !== "function" || !window.cgFsBridge.active()) return;
+                var now = Date.now();
+                if (now - __cgKvBcLastPull < 320) return;
+                __cgKvBcLastPull = now;
+                var kk = p.k != null ? String(p.k) : "";
+                if (kk && typeof window.CG.cloudPullSingleLsKey === "function") {
+                  window.CG.cloudPullSingleLsKey(kk).catch(function () {});
+                } else if (typeof window.CG.cloudPullAllOnce === "function") {
+                  window.CG.cloudPullAllOnce().catch(function () {});
+                }
+              } catch (eM) {}
+            };
+          }
+        } catch (eBcL) {}
+      }
       attachStaffChatRemoteSync();
       try {
         if (window.cgFsBridge && typeof window.cgFsBridge.replaySyncOutbox === "function") {
@@ -14529,7 +14587,7 @@
     (function cgCloudPeriodicFullPull() {
       if (window.__cgCloudPeriodicPullBound) return;
       window.__cgCloudPeriodicPullBound = true;
-      /* Refuerzo: lectura completa de la colección kv por si el listener perdió un delta (pestaña en segundo plano, red). */
+      /* Refuerzo frecuente: la colección kv debe alinearse entre equipos aunque falle un delta del listener. */
       setInterval(function () {
         try {
           if (document.visibilityState !== "visible") return;
@@ -14537,7 +14595,7 @@
           if (!window.cgFsBridge || typeof window.cgFsBridge.active !== "function" || !window.cgFsBridge.active()) return;
           if (typeof window.CG.cloudPullAllOnce === "function") window.CG.cloudPullAllOnce();
         } catch (ePer) {}
-      }, 60000);
+      }, 15000);
     })();
     (function cgFlushCloudOnPageHide() {
       if (window.__cgFlushCloudOnPageHideBound) return;
