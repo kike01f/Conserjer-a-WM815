@@ -953,6 +953,55 @@
       }
 
       /**
+       * KV JSON de administración (objeto o envoltorio {_cgItems, _cgUpdatedAt}): evita que un snapshot de
+       * Firestore antiguo pise cambios ya guardados en localStorage al recargar (last-write-wins remoto).
+       */
+      function __cgJsonDocUpdatedAtMs(o) {
+        if (!o || typeof o !== "object") return 0;
+        var t = o._cgUpdatedAt;
+        if (typeof t === "number" && t === t && isFinite(t)) return t;
+        return 0;
+      }
+      function __cgMergeFirestoreJsonDocPreferNewer(remoteStr, localStr) {
+        try {
+          if (typeof remoteStr !== "string" || typeof localStr !== "string") return null;
+          var r = JSON.parse(remoteStr);
+          var l = JSON.parse(localStr);
+          if (Array.isArray(r) && Array.isArray(l)) {
+            return localStr;
+          }
+          if (
+            Array.isArray(r) &&
+            l &&
+            typeof l === "object" &&
+            !Array.isArray(l) &&
+            Array.isArray(l._cgItems)
+          ) {
+            return localStr;
+          }
+          if (
+            r &&
+            typeof r === "object" &&
+            !Array.isArray(r) &&
+            Array.isArray(r._cgItems) &&
+            Array.isArray(l)
+          ) {
+            return remoteStr;
+          }
+          if (!r || !l || typeof r !== "object" || Array.isArray(r) || typeof l !== "object" || Array.isArray(l)) {
+            return null;
+          }
+          var tr = __cgJsonDocUpdatedAtMs(r);
+          var tl = __cgJsonDocUpdatedAtMs(l);
+          if (tl > tr) return localStr;
+          if (tr > tl) return remoteStr;
+          return localStr;
+        } catch (eCgDoc) {
+          return null;
+        }
+      }
+
+      /**
        * Libro de novedades: unión por id entre remoto y caché local (evita last-write-wins que borra entradas).
        * Timestamp `at` más reciente gana; empate → `editedAt` más reciente; segunda ingesta gana empates restantes.
        * Si la copia ganadora trae `note` vacío y la otra tenía texto, se conserva la nota (listas desfasadas / otro equipo).
@@ -1894,6 +1943,15 @@
             shortKey !== "shiftLogs" &&
             shortKey !== "shiftLogsTombstones" &&
             shortKey !== "users" &&
+            shortKey !== "roleModules" &&
+            shortKey !== "config" &&
+            shortKey !== "personalization" &&
+            shortKey !== "festiveAmbience" &&
+            shortKey !== "visitVehAlertLog" &&
+            shortKey !== "parkingConfig" &&
+            shortKey !== "absenceAlertPhrases" &&
+            shortKey !== "dashScheduledAlerts" &&
+            shortKey !== "staffBirthdays" &&
             !__cgDeptKvMerge &&
             typeof curMem0 === "string" &&
             curMem0 !== next &&
@@ -2120,6 +2178,41 @@
             }
             if (window.__cgFsMem[shortKey] === next) {
               return;
+            }
+          }
+
+          var __cgAdminKvMergeKeys = {
+            roleModules: true,
+            config: true,
+            personalization: true,
+            festiveAmbience: true,
+            visitVehAlertLog: true,
+            parkingConfig: true,
+            absenceAlertPhrases: true,
+            dashScheduledAlerts: true,
+            staffBirthdays: true
+          };
+          if (__cgAdminKvMergeKeys[shortKey]) {
+            var adminKvIncoming = next;
+            try {
+              var prevStrDoc = window.__cgFsMem[shortKey];
+              if (typeof prevStrDoc !== "string" || !prevStrDoc) {
+                prevStrDoc = tryLocalStorageGet(full);
+              }
+              if (typeof prevStrDoc === "string" && prevStrDoc) {
+                var pickDoc = __cgMergeFirestoreJsonDocPreferNewer(next, prevStrDoc);
+                if (pickDoc != null) next = pickDoc;
+              }
+            } catch (eAdmKv) {}
+            if (
+              next !== adminKvIncoming &&
+              window.cgFsBridge &&
+              typeof window.cgFsBridge.pushImmediate === "function" &&
+              !window.__cgFsSkipFirestoreKey[shortKey]
+            ) {
+              try {
+                window.cgFsBridge.pushImmediate(shortKey, next);
+              } catch (eAdmPush) {}
             }
           }
 
@@ -9290,6 +9383,18 @@
       return window.__cgCloudSyncLastInitResult;
     }
     /* ┌─ 3. Persistencia local (clave corta → JSON en localStorage) ──────────────────── */
+    function __cgUnwrapArrayKvIfWrapped(key, v) {
+      if (
+        (key === "absenceAlertPhrases" || key === "dashScheduledAlerts" || key === "staffBirthdays") &&
+        v &&
+        typeof v === "object" &&
+        !Array.isArray(v) &&
+        Array.isArray(v._cgItems)
+      ) {
+        return v._cgItems;
+      }
+      return v;
+    }
     function load(key, fallback) {
       if (key == null || key === "" || typeof key !== "string") return fallback;
       if (key.indexOf("/") >= 0 || key.indexOf("\\") >= 0) return fallback;
@@ -9297,6 +9402,8 @@
         var raw = P.localGetRaw(LS + key);
         if (raw == null || raw === "") return fallback;
         var v = P.parseJson(raw, undefined);
+        if (v === undefined) return fallback;
+        v = __cgUnwrapArrayKvIfWrapped(key, v);
         return v === undefined ? fallback : v;
       } catch (eLoad) {
         console.warn("[CG] load: lectura o JSON inválido para clave", key, eLoad);
@@ -9310,7 +9417,26 @@
       }
       if (key.indexOf("/") >= 0 || key.indexOf("\\") >= 0) return;
       try {
-        var str = P.stringifyForStorage(val);
+        var valToSave = val;
+        if (
+          valToSave &&
+          typeof valToSave === "object" &&
+          !Array.isArray(valToSave) &&
+          (key === "roleModules" ||
+            key === "config" ||
+            key === "personalization" ||
+            key === "festiveAmbience" ||
+            key === "visitVehAlertLog" ||
+            key === "parkingConfig")
+        ) {
+          valToSave = Object.assign({}, valToSave, { _cgUpdatedAt: Date.now() });
+        } else if (
+          (key === "absenceAlertPhrases" || key === "dashScheduledAlerts" || key === "staffBirthdays") &&
+          Array.isArray(valToSave)
+        ) {
+          valToSave = { _cgItems: valToSave.slice(), _cgUpdatedAt: Date.now() };
+        }
+        var str = P.stringifyForStorage(valToSave);
         if (str === null) {
           console.warn("[CG] save: no se pudo serializar", key);
           return;
