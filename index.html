@@ -16081,9 +16081,12 @@ function __deptUnitsStorageKey() {
                     window.CG_UI && typeof window.CG_UI.getCurrentView === "function" ? window.CG_UI.getCurrentView() : null;
                 return cvu === "departamentos" || cvu === "mapaEdificio";
             } catch (eDef) {
-                return true;
+                return false;
             }
         }
+        try {
+            window.__cgDeptDeferSilentReloadForOpenEditor = __deptDeferSilentReloadForOpenEditor;
+        } catch (eExDef) {}
 
         function writeUnitsToStorage(units) {
             var str = window.CG_PERSIST.stringifyForStorage(units);
@@ -16156,10 +16159,11 @@ function __deptUnitsStorageKey() {
             }
         };
 
-        window.loadUnitsFromCloud = async function(silent) {
+        window.loadUnitsFromCloud = async function(silent, ignoreDefer) {
             /* No recargar desde disco en segundo plano mientras se edita una unidad o hay guardado en curso
-               en las vistas Residentes/Departamentos (si el usuario salió a otro módulo, sí recargar: sync remoto). */
-            if (silent && __deptDeferSilentReloadForOpenEditor()) {
+               en las vistas Residentes/Departamentos (si el usuario salió a otro módulo, sí recargar: sync remoto).
+               ignoreDefer=true: aplicar kv ya fusionado (p. ej. tras cg-cloud-storage-applied) aunque silent. */
+            if (silent && !ignoreDefer && __deptDeferSilentReloadForOpenEditor()) {
                 return true;
             }
             var hadLkg = Array.isArray(appState.lastKnownGoodUnits);
@@ -16294,8 +16298,8 @@ function __deptUnitsStorageKey() {
             }
         };
 
-        window.loadFormerResidentsFromCloud = async function(silent) {
-            if (silent && __deptDeferSilentReloadForOpenEditor()) {
+        window.loadFormerResidentsFromCloud = async function(silent, ignoreDefer) {
+            if (silent && !ignoreDefer && __deptDeferSilentReloadForOpenEditor()) {
                 return true;
             }
             var hadLkgFr = Array.isArray(appState.lastKnownGoodFormerResidents);
@@ -16403,7 +16407,30 @@ function __deptUnitsStorageKey() {
         };
 
         window.startRealtimeSync = function() {
-            console.log("💾 Datos solo en este navegador (localStorage).");
+            if (window.__cgDeptKvSyncListenerBound) return;
+            window.__cgDeptKvSyncListenerBound = true;
+            window.addEventListener("cg-cloud-storage-applied", function (ev) {
+                var k = ev && ev.detail && ev.detail.key;
+                if (!k) return;
+                var ku =
+                    typeof window.__cgFabricaDeptKvUnits === "function"
+                        ? window.__cgFabricaDeptKvUnits()
+                        : "wm815_units";
+                var kf =
+                    typeof window.__cgFabricaDeptKvFormer === "function"
+                        ? window.__cgFabricaDeptKvFormer()
+                        : "wm815_former_residents";
+                if (k !== ku && k !== kf) return;
+                if (appState.editingUnitId || isSaving) return;
+                try {
+                    if (k === ku && typeof loadUnitsFromCloud === "function") {
+                        loadUnitsFromCloud(true, true).catch(function () {});
+                    }
+                    if (k === kf && typeof loadFormerResidentsFromCloud === "function") {
+                        loadFormerResidentsFromCloud(true, true).catch(function () {});
+                    }
+                } catch (eKv) {}
+            });
         };
 
         window.saveUnitNoteToCloud = async function(unit) {
@@ -23756,11 +23783,19 @@ function __deptUnitsStorageKey() {
           } catch (eVisDept) {}
         }
         if ((view === "departamentos" || view === "mapaEdificio") && !remountedMain) {
+          var ignDeptRf = false;
+          try {
+            if (typeof window.__cgDeptDeferSilentReloadForOpenEditor === "function") {
+              ignDeptRf = !window.__cgDeptDeferSilentReloadForOpenEditor();
+            }
+          } catch (eIgnRf) {
+            ignDeptRf = true;
+          }
           if (typeof window.loadUnitsFromCloud === "function") {
-            window.loadUnitsFromCloud(true).catch(function () {});
+            window.loadUnitsFromCloud(true, ignDeptRf).catch(function () {});
           }
           if (typeof window.loadFormerResidentsFromCloud === "function") {
-            window.loadFormerResidentsFromCloud(true).catch(function () {});
+            window.loadFormerResidentsFromCloud(true, ignDeptRf).catch(function () {});
           }
         }
         if (dash && !remountedMain) {
@@ -25420,12 +25455,28 @@ function __deptUnitsStorageKey() {
     /* Alinear appState del módulo embebido con el mismo LS usado arriba y repintar tablas/mapa/notas (silent respeta edición en curso). */
     try {
       if (typeof window.loadUnitsFromCloud === "function") {
-        window.loadUnitsFromCloud(true).catch(function () {});
+        var ignU = false;
+        try {
+          if (typeof window.__cgDeptDeferSilentReloadForOpenEditor === "function") {
+            ignU = !window.__cgDeptDeferSilentReloadForOpenEditor();
+          }
+        } catch (eIgn) {
+          ignU = true;
+        }
+        window.loadUnitsFromCloud(true, ignU).catch(function () {});
       }
     } catch (eLdU) {}
     try {
       if (typeof window.loadFormerResidentsFromCloud === "function") {
-        window.loadFormerResidentsFromCloud(true).catch(function () {});
+        var ignF = false;
+        try {
+          if (typeof window.__cgDeptDeferSilentReloadForOpenEditor === "function") {
+            ignF = !window.__cgDeptDeferSilentReloadForOpenEditor();
+          }
+        } catch (eIgn2) {
+          ignF = true;
+        }
+        window.loadFormerResidentsFromCloud(true, ignF).catch(function () {});
       }
     } catch (eLdF) {}
   };
