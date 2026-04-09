@@ -2670,6 +2670,7 @@
     :root {
       /* Valores por defecto = paleta oficial Lima (#74BD20); html[data-cg-palette] puede sobreescribir. */
       --blue-900: #1e3a0f;
+      --blue-800: #365f14;
       --blue-700: #365f14;
       --blue-500: #74bd20;
       --blue-400: #8fd03a;
@@ -7844,6 +7845,7 @@
       --secondary-text: #9eb0c8;
       --shadow: 0 4px 28px rgba(0, 0, 0, 0.55);
       --blue-900: color-mix(in srgb, var(--blue-100) 78%, #f8fafc);
+      --blue-800: color-mix(in srgb, var(--blue-400) 72%, #ecfccb);
       --blue-700: color-mix(in srgb, var(--blue-400) 52%, #dcfce7);
       --on-accent: #0f172a;
     }
@@ -8466,6 +8468,191 @@
     }
     html[data-cg-theme="dark"] #cg-user-manual-overlay .cg-user-manual-body {
       background: linear-gradient(180deg, transparent 0%, rgba(99, 102, 241, 0.08) 100%);
+    }
+
+    /* —— Modo noche: libro de novedades (timeline), avisos de turno, badges de estado —— */
+    html[data-cg-theme="dark"] .timeline::before {
+      background: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .tl-card {
+      background: var(--card-color);
+      border-color: var(--gray-300);
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .tl-meta {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .tl-card.tl-turno-card {
+      background: linear-gradient(145deg, rgba(13, 148, 136, 0.2) 0%, var(--gray-100) 42%, var(--card-color) 100%);
+      border-color: rgba(45, 212, 191, 0.38);
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.38);
+    }
+    html[data-cg-theme="dark"] .tl-cat.tl-cat-turno {
+      background: rgba(45, 212, 191, 0.22) !important;
+      color: #5eead4 !important;
+    }
+    html[data-cg-theme="dark"] .tl-cat.tl-cat-general {
+      background: rgba(99, 102, 241, 0.24);
+      color: #c7d2fe;
+    }
+    html[data-cg-theme="dark"] .tl-cat.tl-cat-mantenimiento {
+      background: rgba(234, 88, 12, 0.24);
+      color: #fdba74;
+    }
+    html[data-cg-theme="dark"] .tl-cat.tl-cat-seguridad {
+      background: rgba(239, 68, 68, 0.22);
+      color: #fecaca;
+    }
+    html[data-cg-theme="dark"] .tl-cat.tl-cat-proveedores {
+      background: rgba(14, 165, 233, 0.22);
+      color: #7dd3fc;
+    }
+    html[data-cg-theme="dark"] .tl-cat.tl-cat-incidentes {
+      background: rgba(220, 38, 38, 0.26);
+      color: #fecaca;
+    }
+    html[data-cg-theme="dark"] .tl-cat.tl-cat-multa {
+      background: rgba(217, 119, 6, 0.24);
+      color: #fcd34d;
+    }
+    html[data-cg-theme="dark"] .tl-cat.tl-cat-otros {
+      background: var(--gray-200);
+      color: var(--gray-700);
+    }
+    html[data-cg-theme="dark"] .tl-card.tl-card-nov-general {
+      border-left-color: #818cf8;
+    }
+    html[data-cg-theme="dark"] .tl-card.tl-card-nov-mantenimiento {
+      border-left-color: #fb923c;
+    }
+    html[data-cg-theme="dark"] .tl-card.tl-card-nov-seguridad {
+      border-left-color: #f87171;
+    }
+    html[data-cg-theme="dark"] .tl-card.tl-card-nov-proveedores {
+      border-left-color: #38bdf8;
+    }
+    html[data-cg-theme="dark"] .tl-card.tl-card-nov-incidentes {
+      border-left-color: #f87171;
+    }
+    html[data-cg-theme="dark"] .tl-card.tl-card-nov-multa {
+      border-left-color: #fbbf24;
+      background: linear-gradient(90deg, rgba(217, 119, 6, 0.16) 0%, var(--card-color) 18%);
+    }
+    html[data-cg-theme="dark"] .tl-card.tl-card-nov-otros {
+      border-left-color: #94a3b8;
+    }
+    html[data-cg-theme="dark"] .tl-nov-note {
+      color: #fef9c3;
+      background: rgba(113, 63, 18, 0.42);
+      border-left-color: #eab308;
+      box-shadow: inset 0 0 0 1px rgba(234, 179, 8, 0.22);
+    }
+    html[data-cg-theme="dark"] .tl-nov-note strong {
+      color: #fde047;
+    }
+    html[data-cg-theme="dark"] .cg-dash-nov-note-chip {
+      background: rgba(113, 63, 18, 0.5);
+      color: #fef9c3;
+      border-color: rgba(250, 204, 21, 0.42);
+    }
+    html[data-cg-theme="dark"] .cg-dash-nov-note-chip strong {
+      color: #fef08a;
+    }
+    html[data-cg-theme="dark"] .cg-nov-bitacora-veil-hint {
+      background: linear-gradient(120deg, rgba(124, 45, 18, 0.45), rgba(234, 88, 12, 0.22));
+      border-color: rgba(251, 146, 60, 0.45);
+      color: #fdba74;
+    }
+    html[data-cg-theme="dark"] .cg-shift-close-alert {
+      background: linear-gradient(135deg, rgba(124, 45, 18, 0.5) 0%, rgba(154, 52, 18, 0.28) 100%);
+      border-color: #ea580c;
+      color: #fed7aa;
+    }
+    html[data-cg-theme="dark"] .cg-shift-close-alert strong {
+      color: #fde68a;
+    }
+    html[data-cg-theme="dark"] .cg-shift-close-alert ul {
+      color: #fcd34d;
+    }
+    html[data-cg-theme="dark"] .badge-disponible {
+      background: rgba(16, 185, 129, 0.22);
+      color: #6ee7b7;
+    }
+    html[data-cg-theme="dark"] .badge-ocupado {
+      background: rgba(59, 130, 246, 0.22);
+      color: #93c5fd;
+    }
+    html[data-cg-theme="dark"] .badge-arrendado {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fcd34d;
+    }
+    html[data-cg-theme="dark"] .badge-airbnb {
+      background: rgba(139, 92, 246, 0.22);
+      color: #d8b4fe;
+    }
+    html[data-cg-theme="dark"] .badge-libre {
+      background: rgba(16, 185, 129, 0.2);
+      color: #6ee7b7;
+    }
+    html[data-cg-theme="dark"] .badge-ocupado-p {
+      background: rgba(248, 113, 113, 0.2);
+      color: #fecaca;
+    }
+    html[data-cg-theme="dark"] #cg-reservas-error,
+    html[data-cg-theme="dark"] #cg-admin-error {
+      background: rgba(127, 29, 29, 0.35);
+      border-color: rgba(248, 113, 113, 0.45);
+      color: #fecaca;
+    }
+    html[data-cg-theme="dark"] table.data-table th {
+      background: var(--gray-100);
+      color: var(--gray-600);
+      border-bottom-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] table.data-table td {
+      border-bottom-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] table.data-table tr:hover td {
+      background: rgba(148, 163, 184, 0.08);
+    }
+    html[data-cg-theme="dark"] .cg-stat-chip {
+      background: var(--card-color);
+      border-color: var(--gray-300);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+    }
+    html[data-cg-theme="dark"] .cg-stat-chip .cg-stat-chip-val {
+      color: var(--blue-800);
+    }
+    html[data-cg-theme="dark"] .cg-stat-chip--enc .cg-stat-chip-val {
+      color: #fdba74;
+    }
+    html[data-cg-theme="dark"] .cg-stat-chip--res .cg-stat-chip-val {
+      color: #6ee7b7;
+    }
+    html[data-cg-theme="dark"] .cg-stat-chip--aus .cg-stat-chip-val {
+      color: #a5b4fc;
+    }
+    html[data-cg-theme="dark"] .btn-secondary {
+      background: var(--gray-200);
+      color: var(--gray-800);
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .btn-secondary:hover {
+      background: var(--gray-300);
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .card-h h3 {
+      color: var(--gray-800);
+    }
+    html[data-cg-theme="dark"] .kpi {
+      background: var(--card-color);
+      border-color: var(--gray-300);
+    }
+    html[data-cg-theme="dark"] .kpi .label {
+      color: var(--gray-600);
+    }
+    html[data-cg-theme="dark"] .kpi .value {
+      color: var(--blue-700);
     }
 
     html[data-cg-theme="dark"] #modal-root .modal-b form,
