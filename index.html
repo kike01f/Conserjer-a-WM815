@@ -24871,6 +24871,10 @@ function __deptUnitsStorageKey() {
     }
 
     function __cgRemoteRefreshShouldRemountDashboard(k) {
+      /* Solo remontar HTML completo del panel cuando hace falta reconstruir estructura.
+       * NO incluir: conserjeActivityLog, dashActMonth, staffBirthdays, dashScheduledAlerts,
+       * personalization, festiveAmbience, config — se actualizan con ramas específicas en
+       * refreshAfterRemoteLsKey (evita parpadeo si Firestore notifica a menudo). */
       if (
         {
           visits: true,
@@ -24878,23 +24882,16 @@ function __deptUnitsStorageKey() {
           encomiendas: true,
           reservas: true,
           novedades: true,
-          conserjeActivityLog: true,
           users: true,
           shiftLogs: true,
           proveedores: true,
-          dashActMonth: true,
-          staffBirthdays: true,
-          dashScheduledAlerts: true,
           departments: true,
           buildingUnits: true,
           buildingResidents: true,
           buildingFormerResidents: true,
           buildingParking: true,
           parkingSlots: true,
-          parkingConfig: true,
-          personalization: true,
-          festiveAmbience: true,
-          config: true
+          parkingConfig: true
         }[k]
       ) {
         return true;
