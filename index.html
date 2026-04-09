@@ -30671,7 +30671,9 @@ function __deptUnitsStorageKey() {
       syncNovedadEntryFormShiftGate();
       return;
     }
-    var isAdm = G.currentUser() && G.userIsAdmin(G.currentUser());
+    var u0 = G.currentUser();
+    var isAdm = !!(u0 && G.userIsAdmin(u0));
+    var mayDeleteNov = isAdm || !!(u0 && G.roleIsConserje(u0.role));
     tl.innerHTML = rows.map(function (n) {
       var isTurno = n.category === "Turno";
       var catSlug = novedadCategorySlug(n.category);
@@ -30690,10 +30692,10 @@ function __deptUnitsStorageKey() {
       var catBadgeCls = isTurno ? " tl-cat-turno" : " tl-cat-" + catSafe;
       var ribbon = isTurno ? "<div class=\"tl-turno-ribbon\">Turno cerrado</div>" : "";
       var actions = "";
-      if (!(isTurno && !isAdm)) {
+      if (!isTurno || isAdm || (u0 && G.roleIsConserje(u0.role))) {
         var uCur = G.currentUser();
         var mayEdit = isAdm || novedadConserjeMayEdit(n, uCur);
-        var delNov = isAdm
+        var delNov = mayDeleteNov
           ? "<button type=\"button\" class=\"btn btn-danger btn-sm\" data-cg-act=\"novDel\" data-cg-id=\"" +
             G.escapeHtml(n.id) +
             "\">Eliminar</button>"
@@ -31153,8 +31155,13 @@ function __deptUnitsStorageKey() {
   };
 
   A.novDel = function (id) {
-    if (!G.userIsAdmin(G.currentUser())) {
-      G.toast("Solo el administrador puede eliminar entradas del libro de novedades", "warn");
+    var u = G.currentUser();
+    if (!u) {
+      G.toast("Inicie sesión para continuar.", "warn");
+      return;
+    }
+    if (!G.userIsAdmin(u) && !G.roleIsConserje(u.role)) {
+      G.toast("Solo administración o conserjería pueden eliminar entradas del libro.", "warn");
       return;
     }
     if (!confirm("¿Eliminar esta entrada del libro?")) return;
