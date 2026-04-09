@@ -901,6 +901,55 @@
       }
 
       /**
+       * Personal (users): unión por id entre remoto y caché local.
+       * Respeta __cgPendingDeleted.users; gana la copia con `updatedAt` más reciente (empate → local).
+       */
+      function mergeUserDirectory(remoteArr, localArr) {
+        if (!Array.isArray(remoteArr)) remoteArr = [];
+        if (!Array.isArray(localArr)) localArr = [];
+        var pendDel = __cgReadPendingDeletedIdsForKey("users");
+        function idOf(u) {
+          return u && u.id != null ? String(u.id) : "";
+        }
+        function updatedAtMs(u) {
+          if (!u) return 0;
+          if (typeof u.updatedAt === "number" && isFinite(u.updatedAt)) return u.updatedAt;
+          if (u.updatedAt != null) {
+            var t = new Date(u.updatedAt).getTime();
+            return isFinite(t) ? t : 0;
+          }
+          return 0;
+        }
+        var byId = Object.create(null);
+        function ingest(arr, preferLocalTie) {
+          var i, u, k, cur, nu, cu;
+          for (i = 0; i < arr.length; i++) {
+            u = arr[i];
+            k = idOf(u);
+            if (!k) continue;
+            if (pendDel[k]) continue;
+            cur = byId[k];
+            if (!cur) {
+              byId[k] = u;
+              continue;
+            }
+            nu = updatedAtMs(u);
+            cu = updatedAtMs(cur);
+            if (nu > cu) byId[k] = u;
+            else if (nu === cu && preferLocalTie) byId[k] = u;
+          }
+        }
+        ingest(remoteArr, false);
+        ingest(localArr, true);
+        var out = [];
+        var key;
+        for (key in byId) {
+          if (Object.prototype.hasOwnProperty.call(byId, key)) out.push(byId[key]);
+        }
+        return out;
+      }
+
+      /**
        * Libro de novedades: unión por id entre remoto y caché local (evita last-write-wins que borra entradas).
        * Timestamp `at` más reciente gana; empate → `editedAt` más reciente; segunda ingesta gana empates restantes.
        * Si la copia ganadora trae `note` vacío y la otra tenía texto, se conserva la nota (listas desfasadas / otro equipo).
@@ -1841,6 +1890,7 @@
             shortKey !== "visits" &&
             shortKey !== "shiftLogs" &&
             shortKey !== "shiftLogsTombstones" &&
+            shortKey !== "users" &&
             !__cgDeptKvMerge &&
             typeof curMem0 === "string" &&
             curMem0 !== next &&
@@ -2033,6 +2083,31 @@
             }
           }
 
+          if (shortKey === "users") {
+            try {
+              var remUsers = JSON.parse(remoteSnapshot);
+              if (!Array.isArray(remUsers)) remUsers = [];
+              if (typeof window.__cgPrunePendingDeletedUsersAfterRemote === "function") {
+                window.__cgPrunePendingDeletedUsersAfterRemote(remUsers);
+              }
+              var prevStrUsers = window.__cgFsMem[shortKey];
+              if (typeof prevStrUsers !== "string" || !prevStrUsers) {
+                prevStrUsers = tryLocalStorageGet(full);
+              }
+              var locUsers = [];
+              if (typeof prevStrUsers === "string" && prevStrUsers) {
+                var locParsedUsers = JSON.parse(prevStrUsers);
+                if (Array.isArray(locParsedUsers)) locUsers = locParsedUsers;
+              }
+              next = JSON.stringify(mergeUserDirectory(remUsers, locUsers));
+            } catch (eUsersMerge) {
+              console.warn("[CG][Firestore] merge users falló:", eUsersMerge && eUsersMerge.message ? eUsersMerge.message : eUsersMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
           window.__cgFsMem[shortKey] = next;
           /* Espejo en disco del valor fusionado: otras pestañas y F5 ven lo mismo que la nube sin depender solo de RAM. */
           tryLocalStorageSet(full, next);
@@ -2050,6 +2125,7 @@
               shortKey === "novedades" ||
               shortKey === "shiftLogs" ||
               shortKey === "shiftLogsTombstones" ||
+              shortKey === "users" ||
               __cgDeptKvMerge) &&
             next !== remoteSnapshot &&
             window.cgFsBridge &&
@@ -9699,6 +9775,29 @@
       delete CG_SYNC_STATE.pendingDeletedIdsByKey[lsKey];
       __cgPersistPendingDeletedToStorage();
     }
+
+    /** Cuando el documento remoto ya no incluye un usuario, se puede olvidar la tumba (sync replicado). */
+    function __cgPrunePendingDeletedUsersAfterRemote(remoteArr) {
+      var b = CG_SYNC_STATE.pendingDeletedIdsByKey && CG_SYNC_STATE.pendingDeletedIdsByKey.users;
+      if (!b || typeof b !== "object") return;
+      var still = Object.create(null);
+      (Array.isArray(remoteArr) ? remoteArr : []).forEach(function (u) {
+        if (u && u.id != null) still[String(u.id)] = true;
+      });
+      var id;
+      var ch = false;
+      for (id in b) {
+        if (!Object.prototype.hasOwnProperty.call(b, id)) continue;
+        if (!still[id]) {
+          delete b[id];
+          ch = true;
+        }
+      }
+      if (ch) __cgPersistPendingDeletedToStorage();
+    }
+    try {
+      window.__cgPrunePendingDeletedUsersAfterRemote = __cgPrunePendingDeletedUsersAfterRemote;
+    } catch (ePrU) {}
 
     function __cgStaffChatDedupeKey(m) {
       if (m && typeof m === "object" && m.id) return "id:" + String(m.id);
@@ -35557,7 +35656,11 @@ function __deptUnitsStorageKey() {
         G.toast("No se encontró el usuario a editar. Recargue el listado e inténtelo de nuevo.", "error");
         return;
       }
-      list[i] = Object.assign({}, list[i], { name: f.name.value.trim(), role: f.role.value });
+      list[i] = Object.assign({}, list[i], {
+        name: f.name.value.trim(),
+        role: f.role.value,
+        updatedAt: Date.now()
+      });
       if (f.password.value) {
         try {
           var vEdit = await G.authCreatePasswordVerifier(f.password.value);
@@ -35589,7 +35692,8 @@ function __deptUnitsStorageKey() {
         username: f.username.value.trim(),
         name: f.name.value.trim(),
         role: f.role.value,
-        passwordVerifier: vNew
+        passwordVerifier: vNew,
+        updatedAt: Date.now()
       });
     }
     G.state.users = list;
