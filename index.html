@@ -6511,6 +6511,16 @@
       gap: 0.5rem;
       align-items: stretch;
     }
+    #cg-reservas-error {
+      margin-bottom: 1rem;
+      padding: 0.65rem 0.95rem;
+      border-radius: var(--radius);
+      border: 1px solid #fecaca;
+      background: #fef2f2;
+      color: #991b1b;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
     .cg-stat-chip {
       display: flex;
       flex-direction: column;
@@ -24623,16 +24633,18 @@ function __deptUnitsStorageKey() {
 
     function pageReservas() {
       return (
-        "<div class=\"cg-page-compact\">" +
-        "<h1 class=\"page-title\">Reservas (espacios comunes)</h1>" +
+        "<div class=\"cg-page-compact\" id=\"cg-page-reservas\" role=\"region\" aria-label=\"Reservas de espacios comunes\">" +
+        "<h1 class=\"page-title\">Reservas — espacios comunes</h1>" +
+        "<div id=\"cg-reservas-error\" class=\"hidden\" role=\"alert\"></div>" +
         "<div class=\"cg-module-intro\">" +
-        "<p class=\"page-desc\">Gestión de salones, quincho, multicancha u otros espacios. Los nombres se definen en <strong>Administración → Configuración</strong>. En la ficha y la tabla: <strong>fondo verde</strong> = reserva <strong>en curso ahora</strong> (entre inicio y término); <strong>fondo azul claro</strong> = <strong>próxima</strong> (vigente pero aún no inicia); <strong>fondo gris</strong> = ya <strong>finalizada</strong>. En el panel de control, la tarjeta <strong>Reservas</strong> y la tabla <strong>Reservas vigentes</strong> usan la misma lógica (verde / azul); las finalizadas no cuentan como vigentes.</p></div>" +
-        "<div class=\"card cg-card-accent--res\"><div class=\"card-h\"><h3>Resumen</h3>" +
+        "<p class=\"page-desc\">Reserve salón, quincho u otros espacios definidos en <strong>Administración → Configuración</strong>. " +
+        "<strong>Fondo verde</strong> = en curso ahora; <strong>azul</strong> = próxima (aún no inicia); <strong>gris</strong> = finalizada.</p></div>" +
+        "<div class=\"card cg-card-accent--res\"><div class=\"card-h\"><h3>Resumen y próximas</h3>" +
         "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"reservaOpen\" data-cg-empty=\"1\"><i class=\"fa-solid fa-plus\"></i> Nueva reserva</button></div>" +
         "<div class=\"card-b\"><div id=\"res-module-summary\" class=\"cg-reserva-summary\" aria-live=\"polite\"></div></div></div>" +
         "<div class=\"card cg-card-accent--res\"><div class=\"card-h\"><h3>Listado completo</h3>" +
-        "<div class=\"toolbar\"><input type=\"search\" id=\"flt-res-q\" placeholder=\"Filtrar espacio o nota…\" /></div></div>" +
-        "<div class=\"card-b\"><div id=\"tbl-res-wrap\"></div></div></div></div>"
+        "<div class=\"toolbar\"><input type=\"search\" id=\"flt-res-q\" placeholder=\"Filtrar por espacio, depto, nota o conserje…\" aria-label=\"Filtrar reservas\" /></div></div>" +
+        "<div class=\"card-b\"><div id=\"tbl-res-wrap\" role=\"region\" aria-label=\"Tabla de reservas\"></div></div></div></div>"
       );
     }
 
@@ -31629,10 +31641,18 @@ function __deptUnitsStorageKey() {
           return String(x.id) === String(id);
         })
       : { space: "", deptId: "", start: "", end: "", note: "" };
-    if (id && !r) return;
+    if (id && !r) {
+      G.toast("No se encontró esa reserva. Actualice el listado e inténtelo de nuevo.", "error");
+      return;
+    }
     var csp = G.state.config.commonSpaces || [];
     if (!csp.length) {
       G.toast("Defina espacios comunes en Administración → Configuración", "warn");
+      return;
+    }
+    var depts = Array.isArray(G.state.departments) ? G.state.departments : [];
+    if (!depts.length) {
+      G.toast("No hay departamentos cargados. Revise la base de datos o importación.", "error");
       return;
     }
     var sp = csp.map(function (s) {
@@ -31641,6 +31661,7 @@ function __deptUnitsStorageKey() {
     var d1 = r.start ? localDatetimeValue(new Date(r.start)) : localDatetimeValue(new Date());
     var d2 = r.end ? localDatetimeValue(new Date(r.end)) : localDatetimeValue(new Date(Date.now() + 7200000));
     var deptOpts = deptSelectOpts(r.deptId);
+    try {
     UI.openModal(
       "<div class=\"modal modal-lg\"><div class=\"modal-h\"><h4>" + (id ? "Editar reserva" : "Nueva reserva") + "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
       "<div class=\"modal-b\"><form id=\"f-res\" action=\"#\" method=\"post\" onsubmit=\"return false;\">" +
@@ -31658,17 +31679,24 @@ function __deptUnitsStorageKey() {
       "<div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
       "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"reservaSave\">Guardar</button></div></div>"
     );
+    } catch (eOpen) {
+      console.error("[CG][reservas] reservaOpen", eOpen);
+      G.toast("No se pudo abrir el formulario de reserva. Intente de nuevo (F12 para detalles).", "error");
+    }
   };
 
   function deptSelectOpts(selId) {
     return (Array.isArray(G.state.departments) ? G.state.departments : []).map(function (d) {
-      return "<option value=\"" + G.escapeAttr(d.id) + "\"" + (d.id === selId ? " selected" : "") + ">" + G.escapeHtml(G.departmentSelectLabel(d)) + "</option>";
+      return "<option value=\"" + G.escapeAttr(d.id) + "\"" + (String(d.id) === String(selId) ? " selected" : "") + ">" + G.escapeHtml(G.departmentSelectLabel(d)) + "</option>";
     }).join("");
   }
 
-  A.reservaSave = function () {
+  A.reservaSave = async function () {
     var f = document.getElementById("f-res");
-    if (!f) return;
+    if (!f) {
+      G.toast("No se encontró el formulario de reserva. Cierre el diálogo e inténtelo de nuevo.", "error");
+      return;
+    }
     var id = f.rid.value;
     var vs = G.validate.reservaSpaceInConfig(f.space.value, G.state.config.commonSpaces || []);
     if (!vs.ok) {
@@ -31716,29 +31744,50 @@ function __deptUnitsStorageKey() {
       if (i >= 0) {
         var prevR = list[i];
         list[i] = Object.assign({}, prevR, o, { registradoPor: (prevR.registradoPor && String(prevR.registradoPor).trim()) || cn });
+      } else {
+        G.toast("No se encontró la reserva a editar. Recargue el listado e inténtelo de nuevo.", "error");
+        return;
       }
     } else list.push(Object.assign({ id: G.uid(), registradoPor: cn }, o));
-    G.state.reservas = list;
-    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("reservas");
-    var dRes = G.deptById(o.deptId);
-    var dLab = dRes ? dRes.number : "—";
-    if (id) {
-      G.logConserjeActivity(
-        "reserva_editar",
-        "Editó reserva — " + (o.space || "") + " — Depto " + dLab + " — Inicio " + G.fmtDate(o.start)
-      );
-    } else {
-      G.logConserjeActivity(
-        "reserva_nueva",
-        "Nueva reserva — " + (o.space || "") + " — Depto " + dLab + " — Inicio " + G.fmtDate(o.start)
-      );
+    try {
+      G.state.reservas = list;
+      var pushRes = null;
+      if (typeof G.cloudPushLsKeyPromise === "function") {
+        pushRes = await G.cloudPushLsKeyPromise("reservas");
+      } else if (typeof G.cloudPushKeyImmediate === "function") {
+        pushRes = await G.cloudPushKeyImmediate("reservas");
+      }
+      var dRes = G.deptById(o.deptId);
+      var dLab = dRes ? dRes.number : "—";
+      try {
+        if (id) {
+          G.logConserjeActivity(
+            "reserva_editar",
+            "Editó reserva — " + (o.space || "") + " — Depto " + dLab + " — Inicio " + G.fmtDate(o.start)
+          );
+        } else {
+          G.logConserjeActivity(
+            "reserva_nueva",
+            "Nueva reserva — " + (o.space || "") + " — Depto " + dLab + " — Inicio " + G.fmtDate(o.start)
+          );
+        }
+      } catch (eLog) {
+        console.warn("[CG][reservas] log actividad", eLog);
+      }
+      UI.closeModal();
+      if (pushRes && !pushRes.ok && !pushRes.skipped) {
+        G.toast("Reserva guardada en este equipo. Si no se sincroniza con la nube, revise red y el indicador de sincronización (F12).", "warn");
+      } else {
+        G.toast("Reserva guardada.", "success");
+      }
+      nav("reservas");
+    } catch (eSave) {
+      console.error("[CG][reservas] reservaSave", eSave);
+      G.toast("No se pudo completar el guardado. Intente de nuevo o revise la consola (F12).", "error");
     }
-    UI.closeModal();
-    G.toast("Reserva guardada");
-    nav("reservas");
   };
 
-  A.reservaDel = function (id) {
+  A.reservaDel = async function (id) {
     if (!G.userIsAdmin(G.currentUser())) {
       G.toast("Solo el administrador puede eliminar reservas o eventos", "warn");
       return;
@@ -31748,23 +31797,47 @@ function __deptUnitsStorageKey() {
     var rDel = curRes.find(function (r) {
       return String(r.id) === String(id);
     });
-    if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("reservas", String(id));
-    G.state.reservas = curRes.filter(function (r) {
-      return String(r.id) !== String(id);
-    });
-    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("reservas");
-    if (rDel) {
-      var dRd = G.deptById(rDel.deptId);
-      G.logConserjeActivity(
-        "reserva_eliminar",
-        "Eliminó reserva — " + (rDel.space || "") + " — Depto " + (dRd ? dRd.number : "—")
-      );
+    try {
+      if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("reservas", String(id));
+      G.state.reservas = curRes.filter(function (r) {
+        return String(r.id) !== String(id);
+      });
+      var pushRes = null;
+      if (typeof G.cloudPushLsKeyPromise === "function") {
+        pushRes = await G.cloudPushLsKeyPromise("reservas");
+      } else if (typeof G.cloudPushKeyImmediate === "function") {
+        pushRes = await G.cloudPushKeyImmediate("reservas");
+      }
+      try {
+        if (rDel) {
+          var dRd = G.deptById(rDel.deptId);
+          G.logConserjeActivity(
+            "reserva_eliminar",
+            "Eliminó reserva — " + (rDel.space || "") + " — Depto " + (dRd ? dRd.number : "—")
+          );
+        }
+      } catch (eLog) {
+        console.warn("[CG][reservas] log eliminar", eLog);
+      }
+      if (pushRes && !pushRes.ok && !pushRes.skipped) {
+        G.toast("Eliminación guardada en este equipo. Revise sincronización con la nube si usa varios dispositivos.", "warn");
+      } else {
+        G.toast("Reserva eliminada.", "success");
+      }
+      nav("reservas");
+    } catch (eDel) {
+      console.error("[CG][reservas] reservaDel", eDel);
+      G.toast("No se pudo completar la eliminación. Intente de nuevo (F12).", "error");
     }
-    G.toast("Reserva eliminada");
-    nav("reservas");
   };
 
   A.renderReservas = function () {
+    var errBanner = document.getElementById("cg-reservas-error");
+    if (errBanner) {
+      errBanner.classList.add("hidden");
+      errBanner.textContent = "";
+    }
+    try {
     var allR = Array.isArray(G.state.reservas) ? G.state.reservas : [];
     var sumEl = document.getElementById("res-module-summary");
     if (sumEl) {
@@ -31846,10 +31919,16 @@ function __deptUnitsStorageKey() {
     var rows = allR.slice().sort(function (a, b) { return new Date(b.start) - new Date(a.start); });
     if (q) {
       rows = rows.filter(function (r) {
-        return ((r.space || "") + " " + (r.note || "") + " " + (r.registradoPor || "")).toLowerCase().indexOf(q) >= 0;
+        var depF = G.deptById(r.deptId);
+        var depTxt = depF
+          ? String(depF.number || "") + " " + String(depF.id != null ? depF.id : "")
+          : "";
+        return (
+          ((r.space || "") + " " + (r.note || "") + " " + (r.registradoPor || "") + " " + depTxt).toLowerCase().indexOf(q) >= 0
+        );
       });
     }
-    var html = "<table class=\"data-table\"><thead><tr><th>Espacio</th><th>Depto</th><th>Inicio</th><th>Término</th><th>Nota</th><th>Conserje</th><th></th></tr></thead><tbody>";
+    var html = "<table class=\"data-table\" aria-label=\"Reservas\"><thead><tr><th>Espacio</th><th>Depto</th><th>Inicio</th><th>Término</th><th>Nota</th><th>Conserje</th><th></th></tr></thead><tbody>";
     if (!rows.length) html += "<tr><td class=\"cg-empty-table\" colspan=\"7\">Sin reservas que coincidan. Cree una con <strong>Nueva reserva</strong> o ajuste el filtro.</td></tr>";
     var nowTbl = new Date();
     rows.forEach(function (r) {
@@ -31888,6 +31967,15 @@ function __deptUnitsStorageKey() {
     });
     html += "</tbody></table>";
     w.innerHTML = html;
+    } catch (eRen) {
+      console.error("[CG][reservas] renderReservas", eRen);
+      if (errBanner) {
+        errBanner.textContent =
+          "No se pudo mostrar el listado de reservas. Recargue la página o revise la consola (F12).";
+        errBanner.classList.remove("hidden");
+      }
+      G.toast("Error al mostrar reservas. Revise la consola (F12).", "error");
+    }
   };
 
   function nextNovedadSeq() {
@@ -37090,5 +37178,3 @@ function __deptUnitsStorageKey() {
   </script>
 </body>
 </html>
-
-  
