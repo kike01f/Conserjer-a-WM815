@@ -35225,7 +35225,7 @@ function __deptUnitsStorageKey() {
       return;
     }
     var usersList = Array.isArray(G.state.users) ? G.state.users : [];
-    var u = id ? usersList.find(function (x) { return x.id === id; }) : { name: "", username: "", role: "conserje" };
+    var u = id ? usersList.find(function (x) { return G.sameUserId(x.id, id); }) : { name: "", username: "", role: "conserje" };
     if (id && !u) return;
     UI.openModal(
       "<div class=\"modal\"><div class=\"modal-h\"><h4>" + (id ? "Editar usuario" : "Nuevo usuario") + "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
@@ -35258,7 +35258,7 @@ function __deptUnitsStorageKey() {
     var id = f.uid.value;
     var list = (Array.isArray(G.state.users) ? G.state.users : []).slice();
     if (id) {
-      var i = list.findIndex(function (x) { return x.id === id; });
+      var i = list.findIndex(function (x) { return G.sameUserId(x.id, id); });
       if (i < 0) return;
       list[i] = Object.assign({}, list[i], { name: f.name.value.trim(), role: f.role.value });
       if (f.password.value) {
@@ -35357,13 +35357,14 @@ function __deptUnitsStorageKey() {
       G.toast("Solo el administrador puede eliminar usuarios.", "error");
       return;
     }
-    if (u.id === id) {
+    /* data-cg-id es string; los ids en estado pueden venir como número desde JSON — usar sameUserId. */
+    if (G.sameUserId(u.id, id)) {
       G.toast("No puede eliminar su propia sesión", "error");
       return;
     }
     if (!confirm("¿Eliminar usuario?")) return;
-    if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("users", id);
-    G.state.users = (Array.isArray(G.state.users) ? G.state.users : []).filter(function (x) { return x.id !== id; });
+    if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("users", String(id));
+    G.state.users = (Array.isArray(G.state.users) ? G.state.users : []).filter(function (x) { return !G.sameUserId(x.id, id); });
     if (typeof G.armLsKeyPullQuiet === "function") G.armLsKeyPullQuiet("users", 35000);
     var delRes = null;
     if (typeof G.cloudPushLsKeyPromise === "function") {
