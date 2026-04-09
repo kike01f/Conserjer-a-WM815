@@ -20804,19 +20804,13 @@ function __deptUnitsStorageKey() {
     let dashChartVisit = null;
     let dashChartEnc = null;
 
-    function userHasOpenShift(userId) {
-      var list = G.state.shiftLogs || [];
-      var i;
-      for (i = 0; i < list.length; i++) {
-        if (G.sameUserId(list[i].userId, userId) && G.shiftLogTramoIsOpen(list[i])) return true;
-      }
-      return false;
-    }
-
-    /** Conserjes (y cualquier rol distinto de admin) necesitan turno abierto para salir de Novedades. */
+    /**
+     * Antes se exigía turno abierto para navegar a visitas, encomiendas, residentes, etc.
+     * Eso bloqueaba el trabajo en recepción si el tramo no estaba sincronizado o no se había pulsado «Abrir turno».
+     * El control de turno sigue disponible en Libro de novedades; ya no se fuerza como requisito para el resto de módulos.
+     */
     function conserjeMustOpenShiftBeforeModules() {
-      var u = G.currentUser();
-      return !!(u && !G.userIsAdmin(u) && !userHasOpenShift(u.id));
+      return false;
     }
 
     var __cgAbsenceAlertIntervalId = null;
@@ -23002,9 +22996,23 @@ function __deptUnitsStorageKey() {
       reservas: ["reservas"],
       proveedores: ["proveedores", "visitas"],
       bodegas: ["bodegas"],
-      config: ["visitas", "reservas"],
-      shiftLogs: ["novedades"],
-      absenceAlertPhrases: ["ausenciaAlertas"]
+      config: ["visitas", "reservas", "admin"],
+      shiftLogs: ["novedades", "admin"],
+      shiftLogsTombstones: ["novedades", "admin"],
+      staffChatMessages: ["admin"],
+      chatLastReadByUser: ["admin"],
+      staffPresence: ["admin"],
+      users: ["dashboard", "admin"],
+      roleModules: ["dashboard", "admin"],
+      personalization: ["dashboard", "admin"],
+      festiveAmbience: ["admin"],
+      staffBirthdays: ["dashboard", "admin"],
+      dashScheduledAlerts: ["dashboard", "admin"],
+      dashActMonth: ["dashboard"],
+      parkingSlots: ["estacionamientos", "mapaEdificio"],
+      parkingConfig: ["estacionamientos", "visitas", "reservas"],
+      conserjeActivityLog: ["dashboard"],
+      absenceAlertPhrases: ["ausenciaAlertas", "admin"]
     };
 
     function __cgRemoteRefreshDeptKeysArr() {
@@ -23158,8 +23166,10 @@ function __deptUnitsStorageKey() {
         }
       }
 
-      if (k === "shiftLogs") {
-        if (A && typeof G.kickConserjeIfOpenShiftConflict === "function") G.kickConserjeIfOpenShiftConflict();
+      if (k === "shiftLogs" || k === "shiftLogsTombstones") {
+        if (k === "shiftLogs" && A && typeof G.kickConserjeIfOpenShiftConflict === "function") {
+          G.kickConserjeIfOpenShiftConflict();
+        }
         if (A && typeof A.renderAdmin === "function") {
           try {
             var admTurn = document.querySelector(".admin-tab[data-adm=\"turnos\"].active");
@@ -23174,6 +23184,15 @@ function __deptUnitsStorageKey() {
         try {
           renderNav();
         } catch (eRnSh) {}
+      }
+
+      if (k === "staffChatMessages" || k === "chatLastReadByUser" || k === "staffPresence") {
+        if (A && typeof A.renderAdmin === "function") {
+          try {
+            var admTurnChat = document.querySelector(".admin-tab[data-adm=\"turnos\"].active");
+            if (admTurnChat) A.renderAdmin("turnos");
+          } catch (eTch) {}
+        }
       }
 
       var deptKeys = __cgRemoteRefreshDeptKeysArr();
@@ -30292,9 +30311,10 @@ function __deptUnitsStorageKey() {
     return new Date(n.at).getTime() >= new Date(open.startAt).getTime();
   }
 
-  /** Conserje: requiere turno abierto para usar el formulario «Nueva entrada». Admin: siempre permitido. */
+  /** Conserje: puede usar «Nueva entrada» sin exigir turno abierto (el turno sigue recomendable vía Control de turno). Admin: siempre permitido. */
   function novedadConserjeMayRegisterNew(user) {
     if (!user || G.userIsAdmin(user)) return true;
+    if (G.roleIsConserje(user.role)) return true;
     return !!shiftFindOpen(G.state.shiftLogs || [], user.id);
   }
 
