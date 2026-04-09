@@ -7436,7 +7436,7 @@
       vertical-align: baseline;
     }
     .cg-dash-nov-note-chip strong { color: #854d0e; font-weight: 600; }
-    /* Bitácora: conserje sin turno → registros distorsionados / ilegibles hasta abrir turno */
+    /* Bitácora: conserje sin turno → vista atenuada/difusa hasta abrir turno (sin bloquear clics en botones Editar/Eliminar). */
     .cg-nov-tl-shell {
       position: relative;
     }
@@ -7455,8 +7455,6 @@
       filter: blur(6px) saturate(0.75);
       opacity: 0.38;
       transform: scale(0.985);
-      pointer-events: none;
-      user-select: none;
       transition: filter 0.28s ease, opacity 0.28s ease, transform 0.28s ease;
     }
     #cg-nov-bitacora-card:not(.cg-nov-bitacora--sin-turno) .cg-nov-tl-shell .timeline {
@@ -23317,7 +23315,11 @@ function __deptUnitsStorageKey() {
       }
 
       if (k === "visits" || k === "visitVehAlertLog") {
-        if (!remountedMain && document.getElementById("tbl-vis-wrap") && A && typeof A.renderVisitas === "function") {
+        var visPageReady =
+          view === "visitas" ||
+          document.getElementById("tbl-vis-wrap") ||
+          document.getElementById("vis-reg-stack");
+        if (!remountedMain && visPageReady && A && typeof A.renderVisitas === "function") {
           try {
             A.renderVisitas();
           } catch (eVis) {}
@@ -27558,7 +27560,14 @@ function __deptUnitsStorageKey() {
     if (options.log !== false && options.logMsg) {
       G.logConserjeActivity("visita_correo", options.logMsg);
     }
-    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("visits");
+    if (typeof G.cloudPushWarnIfFailed === "function") {
+      G.cloudPushWarnIfFailed(
+        "visits",
+        "Constancia guardada en este equipo. No se pudo sincronizar visitas con la nube ahora; revise la red."
+      );
+    } else if (typeof G.cloudPushKeyImmediate === "function") {
+      G.cloudPushKeyImmediate("visits");
+    }
     if (options.closeModal) UI.closeModal();
     if (options.toastMsg) G.toast(options.toastMsg, options.toastType || "success");
     A.renderVisitas();
@@ -29123,6 +29132,14 @@ function __deptUnitsStorageKey() {
         salidaRegistradoPor: ""
       };
       G.state.visits = G.state.visits.concat([rec]);
+      if (typeof G.cloudPushWarnIfFailed === "function") {
+        G.cloudPushWarnIfFailed(
+          "visits",
+          "Ingreso guardado en este equipo. No se pudo sincronizar con la nube ahora; otros equipos podrían no verlo aún."
+        );
+      } else if (typeof G.cloudPushKeyImmediate === "function") {
+        G.cloudPushKeyImmediate("visits");
+      }
       var depIng = G.deptById(deptId);
       G.logConserjeActivity(
         "visita_ingreso",
@@ -29184,7 +29201,14 @@ function __deptUnitsStorageKey() {
     if (peatonalLegacyFix) {
       G.state.visits = allVisNorm;
       allVis = allVisNorm;
-      if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("visits");
+      if (typeof G.cloudPushWarnIfFailed === "function") {
+        G.cloudPushWarnIfFailed(
+          "visits",
+          "Ajuste de visitas guardado en este equipo. No se pudo sincronizar con la nube ahora; revise la red."
+        );
+      } else if (typeof G.cloudPushKeyImmediate === "function") {
+        G.cloudPushKeyImmediate("visits");
+      }
     }
     var rows = allVis.slice().sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
     if (scope === "open") rows = rows.filter(function (v) { return !v.outAt && !visitIsPeatonalPersona(v); });
@@ -29579,6 +29603,14 @@ function __deptUnitsStorageKey() {
       );
     }
     G.toast("Salida registrada");
+    if (typeof G.cloudPushWarnIfFailed === "function") {
+      G.cloudPushWarnIfFailed(
+        "visits",
+        "Salida guardada en este equipo. No se pudo sincronizar con la nube ahora; revise la red."
+      );
+    } else if (typeof G.cloudPushKeyImmediate === "function") {
+      G.cloudPushKeyImmediate("visits");
+    }
     A.renderVisitas();
     if (A.renderDashboardVehAlerts) A.renderDashboardVehAlerts();
     if (A.renderDashboardProvVisits) A.renderDashboardProvVisits();
@@ -29607,6 +29639,14 @@ function __deptUnitsStorageKey() {
     delete valog[id];
     G.state.visitVehAlertLog = valog;
     G.toast("Visita eliminada");
+    if (typeof G.cloudPushWarnIfFailed === "function") {
+      G.cloudPushWarnIfFailed(
+        "visits",
+        "Eliminación guardada en este equipo. No se pudo sincronizar con la nube ahora; revise la red."
+      );
+    } else if (typeof G.cloudPushKeyImmediate === "function") {
+      G.cloudPushKeyImmediate("visits");
+    }
     A.renderVisitas();
     if (A.renderDashboardVehAlerts) A.renderDashboardVehAlerts();
     if (A.renderDashboardProvVisits) A.renderDashboardProvVisits();
@@ -35568,5 +35608,3 @@ function __deptUnitsStorageKey() {
   </script>
 </body>
 </html>
-
-  
