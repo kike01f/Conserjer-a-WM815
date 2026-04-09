@@ -23622,6 +23622,102 @@ function __deptUnitsStorageKey() {
       return false;
     }
 
+    /**
+     * Refuerzo tras sync remoto: vuelve a repintar el módulo de la vista activa cuando la clave `k` afecta sus datos.
+     * Complementa los bloques de refreshAfterRemoteLsKey (misma idea que el listener wm815 en Residentes): no depende
+     * solo de que existan ciertos id en el DOM en ese instante.
+     */
+    function __cgRepaintActiveModuleForRemoteKey(k, view, A, remountedMain, dash) {
+      if (remountedMain || !k || !A) return;
+      var ku =
+        typeof window.__cgFabricaDeptKvUnits === "function" ? window.__cgFabricaDeptKvUnits() : "wm815_units";
+      var kf =
+        typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "wm815_former_residents";
+      var deptKeysR = __cgRemoteRefreshDeptKeysArr();
+      try {
+        if (view === "visitas") {
+          if (
+            k === "visits" ||
+            k === "visitVehAlertLog" ||
+            k === "proveedores" ||
+            k === "bodegas" ||
+            k === "config" ||
+            k === "parkingConfig" ||
+            k === "departments" ||
+            k === ku ||
+            k === kf ||
+            k === "buildingUnits" ||
+            k === "buildingResidents" ||
+            k === "buildingFormerResidents" ||
+            k === "buildingParking"
+          ) {
+            if (typeof A.renderVisitas === "function") A.renderVisitas();
+          }
+        }
+        if (view === "encomiendas" && k === "encomiendas" && typeof A.renderEncomiendas === "function") {
+          A.renderEncomiendas();
+        }
+        if (view === "reservas" && k === "reservas" && typeof A.renderReservas === "function") {
+          A.renderReservas();
+        }
+        if (view === "novedades" && (k === "novedades" || k === "shiftLogs" || k === "shiftLogsTombstones")) {
+          if (typeof A.renderNovedades === "function") A.renderNovedades();
+        }
+        if (view === "proveedores" && k === "proveedores" && typeof A.renderProveedores === "function") {
+          A.renderProveedores();
+        }
+        if (view === "bodegas" && k === "bodegas" && typeof A.renderBodegas === "function") {
+          A.renderBodegas();
+        }
+        if (view === "estacionamientos" && __cgRemoteRefreshParkingKeys(k)) {
+          if (typeof A.syncParkingSlotsFromBuilding === "function") A.syncParkingSlotsFromBuilding();
+          if (typeof A.renderParkingGrid === "function") A.renderParkingGrid();
+        }
+        if ((view === "departamentos" || view === "mapaEdificio") && deptKeysR.indexOf(k) >= 0) {
+          var ignV = false;
+          var ignF = false;
+          try {
+            if (typeof window.__cgDeptDeferSilentReloadForOpenEditor === "function") {
+              ignV = !window.__cgDeptDeferSilentReloadForOpenEditor();
+              ignF = ignV;
+            }
+          } catch (eIgn) {
+            ignV = true;
+            ignF = true;
+          }
+          if (typeof window.loadUnitsFromCloud === "function") {
+            window.loadUnitsFromCloud(true, ignV).catch(function () {});
+          }
+          if (typeof window.loadFormerResidentsFromCloud === "function") {
+            window.loadFormerResidentsFromCloud(true, ignF).catch(function () {});
+          }
+        }
+        if (dash) {
+          if (
+            k === "visits" ||
+            k === "visitVehAlertLog" ||
+            k === "encomiendas" ||
+            k === "reservas" ||
+            k === "novedades" ||
+            k === "conserjeActivityLog" ||
+            k === "shiftLogs" ||
+            k === "shiftLogsTombstones" ||
+            k === "users"
+          ) {
+            if (typeof updateDashboardChartsSummaryAndActivity === "function") {
+              updateDashboardChartsSummaryAndActivity();
+            }
+          }
+          if (k === "staffBirthdays" && typeof A.renderDashboardStaffBirthdays === "function") {
+            A.renderDashboardStaffBirthdays();
+          }
+          if (k === "dashScheduledAlerts" && typeof A.renderDashboardScheduledAlerts === "function") {
+            A.renderDashboardScheduledAlerts();
+          }
+        }
+      } catch (eRpaint) {}
+    }
+
     /** Pruebas manuales por claves críticas (consola / soporte). */
     var __CG_REMOTE_REFRESH_MANUAL_TESTS = [
       {
@@ -24039,6 +24135,10 @@ function __deptUnitsStorageKey() {
           updateDashboardActivityAndNovBodiesOnly();
         } catch (eDashUsers) {}
       }
+
+      try {
+        __cgRepaintActiveModuleForRemoteKey(k, view, A, remountedMain, dash);
+      } catch (eRpk) {}
     }
 
     window.addEventListener("cg-cloud-storage-applied", function (ev) {
@@ -31420,7 +31520,7 @@ function __deptUnitsStorageKey() {
     }
     var u0 = G.currentUser();
     var isAdm = !!(u0 && G.userIsAdmin(u0));
-    var mayDeleteNov = isAdm || !!(u0 && G.roleIsConserje(u0.role));
+    var mayDeleteNov = isAdm;
     tl.innerHTML = rows.map(function (n) {
       var isTurno = n.category === "Turno";
       var catSlug = novedadCategorySlug(n.category);
@@ -31907,8 +32007,8 @@ function __deptUnitsStorageKey() {
       G.toast("Inicie sesión para continuar.", "warn");
       return;
     }
-    if (!G.userIsAdmin(u) && !G.roleIsConserje(u.role)) {
-      G.toast("Solo administración o conserjería pueden eliminar entradas del libro.", "warn");
+    if (!G.userIsAdmin(u)) {
+      G.toast("Solo administración puede eliminar entradas del libro.", "warn");
       return;
     }
     if (!confirm("¿Eliminar esta entrada del libro?")) return;
