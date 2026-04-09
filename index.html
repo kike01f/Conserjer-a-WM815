@@ -2132,7 +2132,8 @@
             shortKey === "buildingResidents" ||
             shortKey === "buildingFormerResidents" ||
             shortKey === "buildingParking" ||
-            shortKey === "conserjeActivityLog";
+            shortKey === "conserjeActivityLog" ||
+            shortKey === "dashActMonth";
           if (
             shortKey !== "staffChatMessages" &&
             shortKey !== "novedades" &&
@@ -9795,7 +9796,7 @@
                   __cgFsSyncHealthFromError(eVis);
                   __cgRefreshFirestoreSyncBanner();
                 });
-            }, 500);
+            }, 280);
           });
         } catch (eVis) {}
       }
@@ -14435,12 +14436,26 @@
             if (typeof window.CG.flushPendingCloudWritesNow === "function") window.CG.flushPendingCloudWritesNow();
             if (typeof window.CG.cloudPullAllOnce === "function") window.CG.cloudPullAllOnce();
           } catch (eRe) {}
-        }, 550);
+        }, 280);
       }
       document.addEventListener("visibilitychange", function () {
         if (document.visibilityState === "visible") resyncSoon();
       });
+      window.addEventListener("focus", resyncSoon);
       window.addEventListener("online", resyncSoon);
+    })();
+    (function cgCloudPeriodicFullPull() {
+      if (window.__cgCloudPeriodicPullBound) return;
+      window.__cgCloudPeriodicPullBound = true;
+      /* Refuerzo: lectura completa de la colección kv por si el listener perdió un delta (pestaña en segundo plano, red). */
+      setInterval(function () {
+        try {
+          if (document.visibilityState !== "visible") return;
+          if (!window.CG || typeof window.CG.currentUser !== "function" || !window.CG.currentUser()) return;
+          if (!window.cgFsBridge || typeof window.cgFsBridge.active !== "function" || !window.cgFsBridge.active()) return;
+          if (typeof window.CG.cloudPullAllOnce === "function") window.CG.cloudPullAllOnce();
+        } catch (ePer) {}
+      }, 60000);
     })();
     (function cgFlushCloudOnPageHide() {
       if (window.__cgFlushCloudOnPageHideBound) return;
