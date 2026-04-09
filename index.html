@@ -6521,6 +6521,16 @@
       font-size: 0.9rem;
       line-height: 1.45;
     }
+    #cg-admin-error {
+      margin-bottom: 1rem;
+      padding: 0.65rem 0.95rem;
+      border-radius: var(--radius);
+      border: 1px solid #fecaca;
+      background: #fef2f2;
+      color: #991b1b;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
     .cg-stat-chip {
       display: flex;
       flex-direction: column;
@@ -10108,6 +10118,7 @@
         }
       }).catch(function (err) {
         window.__cgFsLastError = err;
+        __cgSyncLog("warn", "firestore_pull_single", err);
       });
     }
 
@@ -10150,7 +10161,9 @@
       if (__cgArmPullTimers[shortKey]) clearTimeout(__cgArmPullTimers[shortKey]);
       __cgArmPullTimers[shortKey] = setTimeout(function () {
         delete __cgArmPullTimers[shortKey];
-        cloudPullSingleLsKey(shortKey).catch(function () {});
+        cloudPullSingleLsKey(shortKey).catch(function (eQuiet) {
+          if (window.__CG_DEBUG) console.warn("[CG] armLsKeyPullQuiet pull falló:", shortKey, eQuiet);
+        });
       }, d);
     }
 
@@ -10610,8 +10623,9 @@
           .then(function () {
             __cgLoginUsersRemotePullHadError = false;
           })
-          .catch(function () {
+          .catch(function (ePullUsers) {
             __cgLoginUsersRemotePullHadError = true;
+            console.warn("[CG] syncLoginFirstAdminPanel: fallo al traer usuarios remotos:", ePullUsers);
           })
           .finally(function () {
             __cgLoginUsersCloudCheckInFlight = false;
@@ -22080,6 +22094,16 @@ function __deptUnitsStorageKey() {
           "Canal directo con administración: solo ve sus mensajes y los del admin; no ve mensajes de otros conserjes.";
       }
     }
+    /** Push del documento KV staffChatMessages: el mensaje ya está en local; solo registramos fallo de red/Firestore. */
+    function staffChatPushKvCatch() {
+      if (typeof G.cloudPushKeyImmediate !== "function") return;
+      var p = G.cloudPushKeyImmediate("staffChatMessages");
+      if (p && typeof p.catch === "function") {
+        p.catch(function (ePush) {
+          console.warn("[CG][staffChat] cloudPush staffChatMessages:", ePush);
+        });
+      }
+    }
     function staffChatClearAll() {
       var cuClr = G.currentUser();
       if (!cuClr || !G.userIsAdmin(cuClr)) {
@@ -22101,9 +22125,13 @@ function __deptUnitsStorageKey() {
       var pushChatP =
         typeof G.cloudPushKeyImmediate === "function" ? G.cloudPushKeyImmediate("staffChatMessages") : null;
       if (pushChatP && typeof pushChatP.finally === "function") {
-        pushChatP.finally(function () {
-          if (typeof G.flushPendingCloudWritesNow === "function") G.flushPendingCloudWritesNow();
-        });
+        pushChatP
+          .catch(function (eClr) {
+            console.warn("[CG][staffChat] push tras vaciar conversación:", eClr);
+          })
+          .finally(function () {
+            if (typeof G.flushPendingCloudWritesNow === "function") G.flushPendingCloudWritesNow();
+          });
       } else if (typeof G.flushPendingCloudWritesNow === "function") {
         G.flushPendingCloudWritesNow();
       }
@@ -22163,9 +22191,13 @@ function __deptUnitsStorageKey() {
       var pushDelP =
         typeof G.cloudPushKeyImmediate === "function" ? G.cloudPushKeyImmediate("staffChatMessages") : null;
       if (pushDelP && typeof pushDelP.finally === "function") {
-        pushDelP.finally(function () {
-          if (typeof G.flushPendingCloudWritesNow === "function") G.flushPendingCloudWritesNow();
-        });
+        pushDelP
+          .catch(function (eDel) {
+            console.warn("[CG][staffChat] push tras borrar mensaje:", eDel);
+          })
+          .finally(function () {
+            if (typeof G.flushPendingCloudWritesNow === "function") G.flushPendingCloudWritesNow();
+          });
       } else if (typeof G.flushPendingCloudWritesNow === "function") {
         G.flushPendingCloudWritesNow();
       }
@@ -22373,6 +22405,7 @@ function __deptUnitsStorageKey() {
         }
         t = vt.value;
       }
+      try {
       if (!Array.isArray(G.state.staffChatMessages)) {
         G.state.staffChatMessages = [];
       }
@@ -22396,12 +22429,17 @@ function __deptUnitsStorageKey() {
       list.push(rec);
       G.state.staffChatMessages = list;
       staffChatLastMsgs = JSON.stringify(list);
-      if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffChatMessages");
+      staffChatPushKvCatch();
       staffChatMarkRead();
       staffChatClearReplyDraft();
       staffChatRenderThread();
       staffChatUpdateBadge();
       return true;
+      } catch (eStaffSend) {
+        console.error("[CG][staffChat] staffChatSend", eStaffSend);
+        G.toast("No se pudo enviar el mensaje. Intente de nuevo (F12).", "error");
+        return false;
+      }
     }
     function staffChatSendBuzz() {
       var u = G.currentUser();
@@ -22413,6 +22451,7 @@ function __deptUnitsStorageKey() {
       }
       staffChatLastBuzzSentAt = now;
       staffChatClearReplyDraft();
+      try {
       if (!Array.isArray(G.state.staffChatMessages)) {
         G.state.staffChatMessages = [];
       }
@@ -22428,10 +22467,14 @@ function __deptUnitsStorageKey() {
       });
       G.state.staffChatMessages = listBuzz;
       staffChatLastMsgs = JSON.stringify(listBuzz);
-      if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("staffChatMessages");
+      staffChatPushKvCatch();
       staffChatMarkRead();
       staffChatRenderThread();
       staffChatUpdateBadge();
+      } catch (eBuzz) {
+        console.error("[CG][staffChat] staffChatSendBuzz", eBuzz);
+        G.toast("No se pudo enviar el zumbido. Intente de nuevo (F12).", "error");
+      }
     }
     function staffChatFabResetDockPosition() {
       var root = document.getElementById("cg-staff-chat-root");
@@ -23426,40 +23469,46 @@ function __deptUnitsStorageKey() {
         };
       }
 
-      var opts = barOptions(m.yLbl, m.tLbl, "visitas");
-      dashChartVisit = new Chart(vCan, {
-        type: "bar",
-        data: {
-          labels: ["Ayer", "Hoy"],
-          datasets: [{
-            data: [m.visitsYesterday, m.visitsToday],
-            backgroundColor: [grayBar, blue],
-            borderRadius: 8,
-            borderSkipped: false
-          }]
-        },
-        options: opts
-      });
+      try {
+        var opts = barOptions(m.yLbl, m.tLbl, "visitas");
+        dashChartVisit = new Chart(vCan, {
+          type: "bar",
+          data: {
+            labels: ["Ayer", "Hoy"],
+            datasets: [{
+              data: [m.visitsYesterday, m.visitsToday],
+              backgroundColor: [grayBar, blue],
+              borderRadius: 8,
+              borderSkipped: false
+            }]
+          },
+          options: opts
+        });
 
-      dashChartEnc = new Chart(eCan, {
-        type: "bar",
-        data: {
-          labels: ["Ayer", "Hoy"],
-          datasets: [{
-            data: [m.encYesterday, m.encToday],
-            backgroundColor: [grayBar, amber],
-            borderRadius: 8,
-            borderSkipped: false
-          }]
-        },
-        options: barOptions(m.yLbl, m.tLbl, "encomiendas")
-      });
+        dashChartEnc = new Chart(eCan, {
+          type: "bar",
+          data: {
+            labels: ["Ayer", "Hoy"],
+            datasets: [{
+              data: [m.encYesterday, m.encToday],
+              backgroundColor: [grayBar, amber],
+              borderRadius: 8,
+              borderSkipped: false
+            }]
+          },
+          options: barOptions(m.yLbl, m.tLbl, "encomiendas")
+        });
+      } catch (ePaint) {
+        console.warn("[CG] dashboard: error al pintar gráficos (Chart.js):", ePaint);
+      }
       }
 
       if (typeof Chart !== "undefined") {
         paintChartBars();
       } else if (window.CG_lazy && typeof window.CG_lazy.ensureChart === "function") {
-        window.CG_lazy.ensureChart().then(paintChartBars).catch(function () {});
+        window.CG_lazy.ensureChart().then(paintChartBars).catch(function (eCh) {
+          console.warn("[CG] dashboard: no se pudo cargar Chart.js:", eCh);
+        });
       }
     }
 
@@ -23476,7 +23525,9 @@ function __deptUnitsStorageKey() {
         dashChartVisit.update("none");
         dashChartEnc.data.datasets[0].data = [m.encYesterday, m.encToday];
         dashChartEnc.update("none");
-      } catch (eUpd) {}
+      } catch (eUpd) {
+        if (window.__CG_DEBUG) console.warn("[CG] dashboard updateDashboardChartsDataOnly:", eUpd);
+      }
     }
 
     /** Gráficos + tarjetas KPI + actividad/novedades (vista dashboard ya montada). */
@@ -24708,11 +24759,13 @@ function __deptUnitsStorageKey() {
     function pageAdmin() {
       var cu = G.currentUser();
       if (!G.userIsAdmin(cu)) {
-        return "<p class=\"page-desc\">No autorizado.</p>";
+        return "<p class=\"page-desc\" role=\"alert\">No autorizado.</p>";
       }
       return (
-        "<h1 class=\"page-title\">Panel de administrador</h1>" +
-        "<p class=\"page-desc\">Personal, turnos y horas, permisos por rol, reportes, alertas programadas del panel de control y configuración.</p>" +
+        "<div class=\"cg-page-admin\" id=\"cg-page-admin\" role=\"region\" aria-label=\"Administración\">" +
+        "<h1 class=\"page-title\">Administración</h1>" +
+        "<div id=\"cg-admin-error\" class=\"hidden\" role=\"alert\"></div>" +
+        "<p class=\"page-desc\">Personal y permisos, turnos, reportes, personalización, RRHH, alertas del panel, ambientación festiva, respaldos y configuración del edificio.</p>" +
         "<div class=\"admin-tabs\" role=\"toolbar\" aria-label=\"Secciones de administración\">" +
         "<button type=\"button\" class=\"admin-tab active\" data-adm=\"staff\" aria-pressed=\"true\">Personal</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"turnos\" aria-pressed=\"false\">Turnos</button>" +
@@ -24724,7 +24777,7 @@ function __deptUnitsStorageKey() {
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"ausAusencia\" aria-pressed=\"false\">Alertas de ausencia</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"festive\" aria-pressed=\"false\">Ambientación festiva</button>" +
         "<button type=\"button\" class=\"admin-tab\" data-adm=\"cfg\" aria-pressed=\"false\">Configuración</button></div>" +
-        "<div id=\"adm-panel\" role=\"region\" aria-label=\"Contenido de administración\"></div>"
+        "<div id=\"adm-panel\" role=\"region\" aria-label=\"Contenido de administración\"></div></div>"
       );
     }
 
@@ -34881,8 +34934,14 @@ function __deptUnitsStorageKey() {
   };
 
   A.renderAdmin = function (tab) {
+    var errAdm = document.getElementById("cg-admin-error");
+    if (errAdm) {
+      errAdm.classList.add("hidden");
+      errAdm.textContent = "";
+    }
     var p = renderAdminBindActiveTab(tab);
     if (!p) return;
+    try {
     var cuRm = G.currentUser();
     if (G.userIsAdmin(cuRm) && typeof A.backupMaybeWarnIfStale === "function") {
       A.backupMaybeWarnIfStale();
@@ -35343,6 +35402,21 @@ function __deptUnitsStorageKey() {
         };
       }
     }
+    } catch (eRenderAdm) {
+      console.error("[CG][admin] renderAdmin", tab, eRenderAdm);
+      if (errAdm) {
+        errAdm.textContent =
+          "No se pudo cargar esta sección. Pruebe otra pestaña o recargue la página. Si persiste, revise la consola (F12).";
+        errAdm.classList.remove("hidden");
+      }
+      G.toast("Error al cargar administración. Revise la consola (F12).", "error");
+      try {
+        if (p) {
+          p.innerHTML =
+            "<div class=\"card\" style=\"border-color:#fecaca\"><div class=\"card-b\"><p class=\"page-desc\" style=\"margin:0;color:#991b1b\">No se pudo mostrar el contenido. Use las pestañas superiores o recargue la página.</p></div></div>";
+        }
+      } catch (eFillAdm) {}
+    }
   };
 
   A.userOpen = function (id) {
@@ -35353,7 +35427,11 @@ function __deptUnitsStorageKey() {
     }
     var usersList = Array.isArray(G.state.users) ? G.state.users : [];
     var u = id ? usersList.find(function (x) { return G.sameUserId(x.id, id); }) : { name: "", username: "", role: "conserje" };
-    if (id && !u) return;
+    if (id && !u) {
+      G.toast("No se encontró ese usuario. Actualice el listado e inténtelo de nuevo.", "error");
+      return;
+    }
+    try {
     UI.openModal(
       "<div class=\"modal\"><div class=\"modal-h\"><h4>" + (id ? "Editar usuario" : "Nuevo usuario") + "</h4><button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal>Cerrar</button></div>" +
       "<div class=\"modal-b\"><form id=\"f-user\">" +
@@ -35366,6 +35444,10 @@ function __deptUnitsStorageKey() {
       "<div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
       "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"userSave\">Guardar</button></div></div>"
     );
+    } catch (eOpUser) {
+      console.error("[CG][admin] userOpen", eOpUser);
+      G.toast("No se pudo abrir el formulario de usuario. Intente de nuevo (F12).", "error");
+    }
   };
 
   A.userSave = async function () {
@@ -35375,18 +35457,25 @@ function __deptUnitsStorageKey() {
       return;
     }
     var f = document.getElementById("f-user");
-    if (!f) return;
+    if (!f) {
+      G.toast("No se encontró el formulario de usuario. Cierre el diálogo e inténtelo de nuevo.", "error");
+      return;
+    }
     try {
       await G.authEnsureReady();
     } catch (e0) {
       G.toast("No se pudo preparar autenticación (¿Web Crypto disponible?)", "error");
       return;
     }
+    try {
     var id = f.uid.value;
     var list = (Array.isArray(G.state.users) ? G.state.users : []).slice();
     if (id) {
       var i = list.findIndex(function (x) { return G.sameUserId(x.id, id); });
-      if (i < 0) return;
+      if (i < 0) {
+        G.toast("No se encontró el usuario a editar. Recargue el listado e inténtelo de nuevo.", "error");
+        return;
+      }
       list[i] = Object.assign({}, list[i], { name: f.name.value.trim(), role: f.role.value });
       if (f.password.value) {
         try {
@@ -35427,16 +35516,20 @@ function __deptUnitsStorageKey() {
     var pushRes = null;
     if (typeof G.cloudPushLsKeyPromise === "function") {
       pushRes = await G.cloudPushLsKeyPromise("users");
-    } else if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
-      window.CG.cloudPushKeyImmediate("users");
+    } else if (typeof G.cloudPushKeyImmediate === "function") {
+      pushRes = await G.cloudPushKeyImmediate("users");
     }
     UI.closeModal();
     if (pushRes && !pushRes.ok && !pushRes.skipped) {
-      G.toast("Usuario guardado en este navegador (revise consola F12).", "warn");
+      G.toast("Usuario guardado en este equipo. Si no se sincroniza con la nube, revise red y el indicador de sincronización (F12).", "warn");
     } else {
-      G.toast("Usuario guardado.");
+      G.toast("Usuario guardado.", "success");
     }
     A.renderAdmin("staff");
+    } catch (eUsSave) {
+      console.error("[CG][admin] userSave", eUsSave);
+      G.toast("No se pudo guardar el usuario. Intente de nuevo o revise la consola (F12).", "error");
+    }
   };
 
   A.staffCleanupDuplicates = function () {
@@ -35490,6 +35583,7 @@ function __deptUnitsStorageKey() {
       return;
     }
     if (!confirm("¿Eliminar usuario?")) return;
+    try {
     if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("users", String(id));
     G.state.users = (Array.isArray(G.state.users) ? G.state.users : []).filter(function (x) { return !G.sameUserId(x.id, id); });
     if (typeof G.armLsKeyPullQuiet === "function") G.armLsKeyPullQuiet("users", 35000);
@@ -35497,14 +35591,18 @@ function __deptUnitsStorageKey() {
     if (typeof G.cloudPushLsKeyPromise === "function") {
       delRes = await G.cloudPushLsKeyPromise("users");
     } else if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
-      window.CG.cloudPushKeyImmediate("users");
+      delRes = await window.CG.cloudPushKeyImmediate("users");
     }
     if (delRes && !delRes.ok && !delRes.skipped) {
-      G.toast("Usuario eliminado.", "warn");
+      G.toast("Usuario eliminado en este equipo. Revise sincronización con la nube (F12).", "warn");
     } else {
-      G.toast("Usuario eliminado");
+      G.toast("Usuario eliminado.", "success");
     }
     A.renderAdmin("staff");
+    } catch (eUsDel) {
+      console.error("[CG][admin] userDel", eUsDel);
+      G.toast("No se pudo completar la eliminación. Intente de nuevo (F12).", "error");
+    }
   };
 
   A.permSave = async function () {
@@ -35513,6 +35611,7 @@ function __deptUnitsStorageKey() {
       G.toast("Solo el administrador puede guardar permisos.", "error");
       return;
     }
+    try {
     var adm = [];
     var con = [];
     document.querySelectorAll("input[data-role][data-mod]").forEach(function (inp) {
@@ -35522,18 +35621,22 @@ function __deptUnitsStorageKey() {
       else con.push(mod);
     });
     G.state.roleModules = { admin: adm, conserje: con };
+    var pr = null;
     if (typeof G.cloudPushLsKeyPromise === "function") {
-      var pr = await G.cloudPushLsKeyPromise("roleModules");
-      if (pr && !pr.ok && !pr.skipped) {
-        G.toast("Permisos guardados.", "warn");
-        UI.renderNav();
-        return;
-      }
+      pr = await G.cloudPushLsKeyPromise("roleModules");
     } else if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
-      window.CG.cloudPushKeyImmediate("roleModules");
+      pr = await window.CG.cloudPushKeyImmediate("roleModules");
     }
-    G.toast("Permisos actualizados");
+    if (pr && !pr.ok && !pr.skipped) {
+      G.toast("Permisos guardados en este equipo. Revise sincronización con la nube si usa varios dispositivos (F12).", "warn");
+    } else {
+      G.toast("Permisos actualizados.", "success");
+    }
     UI.renderNav();
+    } catch (ePerm) {
+      console.error("[CG][admin] permSave", ePerm);
+      G.toast("No se pudieron guardar los permisos. Intente de nuevo (F12).", "error");
+    }
   };
 
   function inDateRange(iso, d1, d2) {
@@ -35591,6 +35694,7 @@ function __deptUnitsStorageKey() {
       G.toast("Indique mes y año válidos", "error");
       return;
     }
+    try {
     var m0 = mSel - 1;
     var mesTitulo = new Date(Date.UTC(y, m0, 1, 12)).toLocaleDateString("es-CL", {
       timeZone: G.CG_APP_TIMEZONE,
@@ -35737,7 +35841,11 @@ function __deptUnitsStorageKey() {
     a.download = "reporte_mensual_" + y + "_" + mPad + "_" + Date.now() + ".html";
     a.click();
     URL.revokeObjectURL(a.href);
-    G.toast("Reporte HTML descargado");
+    G.toast("Reporte HTML descargado.", "success");
+    } catch (eRepH) {
+      console.error("[CG][admin] repMonthlyHtml", eRepH);
+      G.toast("No se pudo generar el reporte. Revise la consola (F12).", "error");
+    }
   };
 
   A.repExport = function () {
@@ -35753,6 +35861,7 @@ function __deptUnitsStorageKey() {
       G.toast("Solo el administrador puede exportar datos.", "error");
       return;
     }
+    try {
     var mod = modEl.value;
     var d1 = d1El.value;
     var d2 = d2El.value;
@@ -35799,7 +35908,11 @@ function __deptUnitsStorageKey() {
     a.download = "reporte_" + mod + "_" + Date.now() + ".json";
     a.click();
     URL.revokeObjectURL(a.href);
-    G.toast("Reporte generado");
+    G.toast("Archivo JSON generado.", "success");
+    } catch (eRepJ) {
+      console.error("[CG][admin] repExport", eRepJ);
+      G.toast("No se pudo exportar. Revise la consola (F12).", "error");
+    }
   };
 
   A.cfgParking = function () {
@@ -35814,6 +35927,7 @@ function __deptUnitsStorageKey() {
       G.toast("Vuelva a abrir Administración → Configuración", "warn");
       return;
     }
+    try {
     var a = parseInt(elA.value, 10);
     var b = parseInt(elB.value, 10);
     if (isNaN(a) || isNaN(b) || a > b) {
@@ -35836,11 +35950,15 @@ function __deptUnitsStorageKey() {
     G.state.buildingParking = bp;
     G.state.parkingConfig = { from: a, to: b };
     A.syncParkingSlotsFromBuilding();
-    G.toast("Rango E-" + a + " … E-" + b + " aplicado al mapa del edificio");
+    G.toast("Rango E-" + a + " … E-" + b + " aplicado al mapa del edificio.", "success");
     A.renderAdmin("cfg");
+    } catch (ePk) {
+      console.error("[CG][admin] cfgParking", ePk);
+      G.toast("No se pudo aplicar el rango. Intente de nuevo (F12).", "error");
+    }
   };
 
-  A.cfgSpacesSave = function () {
+  A.cfgSpacesSave = async function () {
     var cuSp = G.currentUser();
     if (!G.userIsAdmin(cuSp)) {
       G.toast("Solo el administrador puede guardar la configuración.", "error");
@@ -35851,13 +35969,28 @@ function __deptUnitsStorageKey() {
       G.toast("Vuelva a abrir Administración → Configuración", "warn");
       return;
     }
+    try {
     var raw = ta.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
     var prev = G.state.config && typeof G.state.config === "object" && !Array.isArray(G.state.config) ? G.state.config : {};
     G.state.config = Object.assign({}, prev, { commonSpaces: raw });
-    G.toast("Espacios comunes guardados");
+    var pushCfg = null;
+    if (typeof G.cloudPushLsKeyPromise === "function") {
+      pushCfg = await G.cloudPushLsKeyPromise("config");
+    } else if (typeof G.cloudPushKeyImmediate === "function") {
+      pushCfg = await G.cloudPushKeyImmediate("config");
+    }
+    if (pushCfg && !pushCfg.ok && !pushCfg.skipped) {
+      G.toast("Espacios guardados en este equipo. Revise sincronización con la nube (F12).", "warn");
+    } else {
+      G.toast("Espacios comunes guardados.", "success");
+    }
+    } catch (eCfgSp) {
+      console.error("[CG][admin] cfgSpacesSave", eCfgSp);
+      G.toast("No se pudieron guardar los espacios. Intente de nuevo (F12).", "error");
+    }
   };
 
-  A.cfgVisitorParkingSave = function () {
+  A.cfgVisitorParkingSave = async function () {
     var cuVp = G.currentUser();
     if (!G.userIsAdmin(cuVp)) {
       G.toast("Solo el administrador puede guardar la configuración.", "error");
@@ -35868,11 +36001,26 @@ function __deptUnitsStorageKey() {
       G.toast("Vuelva a abrir Administración → Configuración", "warn");
       return;
     }
+    try {
     var raw = ta.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
     var prev = G.state.config && typeof G.state.config === "object" && !Array.isArray(G.state.config) ? G.state.config : {};
     G.state.config = Object.assign({}, prev, { visitorParkingCodes: raw });
-    G.toast("Estacionamientos para visitas guardados");
+    var pushVp = null;
+    if (typeof G.cloudPushLsKeyPromise === "function") {
+      pushVp = await G.cloudPushLsKeyPromise("config");
+    } else if (typeof G.cloudPushKeyImmediate === "function") {
+      pushVp = await G.cloudPushKeyImmediate("config");
+    }
+    if (pushVp && !pushVp.ok && !pushVp.skipped) {
+      G.toast("Códigos guardados en este equipo. Revise sincronización con la nube (F12).", "warn");
+    } else {
+      G.toast("Estacionamientos para visitas guardados.", "success");
+    }
     A.renderAdmin("cfg");
+    } catch (eCfgVp) {
+      console.error("[CG][admin] cfgVisitorParkingSave", eCfgVp);
+      G.toast("No se pudieron guardar los códigos. Intente de nuevo (F12).", "error");
+    }
   };
 
   /** Normaliza datos antiguos (solo número) a nomenclatura E- en localStorage. */
@@ -36418,18 +36566,28 @@ function __deptUnitsStorageKey() {
         var id = actEl.getAttribute("data-cg-id");
         var param = actEl.getAttribute("data-cg-param");
         var param2 = actEl.getAttribute("data-cg-param2");
+        var ret;
         if (empty === "1") {
-          fn();
-          return true;
+          ret = fn();
+        } else {
+          var hasId = id != null && id !== "";
+          var hasParam = param != null && param !== "";
+          var hasParam2 = param2 != null && param2 !== "";
+          if (hasId && hasParam && hasParam2) ret = fn(id, param, param2);
+          else if (hasId && hasParam) ret = fn(id, param);
+          else if (hasId) ret = fn(id);
+          else if (hasParam) ret = fn(param);
+          else ret = fn();
         }
-        var hasId = id != null && id !== "";
-        var hasParam = param != null && param !== "";
-        var hasParam2 = param2 != null && param2 !== "";
-        if (hasId && hasParam && hasParam2) fn(id, param, param2);
-        else if (hasId && hasParam) fn(id, param);
-        else if (hasId) fn(id);
-        else if (hasParam) fn(param);
-        else fn();
+        /* Acciones async devuelven Promise; el try/catch síncrono no captura rechazos. */
+        if (ret != null && typeof ret.then === "function") {
+          ret.catch(function (errP) {
+            console.error("[CG_ACTIONS async]", act, errP);
+            if (window.CG && typeof window.CG.toast === "function") {
+              window.CG.toast("Error al ejecutar la acción. Revise la consola (F12).", "error");
+            }
+          });
+        }
         return true;
       } catch (errAct) {
         console.error("[CG_ACTIONS]", act, errAct);
@@ -37013,20 +37171,36 @@ function __deptUnitsStorageKey() {
     if (typeof G.stripLegacyLocalStorageIfCloudOnly === "function") G.stripLegacyLocalStorageIfCloudOnly();
   }
   function cgStartApplicationRuntime() {
+  if (window.__cgAppRuntimeStarted) {
+    console.warn("[CG] cgStartApplicationRuntime ignorado: runtime ya iniciado (idempotente).");
+    return;
+  }
+  window.__cgAppRuntimeStarted = true;
+  try {
+    if (typeof URLSearchParams !== "undefined" && new URLSearchParams(window.location.search).get("cgDebug") === "1") {
+      window.__CG_DEBUG = true;
+      console.info("[CG] Modo diagnóstico: ?cgDebug=1 (logs ampliados en consola)");
+    }
+  } catch (eDbgUrl) {}
+  console.info("[CG] bootstrap: inicio runtime (ensureInit → migraciones → sesión/UI)");
   G.ensureInit();
   G.runStartupLocalMigrations();
   if (typeof G.rehydrateSessionFromStorage === "function") G.rehydrateSessionFromStorage();
   G.ensureBuildingKeys();
   function cgDeferParkingBoot() {
-    if (window.CG_ACTIONS && window.CG_ACTIONS.migrateParkingENomenclature) {
+    if (window.CG_ACTIONS && typeof window.CG_ACTIONS.migrateParkingENomenclature === "function") {
       try {
         window.CG_ACTIONS.migrateParkingENomenclature();
-      } catch (ePk) {}
+      } catch (ePk) {
+        console.warn("[CG] migrateParkingENomenclature:", ePk);
+      }
     }
-    if (window.CG_ACTIONS && window.CG_ACTIONS.syncParkingSlotsFromBuilding) {
+    if (window.CG_ACTIONS && typeof window.CG_ACTIONS.syncParkingSlotsFromBuilding === "function") {
       try {
         window.CG_ACTIONS.syncParkingSlotsFromBuilding();
-      } catch (ePk2) {}
+      } catch (ePk2) {
+        console.warn("[CG] syncParkingSlotsFromBuilding:", ePk2);
+      }
     }
   }
   if (typeof requestIdleCallback === "function") {
@@ -37034,7 +37208,7 @@ function __deptUnitsStorageKey() {
   } else {
     setTimeout(cgDeferParkingBoot, 1);
   }
-  if (window.CG && window.CG.migrateDeptStorageKeysOnce) window.CG.migrateDeptStorageKeysOnce();
+  if (typeof window.CG.migrateDeptStorageKeysOnce === "function") window.CG.migrateDeptStorageKeysOnce();
   if (typeof G.attachVirtualAdminDepartment === "function") G.attachVirtualAdminDepartment();
 
   if (typeof G.applyPersonalizationToDom === "function") {
@@ -37097,7 +37271,7 @@ function __deptUnitsStorageKey() {
         }
       }
     })();
-  } else {
+      } else {
     (function cgBootLoginPullCloudFirst() {
       var btn = document.getElementById("login-submit");
       var firstSub = document.getElementById("cg-first-admin-submit");
@@ -37110,6 +37284,11 @@ function __deptUnitsStorageKey() {
       function afterLoginScreenReady() {
         UI.showLogin();
         if (typeof G.syncLoginFirstAdminPanel === "function") G.syncLoginFirstAdminPanel();
+      }
+      /* Evita segundo cloudPullAllOnce si el arranque cloud-only ya ejecutó pull completo + replay (misma carga). */
+      if (window.__cgBootCloudPullAttempted) {
+        afterLoginScreenReady();
+        return;
       }
       if (!canPull) {
         afterLoginScreenReady();
@@ -37132,7 +37311,9 @@ function __deptUnitsStorageKey() {
         firstSub.textContent = "Espere sincronización…";
       }
       G.cloudPullAllOnce()
-        .catch(function () {})
+        .catch(function (ePullLogin) {
+          console.warn("[CG] cloudPullAllOnce en pantalla de login falló (se continúa con datos locales):", ePullLogin);
+        })
         .then(function () {
           if (btn) {
             btn.disabled = false;
@@ -37160,6 +37341,7 @@ function __deptUnitsStorageKey() {
         }
       })
       .then(function () {
+        window.__cgBootCloudPullAttempted = true;
         try {
           if (window.cgFsBridge && typeof window.cgFsBridge.replaySyncOutbox === "function") {
             window.cgFsBridge.replaySyncOutbox();
@@ -37167,7 +37349,9 @@ function __deptUnitsStorageKey() {
           if (window.cgFsBridge && typeof window.cgFsBridge.replayDeleteOutbox === "function") {
             window.cgFsBridge.replayDeleteOutbox();
           }
-        } catch (eBootOb) {}
+        } catch (eBootOb) {
+          console.warn("[CG] replay outbox / delete outbox en arranque cloud-only:", eBootOb);
+        }
         cgStartApplicationRuntime();
       });
   } else {
