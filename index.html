@@ -9634,18 +9634,31 @@
       return "leg:" + at + "\0" + uid + "\0" + kind + "\0" + tx.slice(0, 240);
     }
 
+    /**
+     * JSON crudo en disco (localStorage) para una clave de negocio; prioriza el durable sobre P.localGetRaw,
+     * que con Firestore activo devuelve primero __cgFsMem y puede ocultar un guardado reciente en disco.
+     */
+    function __cgReadKvDurableString(shortKey) {
+      if (!shortKey || shortKey === "session") return null;
+      var full = LS + shortKey;
+      try {
+        if (typeof localStorage !== "undefined" && localStorage) {
+          var d = localStorage.getItem(full);
+          if (d != null && d !== "") return d;
+        }
+      } catch (e0) {}
+      try {
+        var r = P.localGetRaw(full);
+        if (r != null && r !== "") return r;
+      } catch (e1) {}
+      return null;
+    }
+
     function scheduleCloudWrite(shortKey) {
       if (!__cgFsCoreActive() || !shortKey || shortKey === "session") return;
+      var sync = __cgReadKvDurableString(shortKey);
+      if (sync != null) window.__cgFsMem[shortKey] = sync;
       var str = window.__cgFsMem[shortKey];
-      if (typeof str !== "string") {
-        try {
-          var rSq = P.localGetRaw(LS + shortKey);
-          if (rSq != null && rSq !== "") {
-            window.__cgFsMem[shortKey] = rSq;
-            str = rSq;
-          }
-        } catch (eSq) {}
-      }
       if (typeof str === "string") window.cgFsBridge.pushImmediate(shortKey, str);
     }
 
@@ -9953,12 +9966,8 @@
     function cloudSyncAfterDirectLocalStorageWrite(shortKey) {
       if (!shortKey || !__cgFsCoreActive()) return;
       try {
-        if (typeof window.__cgFsMem[shortKey] !== "string") {
-          var rawSync = P.localGetRaw(LS + shortKey);
-          if (rawSync != null && rawSync !== "") {
-            window.__cgFsMem[shortKey] = rawSync;
-          }
-        }
+        var sync = __cgReadKvDurableString(shortKey);
+        if (sync != null) window.__cgFsMem[shortKey] = sync;
       } catch (eSy) {}
       cloudPushKeyImmediate(shortKey);
     }
@@ -14502,7 +14511,12 @@
             if (!window.CG || typeof window.CG.currentUser !== "function" || !window.CG.currentUser()) return;
             if (!window.cgFsBridge || typeof window.cgFsBridge.active !== "function" || !window.cgFsBridge.active()) return;
             if (typeof window.CG.flushPendingCloudWritesNow === "function") window.CG.flushPendingCloudWritesNow();
-            if (typeof window.CG.cloudPullAllOnce === "function") window.CG.cloudPullAllOnce();
+            /* Si el listener se perdió (red, error puntual) pero hay sesión, rearmar pull+onSnapshot; si no, solo refuerzo pull. */
+            if (!window.__cgFsListenerUnsub && typeof window.CG.initCloudSync === "function") {
+              window.CG.initCloudSync().catch(function () {});
+            } else if (typeof window.CG.cloudPullAllOnce === "function") {
+              window.CG.cloudPullAllOnce();
+            }
           } catch (eRe) {}
         }, 280);
       }
