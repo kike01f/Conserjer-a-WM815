@@ -792,7 +792,9 @@
        * en Firestore o snapshot desfasado), excepto ids marcados en __cgPendingDeleted (visits).
        */
       function mergeVisitsPreserveLocalExit(remoteArr, localArr) {
-        if (!Array.isArray(remoteArr) || !Array.isArray(localArr)) return remoteArr;
+        if (!Array.isArray(remoteArr)) remoteArr = [];
+        if (!Array.isArray(localArr)) localArr = [];
+        /* Antes: si localArr no era array, se devolvía solo el remoto y se perdían ingresos solo locales / salidas pendientes de reflejar. */
 
         function outMs(v) {
           if (!v || v.outAt == null || v.outAt === "") return 0;
@@ -23970,12 +23972,13 @@ function __deptUnitsStorageKey() {
         } catch (eNav) {}
       }
       if (k === "users" || k === "roleModules") {
-        if (A && typeof A.renderAdmin === "function") {
+        /* Repintar la subpestaña de Administración que esté activa (Turnos, Config., Reportes, etc.),
+         * no solo Personal/Permisos — así otro dispositivo ve al instante usuarios y permisos actualizados. */
+        if (A && typeof A.renderAdmin === "function" && view === "admin") {
           try {
-            var tabStaff = document.querySelector(".admin-tab[data-adm=\"staff\"].active");
-            var tabPerm = document.querySelector(".admin-tab[data-adm=\"perm\"].active");
-            if (tabStaff) A.renderAdmin("staff");
-            if (tabPerm) A.renderAdmin("perm");
+            var admTabActive = document.querySelector(".admin-tab.active");
+            var admTabKey = admTabActive && admTabActive.getAttribute("data-adm");
+            if (admTabKey) A.renderAdmin(admTabKey);
           } catch (eAdm) {}
         }
       }
