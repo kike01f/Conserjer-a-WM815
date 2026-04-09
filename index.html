@@ -1020,12 +1020,24 @@
        * Libro de novedades: unión por id entre remoto y caché local (evita last-write-wins que borra entradas).
        * Timestamp `at` más reciente gana; empate → `editedAt` más reciente; segunda ingesta gana empates restantes.
        * Si la copia ganadora trae `note` vacío y la otra tenía texto, se conserva la nota (listas desfasadas / otro equipo).
+       * Si el remoto trae al menos una fila: ids solo en local que no están en el snapshot remoto se omiten
+       *   (admin borró en la nube), salvo outbox novedades (subida en curso).
        * Respeta __cgPendingDeleted.novedades (eliminaciones de admin no se reinyectan desde el remoto).
        */
       function mergeNovedades(remoteArr, localArr) {
         if (!Array.isArray(remoteArr)) remoteArr = [];
         if (!Array.isArray(localArr)) localArr = [];
         var pendDel = __cgReadPendingDeletedIdsForKey("novedades");
+        var remoteNovIds = Object.create(null);
+        var rni;
+        for (rni = 0; rni < remoteArr.length; rni++) {
+          var rnv = remoteArr[rni];
+          if (rnv && rnv.id != null && String(rnv.id) !== "") remoteNovIds[String(rnv.id)] = true;
+        }
+        var remoteNovNonEmpty = remoteArr.length > 0;
+        var outboxNov =
+          typeof window.__cgFsOutboxHasPendingWrite === "function" &&
+          window.__cgFsOutboxHasPendingWrite("novedades");
         function atMs(n) {
           if (!n || n.at == null) return 0;
           var t = new Date(n.at).getTime();
@@ -1064,12 +1076,13 @@
           return winner;
         }
         var byId = Object.create(null);
-        function ingest(arr) {
+        function ingest(arr, fromLocal) {
           var i;
           for (i = 0; i < arr.length; i++) {
             var m = arr[i];
             if (!m || m.id == null || String(m.id) === "") continue;
             var id = String(m.id);
+            if (fromLocal && remoteNovNonEmpty && !remoteNovIds[id] && !outboxNov) continue;
             if (pendDel[id]) continue;
             var ex = byId[id];
             if (!ex) {
@@ -1083,8 +1096,8 @@
             }
           }
         }
-        ingest(remoteArr);
-        ingest(localArr);
+        ingest(remoteArr, false);
+        ingest(localArr, true);
         var out = [];
         var k;
         for (k in byId) {
@@ -30298,9 +30311,28 @@ function __deptUnitsStorageKey() {
     if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
       window.CG.cloudPushKeyImmediate("shiftLogs");
     }
+    /* Quitar del libro las entradas «Turno cerrado» (y otras) vinculadas a este tramo; si no, siguen viéndose en conserjes. */
+    var novList = Array.isArray(G.state.novedades) ? G.state.novedades : [];
+    var removedNovIds = [];
+    var novNext = novList.filter(function (n) {
+      if (!n || n.shiftSegmentId == null || String(n.shiftSegmentId) === "") return true;
+      if (String(n.shiftSegmentId) !== String(id)) return true;
+      if (n.id != null && String(n.id) !== "") removedNovIds.push(String(n.id));
+      return false;
+    });
+    if (novNext.length !== novList.length) {
+      removedNovIds.forEach(function (nid) {
+        if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("novedades", nid);
+      });
+      G.state.novedades = novNext;
+      if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
+        window.CG.cloudPushKeyImmediate("novedades");
+      }
+    }
     G.toast("Registro eliminado");
     A.renderAdmin("turnos");
     if (typeof A.renderShiftPanelNovedades === "function") A.renderShiftPanelNovedades();
+    if (document.getElementById("tl-nov") && typeof A.renderNovedades === "function") A.renderNovedades();
   };
 
   A.renderShiftPanelNovedades = function () {
