@@ -9382,14 +9382,14 @@
       <main class="content" id="main-content" tabindex="-1"></main>
     </div>
     <div id="cg-staff-chat-root" class="cg-staff-chat-root hidden" aria-hidden="true">
-      <button type="button" id="cg-chat-toggle" class="cg-chat-fab" aria-expanded="false" aria-controls="cg-chat-panel" title="Canal con administración (tiempo real)" aria-label="Abrir o cerrar canal con administración">
+      <button type="button" id="cg-chat-toggle" class="cg-chat-fab" aria-expanded="false" aria-controls="cg-chat-panel" title="Chat del equipo (sincronizado)" aria-label="Abrir o cerrar chat del equipo">
         <i class="fa-solid fa-headset" aria-hidden="true"></i>
         <span id="cg-chat-badge" class="cg-chat-badge hidden" aria-live="polite">0</span>
       </button>
-      <div id="cg-chat-panel" class="cg-chat-panel" role="dialog" aria-modal="false" aria-hidden="true" aria-label="Canal con administración">
+      <div id="cg-chat-panel" class="cg-chat-panel" role="dialog" aria-modal="false" aria-hidden="true" aria-label="Chat del equipo">
         <div class="cg-chat-panel-head">
           <div>
-            <strong class="cg-chat-panel-title">Canal con administración</strong>
+            <strong class="cg-chat-panel-title">Chat del equipo</strong>
             <p class="cg-chat-panel-sub" id="cg-chat-panel-sub"></p>
           </div>
           <div class="cg-chat-panel-actions">
@@ -12979,7 +12979,7 @@
     const PERSONALIZATION_PALETTE_IDS = ["lima", "azul", "bosque", "indigo", "vino", "pizarra", "aurora"];
     var CG_DASH_QUICKLINKS_MAX = 24;
     var CG_STAFF_CHAT_VOICE_PHRASE_MAX = 280;
-    var CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE = "Nuevo mensaje en el canal con administración.";
+    var CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE = "Nuevo mensaje en el chat del equipo.";
 
     /** Texto para síntesis de voz del chat: sin caracteres de control, longitud acotada. */
     function normalizeStaffChatVoicePhrase(raw) {
@@ -21503,14 +21503,14 @@ function __deptUnitsStorageKey() {
       if (!u) return;
       staffChatSetRead(u.id, new Date().toISOString());
     }
-    /** Mayor marca de tiempo ISO de «última lectura del chat» entre usuarios con un rol dado. */
-    function staffChatMaxReadAtForRole(role) {
+    /** Mejor instante en que alguien distinto del autor marcó el chat como leído (recibos «Visto» en grupo). */
+    function staffChatMaxReadAmongOthers(authorUserId) {
       var users = G.state.users || [];
       var best = 0;
       var i;
       for (i = 0; i < users.length; i++) {
         var usr = users[i];
-        if (!usr || String(G.normalizeRoleForAuth(usr.role) || "") !== role) continue;
+        if (!usr || G.sameUserId(usr.id, authorUserId)) continue;
         var iso = staffChatGetRead(usr.id);
         if (!iso) continue;
         var t = Date.parse(String(iso));
@@ -21536,7 +21536,8 @@ function __deptUnitsStorageKey() {
         if (G.userIsAdmin(u)) {
           if (!G.roleIsConserje(ent.role)) return;
         } else if (G.roleIsConserje(u.role)) {
-          if (!G.roleIsAdmin(ent.role)) return;
+          if (G.sameUserId(ent.userId, u.id)) return;
+          if (!G.roleIsAdmin(ent.role) && !G.roleIsConserje(ent.role)) return;
         } else return;
         var uid = String(ent.userId || "");
         if (uid && seen[uid]) return;
@@ -21618,8 +21619,7 @@ function __deptUnitsStorageKey() {
     }
 
     /**
-     * Canal conserje ↔ admin: el hilo se guarda en este navegador; cada conserje solo ve
-     * sus envíos y los mensajes del administrador (no lee a otros conserjes). El admin ve todo.
+     * Chat de equipo: mismo hilo para administración y conserjes (sincronizado por Firestore / almacenamiento).
      */
     function staffChatMessagesForViewer() {
       return staffChatFilterListForViewer(staffChatMessagesSafe(), G.currentUser());
@@ -21630,17 +21630,12 @@ function __deptUnitsStorageKey() {
       var afterMs = staffChatIsoToMs(staffChatGetRead(u.id));
       return staffChatMessagesSafe().filter(function (m) {
         if (!m || typeof m !== "object") return false;
+        if (G.sameUserId(m.userId, u.id)) return false;
         if (isFinite(afterMs)) {
           var mMs = staffChatMessageAtMs(m);
           if (!isFinite(mMs) || mMs <= afterMs) return false;
         }
-        if (G.userIsAdmin(u)) {
-          if (G.sameUserId(m.userId, u.id)) return false;
-          if (G.roleIsConserje(m.role)) return true;
-          if (!m.role && m.userId) return true;
-          return false;
-        }
-        return staffChatMessageIsFromAdminParty(m);
+        return true;
       }).length;
     }
     function staffChatPanelOpen() {
@@ -21926,15 +21921,8 @@ function __deptUnitsStorageKey() {
     function staffChatFilterListForViewer(list, u) {
       if (!u) return [];
       var all = Array.isArray(list) ? list : [];
-      var sorted = all.slice().sort(function (a, b) {
+      return all.slice().sort(function (a, b) {
         return new Date((a && a.at) || 0) - new Date((b && b.at) || 0);
-      });
-      if (G.userIsAdmin(u)) return sorted;
-      return sorted.filter(function (m) {
-        if (!m || typeof m !== "object") return false;
-        if (staffChatMessageIsFromAdminParty(m)) return true;
-        if (G.sameUserId(m.userId, u.id)) return true;
-        return false;
       });
     }
     function staffChatMessageDedupeKey(m) {
@@ -22091,7 +22079,7 @@ function __deptUnitsStorageKey() {
         el.textContent = staffPresenceConserjesSummaryForAdmin();
       } else {
         el.textContent =
-          "Canal directo con administración: solo ve sus mensajes y los del admin; no ve mensajes de otros conserjes.";
+          "Mensajes visibles para todo el personal de conserjería y administración. Se sincroniza entre equipos en tiempo real.";
       }
     }
     /** Push del documento KV staffChatMessages: el mensaje ya está en local; solo registramos fallo de red/Firestore. */
@@ -22228,9 +22216,7 @@ function __deptUnitsStorageKey() {
         var emptyP = document.createElement("p");
         emptyP.className = "cg-chat-empty";
         emptyP.textContent =
-          cu && G.userIsAdmin(cu)
-            ? "Sin mensajes aún. Los avisos de los conserjes aparecerán aquí en tiempo real."
-            : "Sin mensajes aún. Escriba abajo para contactar a administración; las respuestas del admin llegan al instante.";
+          "Sin mensajes aún. Escriba abajo; el equipo verá el mensaje al instante cuando haya sincronización activa.";
         thread.appendChild(emptyP);
       } else {
         list.forEach(function (m) {
@@ -22313,12 +22299,8 @@ function __deptUnitsStorageKey() {
           }
           div.appendChild(txt);
           var msgAtMs = Date.parse(String(m.at || ""));
-          var effRole = m.role;
-          if (!effRole && mine && cu) effRole = cu.role;
           if (mine && m.kind !== "buzz" && isFinite(msgAtMs)) {
-            var readMs = 0;
-            if (G.roleIsAdmin(effRole)) readMs = staffChatMaxReadAtForRole("conserje");
-            else if (G.roleIsConserje(effRole)) readMs = staffChatMaxReadAtForRole("admin");
+            var readMs = staffChatMaxReadAmongOthers(uid);
             if (readMs >= msgAtMs) {
               var foot = document.createElement("span");
               foot.className = "cg-chat-bubble-read";
