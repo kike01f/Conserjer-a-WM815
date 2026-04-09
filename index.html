@@ -10036,12 +10036,16 @@
     }
 
     function cloudPullAllOnce() {
-      if (!__cgFsCoreActive()) return Promise.resolve();
+      if (!__cgFsCoreActive()) {
+        return Promise.resolve({ ok: false, skipped: true, reason: "fs_inactive" });
+      }
       var g = ++window.__cgFsPullGeneration;
       return __cgMaybeAnonymousAuth().then(function () {
         return window.cgFsBridge.kvCol().get();
       }).then(function (qs) {
-        if (g !== window.__cgFsPullGeneration) return;
+        if (g !== window.__cgFsPullGeneration) {
+          return { ok: false, skipped: true, reason: "superseded" };
+        }
         var remoteKvIds = Object.create(null);
         qs.forEach(function (doc) {
           remoteKvIds[doc.id] = true;
@@ -10082,6 +10086,7 @@
             window.CG.scheduleValidateCurrentSessionPermissions();
           }
         } catch (ePullPerm) {}
+        return { ok: true, docCount: typeof qs.size === "number" ? qs.size : 0 };
       }).catch(function (err) {
         window.__cgFsLastError = err;
         __cgSyncLog("warn", "firestore_pull_all", err);
@@ -24316,6 +24321,77 @@ function __deptUnitsStorageKey() {
       } catch (eCloudRf) {}
     });
 
+    /**
+     * Tras cloudPullAllOnce: repinta todos los módulos según claves KV (refuerzo; el pull ya disparó eventos por doc).
+     * Debe ejecutarse desde PART 2 para usar getCurrentView / renderNav del mismo closure.
+     */
+    function refreshUiAfterFullCloudPull() {
+      var keys = [
+        "users",
+        "roleModules",
+        "visits",
+        "visitVehAlertLog",
+        "novedades",
+        "encomiendas",
+        "reservas",
+        "proveedores",
+        "bodegas",
+        "departments",
+        "config",
+        "shiftLogs",
+        "shiftLogsTombstones",
+        "staffChatMessages",
+        "chatLastReadByUser",
+        "staffPresence",
+        "personalization",
+        "festiveAmbience",
+        "staffBirthdays",
+        "dashScheduledAlerts",
+        "dashActMonth",
+        "absenceAlertPhrases",
+        "parkingSlots",
+        "parkingConfig",
+        "buildingUnits",
+        "buildingResidents",
+        "buildingFormerResidents",
+        "buildingParking",
+        "conserjeActivityLog"
+      ];
+      try {
+        if (typeof window.__cgFabricaDeptKvUnits === "function") {
+          var ku = window.__cgFabricaDeptKvUnits();
+          if (ku && keys.indexOf(ku) < 0) keys.push(ku);
+        }
+        if (typeof window.__cgFabricaDeptKvFormer === "function") {
+          var kf = window.__cgFabricaDeptKvFormer();
+          if (kf && keys.indexOf(kf) < 0) keys.push(kf);
+        }
+      } catch (eKu) {}
+      var i;
+      for (i = 0; i < keys.length; i++) {
+        try {
+          refreshAfterRemoteLsKey(keys[i]);
+        } catch (eR) {}
+      }
+      try {
+        if (window.CG && typeof window.CG.applyPersonalizationToDom === "function") window.CG.applyPersonalizationToDom();
+        if (window.CG && typeof window.CG.applyFestiveAmbienceToDom === "function") window.CG.applyFestiveAmbienceToDom();
+      } catch (eDom) {}
+      try {
+        var cvDep = getCurrentView();
+        if (cvDep === "departamentos" || cvDep === "mapaEdificio") {
+          if (typeof window.loadUnitsFromCloud === "function") window.loadUnitsFromCloud(true, false).catch(function () {});
+          if (typeof window.loadFormerResidentsFromCloud === "function") {
+            window.loadFormerResidentsFromCloud(true, false).catch(function () {});
+          }
+        }
+      } catch (eDep) {}
+      try {
+        renderNav();
+        renderTopUser();
+      } catch (eN) {}
+    }
+
     function pageEncomiendas() {
       return (
         "<div class=\"cg-page-compact\">" +
@@ -24339,6 +24415,7 @@ function __deptUnitsStorageKey() {
       pageDepartamentos, pageMapaEdificio, pageEstacionamientos, pageBodegas, pageProveedores, pageVisitas, pageEncomiendas, pageReservas, pageNovedades, pageAdmin, pageManual,
       bindPageEvents, checkVehicularVisitWarnings, renderDashboardCharts, renderDashboardQuickLinksMount,
       refreshAfterRemoteLsKey,
+      refreshUiAfterFullCloudPull,
       getRemoteRefreshRegistry: getRemoteRefreshRegistry,
       remoteRefreshManualTests: __CG_REMOTE_REFRESH_MANUAL_TESTS
     };
@@ -33747,9 +33824,13 @@ function __deptUnitsStorageKey() {
       return;
     }
     var gh = typeof G.getFirestoreSyncHealth === "function" ? G.getFirestoreSyncHealth() : null;
-    if (!gh || gh.cloudSyncEnabled !== true) {
+    var bridgeOk =
+      window.cgFsBridge &&
+      typeof window.cgFsBridge.active === "function" &&
+      window.cgFsBridge.active();
+    if (!gh || gh.cloudSyncEnabled !== true || !bridgeOk) {
       G.toast(
-        "La sincronización en la nube no está activa. Sin Firestore, los datos de otros equipos no pueden traerse aquí; revise la configuración o use un respaldo JSON.",
+        "No hay conexión operativa con Firestore (revise CG_FIREBASE_CONFIG, siteId y que la nube esté activa). Sin eso no se pueden traer los registros de otros equipos.",
         "warn"
       );
       return;
@@ -33768,41 +33849,43 @@ function __deptUnitsStorageKey() {
       if (typeof G.flushPendingCloudWritesNow === "function") G.flushPendingCloudWritesNow();
     } catch (eFl) {}
     G.cloudPullAllOnce()
-      .then(function () {
+      .then(function (pullRes) {
+        if (pullRes && pullRes.skipped && pullRes.reason === "fs_inactive") {
+          G.toast(
+            "Firestore no está activo en este navegador (configuración o clave API). No se descargó nada.",
+            "warn"
+          );
+          return;
+        }
+        if (pullRes && pullRes.skipped && pullRes.reason === "superseded") {
+          G.toast("Otra descarga se superpuso; inténtelo de nuevo en un segundo.", "warn");
+          return;
+        }
         if (typeof window.__cgRefreshFirestoreSyncBanner === "function") window.__cgRefreshFirestoreSyncBanner();
-        G.toast("Datos del servidor aplicados en este navegador. Revise el panel, visitas, novedades y demás módulos.", "success");
         try {
           if (typeof G.scheduleValidateCurrentSessionPermissions === "function") {
             G.scheduleValidateCurrentSessionPermissions();
           }
         } catch (eVal) {}
         try {
-          var cv = typeof getCurrentView === "function" ? getCurrentView() : null;
-          if (cv === "dashboard" && typeof updateDashboardChartsSummaryAndActivity === "function") {
-            updateDashboardChartsSummaryAndActivity();
-          } else if (cv === "visitas" && typeof A.renderVisitas === "function") {
-            A.renderVisitas();
-          } else if (cv === "novedades" && typeof A.renderNovedades === "function") {
-            A.renderNovedades();
-          } else if (cv === "encomiendas" && typeof A.renderEncomiendas === "function") {
-            A.renderEncomiendas();
-          } else if (cv === "reservas" && typeof A.renderReservas === "function") {
-            A.renderReservas();
-          } else if (cv === "proveedores" && typeof A.renderProveedores === "function") {
-            A.renderProveedores();
-          } else if (cv === "bodegas" && typeof A.renderBodegas === "function") {
-            A.renderBodegas();
-          } else if (cv === "estacionamientos" && typeof A.syncParkingSlotsFromBuilding === "function" && typeof A.renderParkingGrid === "function") {
-            A.syncParkingSlotsFromBuilding();
-            A.renderParkingGrid();
-          } else if (cv === "admin" && typeof A.renderAdmin === "function") {
-            var at = document.querySelector(".admin-tab.active");
-            var ak = at && at.getAttribute("data-adm");
-            if (ak) A.renderAdmin(ak);
+          if (UI && typeof UI.refreshUiAfterFullCloudPull === "function") {
+            UI.refreshUiAfterFullCloudPull();
           }
-          renderNav();
-          renderTopUser();
-        } catch (eRf) {}
+        } catch (eRf) {
+          console.warn("[CG] refreshUiAfterFullCloudPull", eRf);
+        }
+        try {
+          if (typeof G.initCloudSync === "function") {
+            G.initCloudSync().catch(function () {});
+          }
+        } catch (eInit) {}
+        var nDoc = pullRes && typeof pullRes.docCount === "number" ? pullRes.docCount : null;
+        G.toast(
+          nDoc != null
+            ? "Sincronizado: " + nDoc + " documento(s) en la nube aplicados. Listas y paneles actualizados."
+            : "Datos del servidor aplicados. Listas y paneles actualizados.",
+          "success"
+        );
       })
       .catch(function (err) {
         console.warn("[CG] adminForceCloudPullAll", err);
