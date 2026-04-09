@@ -25061,7 +25061,7 @@ function __deptUnitsStorageKey() {
       reservas: ["reservas"],
       proveedores: ["proveedores", "visitas"],
       bodegas: ["bodegas"],
-      config: ["visitas"],
+      config: ["visitas", "reservas"],
       shiftLogs: ["novedades"],
       absenceAlertPhrases: ["ausenciaAlertas"]
     };
@@ -25285,6 +25285,12 @@ function __deptUnitsStorageKey() {
             } catch (eVpDl) {}
           }
         }
+        if (!remountedMain && document.getElementById("res-module-summary") && A && typeof A.renderReservas === "function") {
+          try {
+            if (typeof G.ensureReservasCommonSpacesDefaults === "function") G.ensureReservasCommonSpacesDefaults();
+            A.renderReservas();
+          } catch (eResCfg) {}
+        }
       }
 
       if (k === "personalization") {
@@ -25493,7 +25499,7 @@ function __deptUnitsStorageKey() {
     }
 
     window.CG_UI = {
-      showLogin, showApp, navigate, renderNav, openModal, closeModal, getCurrentView, openUserManualOverlay,
+      showLogin, showApp, navigate, renderNav, renderTopUser, openModal, closeModal, getCurrentView, openUserManualOverlay,
       pageDepartamentos, pageMapaEdificio, pageEstacionamientos, pageBodegas, pageProveedores, pageVisitas, pageEncomiendas, pageReservas, pageNovedades, pageAdmin, pageManual,
       bindPageEvents, checkVehicularVisitWarnings, renderDashboardCharts, renderDashboardQuickLinksMount,
       refreshAfterRemoteLsKey,
@@ -35723,6 +35729,16 @@ function __deptUnitsStorageKey() {
       G.toast("Usuario guardado.", "success");
     }
     A.renderAdmin("staff");
+    if (UI && typeof UI.renderTopUser === "function") {
+      try {
+        UI.renderTopUser();
+      } catch (eTopU) {}
+    }
+    if (typeof G.validateCurrentSessionPermissions === "function") {
+      try {
+        G.validateCurrentSessionPermissions({ source: "userSave", silentModuleRedirect: true });
+      } catch (eValUs) {}
+    }
     } catch (eUsSave) {
       console.error("[CG][admin] userSave", eUsSave);
       G.toast("No se pudo guardar el usuario. Intente de nuevo o revise la consola (F12).", "error");
@@ -35830,6 +35846,11 @@ function __deptUnitsStorageKey() {
       G.toast("Permisos actualizados.", "success");
     }
     UI.renderNav();
+    if (typeof G.validateCurrentSessionPermissions === "function") {
+      try {
+        G.validateCurrentSessionPermissions({ source: "permSave", silentModuleRedirect: true });
+      } catch (eValPm) {}
+    }
     } catch (ePerm) {
       console.error("[CG][admin] permSave", ePerm);
       G.toast("No se pudieron guardar los permisos. Intente de nuevo (F12).", "error");
@@ -36148,7 +36169,14 @@ function __deptUnitsStorageKey() {
     G.state.parkingConfig = { from: a, to: b };
     A.syncParkingSlotsFromBuilding();
     G.toast("Rango E-" + a + " … E-" + b + " aplicado al mapa del edificio.", "success");
-    A.renderAdmin("cfg");
+    if (UI && typeof UI.refreshAfterRemoteLsKey === "function") {
+      try {
+        UI.refreshAfterRemoteLsKey("parkingConfig");
+        UI.refreshAfterRemoteLsKey("buildingParking");
+      } catch (ePkRf) {}
+    } else {
+      A.renderAdmin("cfg");
+    }
     } catch (ePk) {
       console.error("[CG][admin] cfgParking", ePk);
       G.toast("No se pudo aplicar el rango. Intente de nuevo (F12).", "error");
@@ -36180,6 +36208,11 @@ function __deptUnitsStorageKey() {
       G.toast("Espacios guardados en este equipo. Revise sincronización con la nube (F12).", "warn");
     } else {
       G.toast("Espacios comunes guardados.", "success");
+    }
+    if (UI && typeof UI.refreshAfterRemoteLsKey === "function") {
+      try {
+        UI.refreshAfterRemoteLsKey("config");
+      } catch (eCfgRf) {}
     }
     } catch (eCfgSp) {
       console.error("[CG][admin] cfgSpacesSave", eCfgSp);
@@ -36213,7 +36246,13 @@ function __deptUnitsStorageKey() {
     } else {
       G.toast("Estacionamientos para visitas guardados.", "success");
     }
-    A.renderAdmin("cfg");
+    if (UI && typeof UI.refreshAfterRemoteLsKey === "function") {
+      try {
+        UI.refreshAfterRemoteLsKey("config");
+      } catch (eVpRf) {}
+    } else if (UI && typeof A.renderAdmin === "function") {
+      A.renderAdmin("cfg");
+    }
     } catch (eCfgVp) {
       console.error("[CG][admin] cfgVisitorParkingSave", eCfgVp);
       G.toast("No se pudieron guardar los códigos. Intente de nuevo (F12).", "error");
