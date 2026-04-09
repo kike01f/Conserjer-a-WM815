@@ -23972,15 +23972,21 @@ function __deptUnitsStorageKey() {
         } catch (eNav) {}
       }
       if (k === "users" || k === "roleModules") {
-        /* Repintar la subpestaña de Administración que esté activa (Turnos, Config., Reportes, etc.),
-         * no solo Personal/Permisos — así otro dispositivo ve al instante usuarios y permisos actualizados. */
+        /* Repintar la subpestaña de Administración activa (incl. Personal/staff): la tabla lee G.state.users tras el merge en disco. */
         if (A && typeof A.renderAdmin === "function" && view === "admin") {
           try {
             var admTabActive = document.querySelector(".admin-tab.active");
             var admTabKey = admTabActive && admTabActive.getAttribute("data-adm");
-            if (admTabKey) A.renderAdmin(admTabKey);
+            if (admTabKey) {
+              A.renderAdmin(admTabKey);
+            } else if (document.getElementById("adm-panel")) {
+              A.renderAdmin("staff");
+            }
           } catch (eAdm) {}
         }
+        try {
+          if (typeof renderTopUser === "function") renderTopUser();
+        } catch (eTopU) {}
       }
 
       if (k === "dashActMonth") {
@@ -32209,6 +32215,7 @@ function __deptUnitsStorageKey() {
     return p;
   }
 
+  /* Listado Personal: misma fuente que el resto de la app (clave KV `users`, merge remoto/local en CG). */
   function buildRenderAdminStaffHtml() {
     var staffUsers = Array.isArray(G.state.users) ? G.state.users : [];
     function staffRoleLabel(r) {
