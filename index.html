@@ -1944,8 +1944,14 @@
               /* No hacer return aquí si remoteRev < localRev: se ignoraban mensajes del otro equipo (sync
                * bidireccional roto). El meta rev puede ir desfasado; mergeStaffChatMessages une por id. */
 
-              /* Si el remoto trae revisión mayor, el documento en nube manda (incl. vaciar chat a propósito). */
-              if (remoteRevKnown && remoteRev > localRev) {
+              /**
+               * 1) Remoto vacío + staffChatRev >= local: vaciado por administración (u otro cliente ya aplicó clear).
+               *    Debe ir ANTES del merge: si no, mergeStaffChatMessages reinyecta mensajes locales y el otro equipo
+               *    nunca ve el chat borrado.
+               * 2) Remoto con revisión estrictamente mayor: documento remoto manda (mensajes nuevos o []).
+               * 3) Si no aplica lo anterior y hay caché local, fusionar por id.
+               */
+              if (remoteRevKnown && remChat.length === 0 && remoteRev >= localRev) {
                 next = remoteSnapshot;
                 __cgWriteLocalStaffChatRev(LS + "staffChatRev", remoteRev);
                 try {
@@ -1953,9 +1959,15 @@
                     window.CG.clearPendingDeletedBucket("staffChatMessages");
                   }
                 } catch (eChatAuth) {}
+              } else if (remoteRevKnown && remoteRev > localRev) {
+                next = remoteSnapshot;
+                __cgWriteLocalStaffChatRev(LS + "staffChatRev", remoteRev);
+                try {
+                  if (window.CG && typeof window.CG.clearPendingDeletedBucket === "function") {
+                    window.CG.clearPendingDeletedBucket("staffChatMessages");
+                  }
+                } catch (eChatAuth2) {}
               } else if (locChat.length > 0) {
-                /* Nunca sustituir por [] solo porque remChat vino vacío: suele ser doc sin subir aún, sin staffChatRev
-                 * o carrera; merge preserva mensajes locales hasta que el remoto gane por revisión (rama de arriba). */
                 next = JSON.stringify(mergeStaffChatMessages(remChat, locChat));
               } else {
                 next = remoteSnapshot;
