@@ -9737,6 +9737,7 @@
       var s = String(role).trim().toLowerCase();
       if (s === "admin" || s === "administrator") return "admin";
       if (s === "conserje") return "conserje";
+      if (s === "ambos" || s === "both" || s === "dual" || s === "admin_y_conserje" || s === "admin+conserje") return "ambos";
       return role;
     }
     /** Comprobaciones RBAC: usar en toda la app en lugar de === "admin" / "conserje". */
@@ -9745,6 +9746,11 @@
     }
     function roleIsConserje(role) {
       return String(normalizeRoleForAuth(role) || "") === "conserje";
+    }
+    /** Rol en directorio (users[]): conserje o cuenta unificada admin+conserje — turnos, bloqueos de login, etc. */
+    function roleIsConserjeScopeForDirectory(role) {
+      var n = normalizeRoleForAuth(role);
+      return n === "conserje" || n === "ambos";
     }
     function userIsAdmin(user) {
       return !!(user && roleIsAdmin(user.role));
@@ -10278,6 +10284,16 @@
     };
 
     /* ┌─ 7. Sesión, permisos por módulo, bloqueo turno conserje ──────────────────────── */
+    function directoryUserById(userId) {
+      var users = state.users;
+      if (!Array.isArray(users)) return null;
+      var i;
+      for (i = 0; i < users.length; i++) {
+        if (users[i] && sameUserId(users[i].id, userId)) return users[i];
+      }
+      return null;
+    }
+
     function currentUser() {
       if (!state.session || state.session.userId == null || state.session.userId === "") return null;
       var users = state.users;
@@ -10287,9 +10303,17 @@
       for (i = 0; i < users.length; i++) {
         if (users[i] && sameUserId(users[i].id, uid)) {
           var raw = users[i];
-          var nr = normalizeRoleForAuth(raw.role);
-          if (nr !== raw.role) return Object.assign({}, raw, { role: nr });
-          return raw;
+          var stored = normalizeRoleForAuth(raw.role);
+          var eff;
+          if (stored === "ambos") {
+            var mode = (state.session && state.session.roleMode) || "conserje";
+            eff = mode === "admin" ? "admin" : "conserje";
+          } else {
+            eff = stored;
+          }
+          var out = Object.assign({}, raw);
+          if (normalizeRoleForAuth(raw.role) !== raw.role) out.role = normalizeRoleForAuth(raw.role);
+          return Object.assign({}, out, { role: eff });
         }
       }
       return null;
@@ -10300,11 +10324,49 @@
         console.warn("[CG] setSession: usuario inválido");
         return;
       }
-      state.session = { userId: user.id, at: new Date().toISOString() };
+      var nr = normalizeRoleForAuth(user.role);
+      var sess = { userId: user.id, at: new Date().toISOString() };
+      if (nr === "ambos") {
+        sess.roleMode = "conserje";
+      }
+      state.session = sess;
       save("session", state.session);
       try {
-        window.__cgPermSnapshot = { userId: user.id, role: normalizeRoleForAuth(user.role) };
+        window.__cgPermSnapshot = { userId: user.id, storedRole: nr };
       } catch (eSessSnap) {}
+    }
+
+    /**
+     * Cuenta «ambos»: alternar entre operación tipo conserjería (turno, libro) y administración sin cerrar sesión.
+     */
+    function setSessionRoleMode(mode) {
+      if (mode !== "admin" && mode !== "conserje") return;
+      var sess = state.session || load("session", null);
+      if (!sess || sess.userId == null) return;
+      var du = directoryUserById(sess.userId);
+      if (!du || normalizeRoleForAuth(du.role) !== "ambos") return;
+      sess = Object.assign({}, sess, { roleMode: mode, at: new Date().toISOString() });
+      state.session = sess;
+      save("session", state.session);
+      validateCurrentSessionPermissions({ silentModuleRedirect: true });
+      if (window.CG_UI && typeof window.CG_UI.renderTopUser === "function") {
+        try {
+          window.CG_UI.renderTopUser();
+        } catch (eRt) {}
+      }
+      if (window.CG_UI && typeof window.CG_UI.renderNav === "function") {
+        try {
+          window.CG_UI.renderNav();
+        } catch (eRn) {}
+      }
+      toast(mode === "admin" ? "Modo administración activo." : "Modo conserjería activo.", "success");
+    }
+
+    function userHasDualRoleInSession() {
+      var sess = state.session;
+      if (!sess || sess.userId == null) return false;
+      var du = directoryUserById(sess.userId);
+      return !!(du && normalizeRoleForAuth(du.role) === "ambos");
     }
     function rehydrateSessionFromStorage() {
       state.session = load("session", null);
@@ -10344,7 +10406,7 @@
       var who = s.userId != null ? byId[s.userId] : null;
       if (who) {
         if (roleIsAdmin(who.role)) return false;
-        return roleIsConserje(who.role);
+        return roleIsConserjeScopeForDirectory(who.role);
       }
       if (roleIsConserje(s.role)) return true;
       if (s.role && !roleIsConserje(s.role)) return false;
@@ -10483,7 +10545,7 @@
       next = next.map(function (seg) {
         if (!seg || !shiftLogTramoIsOpen(seg) || roleIsAdmin(seg.role)) return seg;
         var who = byId[seg.userId];
-        if (!who || !roleIsConserje(who.role)) {
+        if (!who || !roleIsConserjeScopeForDirectory(who.role)) {
           changed = true;
           actions.push("close_orphan:" + seg.id);
           return Object.assign({}, seg, { endAt: nowIso, endReason: "limpieza_usuario" });
@@ -10634,7 +10696,7 @@
         var uid = String(s.userId != null ? s.userId : "?");
         openByUser[uid] = (openByUser[uid] || 0) + 1;
         var who = byId[s.userId];
-        if (!who || !roleIsConserje(who.role)) orphans.push({ id: s.id, userId: s.userId, reason: "open_lock_not_conserje_user" });
+        if (!who || !roleIsConserjeScopeForDirectory(who.role)) orphans.push({ id: s.id, userId: s.userId, reason: "open_lock_not_conserje_user" });
       }
       var dupUsers = [];
       var uk;
@@ -10713,7 +10775,7 @@
         var seg = sl[si];
         if (!seg || !shiftLogTramoIsOpen(seg)) continue;
         var who = byId[seg.userId];
-        if (!who || !roleIsConserje(who.role)) {
+        if (!who || !roleIsConserjeScopeForDirectory(who.role)) {
           sl[si] = Object.assign({}, seg, { endAt: nowIso, endReason: "limpieza_usuario" });
           closedOrphans++;
         }
@@ -10742,8 +10804,8 @@
         var g = groups[gk];
         if (g.length < 2) return;
         g.sort(function (a, b) {
-          var aa = roleIsAdmin(a.u.role) ? 0 : 1;
-          var bb = roleIsAdmin(b.u.role) ? 0 : 1;
+          var aa = roleIsAdmin(a.u.role) || normalizeRoleForAuth(a.u.role) === "ambos" ? 0 : 1;
+          var bb = roleIsAdmin(b.u.role) || normalizeRoleForAuth(b.u.role) === "ambos" ? 0 : 1;
           if (aa !== bb) return aa - bb;
           var av = a.u.passwordVerifier ? 0 : 1;
           var bv = b.u.passwordVerifier ? 0 : 1;
@@ -10965,10 +11027,12 @@
       }
 
       var snap = window.__cgPermSnapshot;
+      var dirU = directoryUserById(u.id);
+      var storedFromDir = dirU ? normalizeRoleForAuth(dirU.role) : normalizeRoleForAuth(u.role);
+      var snapStoredLegacy = snap && (snap.storedRole != null ? snap.storedRole : snap.role);
       if (
         snap &&
-        (String(snap.userId) !== String(u.id) ||
-          String(normalizeRoleForAuth(snap.role) || "") !== String(normalizeRoleForAuth(u.role) || ""))
+        (String(snap.userId) !== String(u.id) || String(snapStoredLegacy || "") !== String(storedFromDir || ""))
       ) {
         clearSession();
         if (appVisible && typeof UI.showLogin === "function") UI.showLogin();
@@ -10978,7 +11042,7 @@
 
       if (roleIsAdmin(u.role)) {
         try {
-          window.__cgPermSnapshot = { userId: u.id, role: u.role };
+          window.__cgPermSnapshot = { userId: u.id, storedRole: storedFromDir };
         } catch (eSn1) {}
         if (appVisible && typeof UI.renderNav === "function") {
           try {
@@ -11017,7 +11081,7 @@
           }
         }
         try {
-          window.__cgPermSnapshot = { userId: u.id, role: u.role };
+          window.__cgPermSnapshot = { userId: u.id, storedRole: storedFromDir };
         } catch (eSn2) {}
         if (appVisible && typeof UI.renderNav === "function") {
           try {
@@ -11028,7 +11092,7 @@
       }
 
       try {
-        window.__cgPermSnapshot = { userId: u.id, role: u.role };
+        window.__cgPermSnapshot = { userId: u.id, storedRole: storedFromDir };
       } catch (eSn3) {}
       if (appVisible && typeof UI.renderNav === "function") {
         try {
@@ -13864,14 +13928,14 @@
       authEnsureReady, authValidateDeptGateNewPassword, authVerifyLoginPassword, authCreatePasswordVerifier, authDeptGateExists, authVerifyDeptGate, authSetDeptGateFromPasswords, authSetDeptGateInitial,
       shiftLogTramoIsOpen,
       conserjeShiftBlockerFor,
-      currentUser, setSession, clearSession, rehydrateSessionFromStorage, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict, closeOpenConserjeShiftBeforeLogout, __cgDiagnoseShiftLogsOpenByUser,
+      currentUser, directoryUserById, setSession, setSessionRoleMode, userHasDualRoleInSession, clearSession, rehydrateSessionFromStorage, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict, closeOpenConserjeShiftBeforeLogout, __cgDiagnoseShiftLogsOpenByUser,
       reconcileShiftLogsLocally, pullShiftLogsForRelayConsistency, diagnoseShiftLogsRelay, diagnoseShiftLogsRelayAsync,
       cleanupStaffDirectoryAndShiftOrphans,
       canSeeModule, cgFirstAllowedModuleForCurrentUser, validateCurrentSessionPermissions, scheduleValidateCurrentSessionPermissions,
       toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, reservaOcurreEnDiaChile, reservaEnCursoAhora, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, proveedorServicioIconClass, proveedorServicioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
       proveedorSelectOptionsHtml,
-      uid, sameUserId, normalizeRoleForAuth, roleIsAdmin, roleIsConserje, userIsAdmin, load, save, LS, persist: P,
+      uid, sameUserId, normalizeRoleForAuth, roleIsAdmin, roleIsConserje, roleIsConserjeScopeForDirectory, userIsAdmin, load, save, LS, persist: P,
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
       CG_DASH_QUICKLINKS_MAX,
       CG_STAFF_CHAT_VOICE_PHRASE_MAX, CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE, normalizeStaffChatVoicePhrase,
@@ -21101,6 +21165,20 @@ function __deptUnitsStorageKey() {
         ", " +
         (G.escapeAttr ? G.escapeAttr(roleLbl) : G.escapeHtml(roleLbl));
       var roleAttr = G.escapeAttr ? G.escapeAttr(roleKey || "other") : String(roleKey || "other").replace(/"/g, "&quot;");
+      var dualHtml = "";
+      if (typeof G.userHasDualRoleInSession === "function" && G.userHasDualRoleInSession()) {
+        var sessRm = G.load("session", null);
+        var m = sessRm && sessRm.roleMode === "admin" ? "admin" : "conserje";
+        dualHtml =
+          "<div class=\"cg-topbar-role-mode\" style=\"display:flex;gap:0.35rem;margin-top:0.35rem;flex-wrap:wrap\" role=\"group\" aria-label=\"Cambiar modo de trabajo\">" +
+          "<button type=\"button\" class=\"btn btn-sm btn-secondary\" style=\"font-size:0.72rem;padding:0.15rem 0.45rem;line-height:1.2\"" +
+          (m === "conserje" ? " disabled" : "") +
+          " data-cg-act=\"sessionRoleMode\" data-cg-param=\"conserje\" title=\"Recepción, turno y módulos de conserjería\">Conserjería</button>" +
+          "<button type=\"button\" class=\"btn btn-sm btn-secondary\" style=\"font-size:0.72rem;padding:0.15rem 0.45rem;line-height:1.2\"" +
+          (m === "admin" ? " disabled" : "") +
+          " data-cg-act=\"sessionRoleMode\" data-cg-param=\"admin\" title=\"Panel de administración\">Administración</button>" +
+          "</div>";
+      }
       if (tb) {
         tb.setAttribute("role", "status");
         tb.setAttribute("aria-live", "polite");
@@ -21126,7 +21204,9 @@ function __deptUnitsStorageKey() {
           iconCls +
           "\" aria-hidden=\"true\"></i> " +
           G.escapeHtml(roleLbl) +
-          "</span></div></div></div>";
+          "</span></div>" +
+          dualHtml +
+          "</div></div>";
       }
       if (sb) sb.textContent = u.name + " · " + roleLbl;
       cgUpdateTopbarUserPersonality();
@@ -21948,7 +22028,16 @@ function __deptUnitsStorageKey() {
             "<table class=\"cg-dash-act-table\"><thead><tr><th>Hora</th><th>Usuario</th><th>Detalle</th></tr></thead><tbody>" +
             actLog
               .map(function (a) {
-                var roleLab = G.roleIsAdmin(a.role) ? "Admin" : G.roleIsConserje(a.role) ? "Conserje" : a.role ? String(a.role) : "—";
+                var roleLab =
+                  G.normalizeRoleForAuth(a.role) === "ambos"
+                    ? "Admin + Conserje"
+                    : G.roleIsAdmin(a.role)
+                      ? "Admin"
+                      : G.roleIsConserje(a.role)
+                        ? "Conserje"
+                        : a.role
+                          ? String(a.role)
+                          : "—";
                 return (
                   "<tr><td style=\"white-space:nowrap\">" +
                   G.escapeHtml(G.fmtDate(a.at)) +
@@ -31340,6 +31429,13 @@ function __deptUnitsStorageKey() {
 
   function buildRenderAdminStaffHtml() {
     var staffUsers = Array.isArray(G.state.users) ? G.state.users : [];
+    function staffRoleLabel(r) {
+      var n = G.normalizeRoleForAuth(r);
+      if (n === "ambos") return "Admin + Conserje";
+      if (n === "admin") return "Administrador";
+      if (n === "conserje") return "Conserje";
+      return r != null ? String(r) : "—";
+    }
     return (
       "<div class=\"card\"><div class=\"card-h\"><h3>Personal</h3>" +
       "<div class=\"toolbar\" style=\"gap:0.5rem;flex-wrap:wrap\">" +
@@ -31348,6 +31444,8 @@ function __deptUnitsStorageKey() {
       "<i class=\"fa-solid fa-broom\"></i> Limpiar duplicados / turnos huérfanos</button></div></div>" +
       "<div class=\"card-b\"><p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.86rem\">" +
       "Si hubo sincronizaciones o altas repetidas, puede quedar más de una ficha con el mismo <strong>usuario</strong> o turnos abiertos ligados a fichas ya borradas; eso bloquea el botón «Abrir turno». Use la limpieza con todos los conserjes fuera de sesión si es posible.</p>" +
+      "<p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.82rem\">" +
+      "El rol <strong>Admin + Conserje</strong> es una sola cuenta: en la barra superior puede alternar entre modo conserjería y administración sin cerrar sesión.</p>" +
       "<table class=\"data-table\"><thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th></th></tr></thead><tbody>" +
       staffUsers
         .map(function (u) {
@@ -31357,7 +31455,7 @@ function __deptUnitsStorageKey() {
             "</td><td>" +
             G.escapeHtml(u.username) +
             "</td><td>" +
-            G.escapeHtml(u.role) +
+            G.escapeHtml(staffRoleLabel(u.role)) +
             "</td>" +
             "<td><button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"userOpen\" data-cg-id=\"" +
             G.escapeHtml(u.id) +
@@ -33715,8 +33813,13 @@ function __deptUnitsStorageKey() {
       "<div class=\"form-group\"><label>Nombre visible</label><input name=\"name\" required value=\"" + G.escapeAttr(u.name) + "\" /></div>" +
       "<div class=\"form-group\"><label>Usuario</label><input name=\"username\" required value=\"" + G.escapeAttr(u.username) + "\" " + (id ? "readonly" : "") + " /></div>" +
       "<div class=\"form-group\"><label>Contraseña" + (id ? " (dejar vacío para no cambiar)" : "") + "</label><input name=\"password\" type=\"password\" " + (id ? "" : "required") + " /></div>" +
-      "<div class=\"form-group\"><label>Rol</label><select name=\"role\"><option value=\"admin\"" + (G.roleIsAdmin(u.role) ? " selected" : "") + ">Administrador</option>" +
-      "<option value=\"conserje\"" + (G.roleIsConserje(u.role) ? " selected" : "") + ">Conserje</option></select></div>" +
+      "<div class=\"form-group\"><label>Rol</label><select name=\"role\"><option value=\"admin\"" +
+      (G.normalizeRoleForAuth(u.role) === "admin" ? " selected" : "") +
+      ">Administrador</option><option value=\"conserje\"" +
+      (G.normalizeRoleForAuth(u.role) === "conserje" ? " selected" : "") +
+      ">Conserje</option><option value=\"ambos\"" +
+      (G.normalizeRoleForAuth(u.role) === "ambos" ? " selected" : "") +
+      ">Administrador y conserjería (una sola cuenta)</option></select></div>" +
       "<input type=\"hidden\" name=\"uid\" value=\"" + G.escapeAttr(id ? u.id : "") + "\" /></form></div>" +
       "<div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
       "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"userSave\">Guardar</button></div></div>"
@@ -33794,6 +33897,31 @@ function __deptUnitsStorageKey() {
       });
     }
     G.state.users = list;
+    try {
+      var sessSelf = G.load("session", null);
+      if (id && sessSelf && sessSelf.userId != null && G.sameUserId(sessSelf.userId, id)) {
+        var editedSelf = list.find(function (x) {
+          return G.sameUserId(x.id, id);
+        });
+        if (editedSelf) {
+          var nrs = G.normalizeRoleForAuth(editedSelf.role);
+          window.__cgPermSnapshot = { userId: editedSelf.id, storedRole: nrs };
+          if (nrs === "ambos") {
+            var s0 = G.load("session", null) || {};
+            var rm0 = s0.roleMode === "admin" || s0.roleMode === "conserje" ? s0.roleMode : "admin";
+            G.save("session", Object.assign({}, s0, { roleMode: rm0, at: new Date().toISOString() }));
+          } else if (sessSelf.roleMode != null) {
+            var s1 = G.load("session", null);
+            if (s1) {
+              var c1 = Object.assign({}, s1);
+              delete c1.roleMode;
+              G.save("session", c1);
+            }
+          }
+          if (typeof G.rehydrateSessionFromStorage === "function") G.rehydrateSessionFromStorage();
+        }
+      }
+    } catch (eSnapSelf) {}
     if (typeof G.armLsKeyPullQuiet === "function") G.armLsKeyPullQuiet("users", 35000);
     var pushRes = null;
     if (typeof G.cloudPushLsKeyPromise === "function") {
@@ -34687,6 +34815,10 @@ function __deptUnitsStorageKey() {
     A.renderAdmin("cfg");
   };
 
+  A.sessionRoleMode = function (mode) {
+    if (typeof G.setSessionRoleMode === "function") G.setSessionRoleMode(mode);
+  };
+
   window.CG_ACTIONS = A;
 
   /**
@@ -34785,7 +34917,7 @@ function __deptUnitsStorageKey() {
         unit: clip(data.unit, 64)
       };
     }
-    var CG_ACTS_NO_MODULE_GUARD = { clipboardCopyByElId: true };
+    var CG_ACTS_NO_MODULE_GUARD = { clipboardCopyByElId: true, sessionRoleMode: true };
     function cgDelegatedActionPermitted(act) {
       if (!act) return false;
       var Gc = window.CG;
@@ -35208,14 +35340,14 @@ function __deptUnitsStorageKey() {
     }
     var user = cand;
     /* Turnos remotos: tumbas + shiftLogs + users + reconciliación para evitar bloqueos fantasma. */
-    if (G.roleIsConserje(user.role) && typeof G.pullShiftLogsForRelayConsistency === "function") {
+    if (G.roleIsConserjeScopeForDirectory(user.role) && typeof G.pullShiftLogsForRelayConsistency === "function") {
       try {
         await G.pullShiftLogsForRelayConsistency();
       } catch (ePullSlLogin) {
         console.warn("[CG] pullShiftLogsForRelayConsistency antes de login conserje:", ePullSlLogin);
       }
     }
-    if (G.roleIsConserje(user.role) && typeof G.loginBlockedByOpenConserjeShift === "function") {
+    if (G.roleIsConserjeScopeForDirectory(user.role) && typeof G.loginBlockedByOpenConserjeShift === "function") {
       var bl = G.loginBlockedByOpenConserjeShift(user.id);
       if (bl) {
         G.toast(
@@ -35275,7 +35407,7 @@ function __deptUnitsStorageKey() {
           console.warn("[CG] initCloudSync rechazó inesperadamente:", eSync);
         })
         .finally(function () {
-          if (G.roleIsConserje(user.role) && typeof G.kickConserjeIfOpenShiftConflict === "function") {
+          if (G.currentUser && G.roleIsConserje(G.currentUser().role) && typeof G.kickConserjeIfOpenShiftConflict === "function") {
             G.kickConserjeIfOpenShiftConflict();
           }
         });
