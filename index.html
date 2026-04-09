@@ -1895,6 +1895,7 @@
                 return;
               }
 
+              /* Si el remoto trae revisión mayor, el documento en nube manda (incl. vaciar chat a propósito). */
               if (remoteRevKnown && remoteRev > localRev) {
                 next = remoteSnapshot;
                 __cgWriteLocalStaffChatRev(LS + "staffChatRev", remoteRev);
@@ -1903,14 +1904,9 @@
                     window.CG.clearPendingDeletedBucket("staffChatMessages");
                   }
                 } catch (eChatAuth) {}
-              } else if (remChat.length === 0 && locChat.length > 0) {
-                next = "[]";
-                try {
-                  if (window.CG && typeof window.CG.clearPendingDeletedBucket === "function") {
-                    window.CG.clearPendingDeletedBucket("staffChatMessages");
-                  }
-                } catch (eChatEmpty) {}
               } else if (locChat.length > 0) {
+                /* Nunca sustituir por [] solo porque remChat vino vacío: suele ser doc sin subir aún, sin staffChatRev
+                 * o carrera; merge preserva mensajes locales hasta que el remoto gane por revisión (rama de arriba). */
                 next = JSON.stringify(mergeStaffChatMessages(remChat, locChat));
               } else {
                 next = remoteSnapshot;
@@ -21650,6 +21646,14 @@ function __deptUnitsStorageKey() {
         var inpClose = document.getElementById("cg-chat-input");
         if (inpClose && document.activeElement === inpClose) inpClose.blur();
       } catch (eBlCh) {}
+      /* Evitar aria-hidden en el panel mientras el foco sigue dentro (p. ej. #cg-chat-close): viola accesibilidad. */
+      try {
+        var ae = document.activeElement;
+        if (ae && panel.contains(ae)) {
+          if (toggle && typeof toggle.focus === "function") toggle.focus();
+          else if (typeof ae.blur === "function") ae.blur();
+        }
+      } catch (ePanFoc) {}
       panel.setAttribute("aria-hidden", "true");
       if (toggle) {
         toggle.setAttribute("aria-expanded", "false");
@@ -24871,32 +24875,8 @@ function __deptUnitsStorageKey() {
     }
 
     function __cgRemoteRefreshShouldRemountDashboard(k) {
-      /* Solo remontar HTML completo del panel cuando hace falta reconstruir estructura.
-       * NO incluir: conserjeActivityLog, dashActMonth, staffBirthdays, dashScheduledAlerts,
-       * personalization, festiveAmbience, config — se actualizan con ramas específicas en
-       * refreshAfterRemoteLsKey (evita parpadeo si Firestore notifica a menudo). */
-      if (
-        {
-          visits: true,
-          visitVehAlertLog: true,
-          encomiendas: true,
-          reservas: true,
-          novedades: true,
-          users: true,
-          shiftLogs: true,
-          proveedores: true,
-          departments: true,
-          buildingUnits: true,
-          buildingResidents: true,
-          buildingFormerResidents: true,
-          buildingParking: true,
-          parkingSlots: true,
-          parkingConfig: true
-        }[k]
-      ) {
-        return true;
-      }
-      if (__cgRemoteRefreshDeptKeysArr().indexOf(k) >= 0) return true;
+      /* Nunca sustituir todo el HTML del panel por sync remoto: provocaba saltos y pérdida de foco.
+       * refreshAfterRemoteLsKey ya actualiza gráficos, KPIs, listas y widgets por clave sin innerHTML total. */
       return false;
     }
 
@@ -31645,7 +31625,11 @@ function __deptUnitsStorageKey() {
 
   A.reservaOpen = function (id) {
     var resList = Array.isArray(G.state.reservas) ? G.state.reservas : [];
-    var r = id ? resList.find(function (x) { return x.id === id; }) : { space: "", deptId: "", start: "", end: "", note: "" };
+    var r = id
+      ? resList.find(function (x) {
+          return String(x.id) === String(id);
+        })
+      : { space: "", deptId: "", start: "", end: "", note: "" };
     if (id && !r) return;
     var csp = G.state.config.commonSpaces || [];
     if (!csp.length) {
@@ -31727,7 +31711,9 @@ function __deptUnitsStorageKey() {
     var cn = conserjeNombreSesion();
     var list = (Array.isArray(G.state.reservas) ? G.state.reservas : []).slice();
     if (id) {
-      var i = list.findIndex(function (x) { return x.id === id; });
+      var i = list.findIndex(function (x) {
+        return String(x.id) === String(id);
+      });
       if (i >= 0) {
         var prevR = list[i];
         list[i] = Object.assign({}, prevR, o, { registradoPor: (prevR.registradoPor && String(prevR.registradoPor).trim()) || cn });
@@ -31760,9 +31746,13 @@ function __deptUnitsStorageKey() {
     }
     if (!confirm("¿Eliminar reserva?")) return;
     var curRes = Array.isArray(G.state.reservas) ? G.state.reservas : [];
-    var rDel = curRes.find(function (r) { return r.id === id; });
-    if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("reservas", id);
-    G.state.reservas = curRes.filter(function (r) { return r.id !== id; });
+    var rDel = curRes.find(function (r) {
+      return String(r.id) === String(id);
+    });
+    if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("reservas", String(id));
+    G.state.reservas = curRes.filter(function (r) {
+      return String(r.id) !== String(id);
+    });
     if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("reservas");
     if (rDel) {
       var dRd = G.deptById(rDel.deptId);
@@ -32622,7 +32612,9 @@ function __deptUnitsStorageKey() {
     }
     var f = document.getElementById("f-nov-turno");
     if (!f) return;
-    var usr = (Array.isArray(G.state.users) ? G.state.users : []).find(function (x) { return x.id === f.userId.value; });
+    var usr = (Array.isArray(G.state.users) ? G.state.users : []).find(function (x) {
+      return G.sameUserId(x.id, f.userId.value);
+    });
     if (!usr) {
       G.toast("Usuario inválido", "error");
       return;
@@ -32665,7 +32657,7 @@ function __deptUnitsStorageKey() {
       G.state.novedades = curNov.concat([Object.assign({ id: G.uid(), seq: nextNovedadSeq() }, base)]);
     } else {
       G.state.novedades = curNov.map(function (x) {
-        if (x.id !== nid) return x;
+        if (String(x.id) !== String(nid)) return x;
         return Object.assign({}, x, base);
       });
     }
@@ -37099,3 +37091,5 @@ function __deptUnitsStorageKey() {
   </script>
 </body>
 </html>
+
+  
