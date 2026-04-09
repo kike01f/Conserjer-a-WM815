@@ -10144,7 +10144,10 @@
 
     function flushPendingCloudWritesNow() {
       /* Oportunista: pagehide/beforeunload no esperan la Promise; el outbox + localStorage ya guardaron el estado. */
-      if (window.cgFsBridge) window.cgFsBridge.flushPending();
+      if (window.cgFsBridge && typeof window.cgFsBridge.flushPending === "function") {
+        return window.cgFsBridge.flushPending();
+      }
+      return Promise.resolve();
     }
 
     function cloudPushKeyImmediate(shortKey) {
@@ -33869,10 +33872,14 @@ function __deptUnitsStorageKey() {
       btn.disabled = true;
       btn.innerHTML = "<i class=\"fa-solid fa-spinner fa-spin\"></i> Descargando…";
     }
-    try {
-      if (typeof G.flushPendingCloudWritesNow === "function") G.flushPendingCloudWritesNow();
-    } catch (eFl) {}
-    G.cloudPullAllOnce()
+    var flushP =
+      typeof G.flushPendingCloudWritesNow === "function"
+        ? G.flushPendingCloudWritesNow()
+        : Promise.resolve();
+    Promise.resolve(flushP)
+      .then(function () {
+        return G.cloudPullAllOnce();
+      })
       .then(function (pullRes) {
         if (pullRes && pullRes.skipped && pullRes.reason === "fs_inactive") {
           G.toast(
