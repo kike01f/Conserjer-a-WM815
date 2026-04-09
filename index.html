@@ -9604,6 +9604,27 @@
       return window.cgFsBridge.pushImmediate(shortKey, str);
     }
 
+    /**
+     * Tras un guardado local, si la subida a Firestore falla, avisa (el dato sigue en este equipo).
+     * Útil cuando ya se mostró un toast de éxito o se va a mostrar otro según el resultado.
+     */
+    function cloudPushWarnIfFailed(shortKey, warnMsg) {
+      return cloudPushKeyImmediate(shortKey).then(function (r) {
+        if (r && r.ok === false && !r.skipped) {
+          try {
+            if (typeof window.CG !== "undefined" && typeof window.CG.toast === "function") {
+              window.CG.toast(
+                warnMsg ||
+                  "Cambio guardado en este equipo. No se pudo sincronizar ahora con la nube: revise la conexión o el indicador de sincronización.",
+                "warn"
+              );
+            }
+          } catch (eW) {}
+        }
+        return r;
+      });
+    }
+
     function cloudPushLsKeyPromise(shortKey) {
       return cloudPushKeyImmediate(shortKey);
     }
@@ -13864,7 +13885,7 @@
       getFestivePreviewChileYmd, setFestivePreviewChileYmd, getFestiveAmbienceChileYmdParts,
       hexToRgb, snapshotThemeForExport, buildExportThemeRootCss, getExportAccentHex, getEmailShellThemeColors,
       initCloudSync, stopCloudSyncListener, attachStaffChatRemoteSync, detachStaffChatRemoteSync, cloudSyncAbortInFlight, cloudSyncAfterDirectLocalStorageWrite, cloudPullAllOnce, cloudPullSingleLsKey, cloudPushAllKeysOnce,
-      flushPendingCloudWritesNow, cloudPushKeyImmediate, cloudPushLsKeyPromise, armLsKeyPullQuiet, getCloudSyncLastInitResult,
+      flushPendingCloudWritesNow, cloudPushKeyImmediate, cloudPushWarnIfFailed, cloudPushLsKeyPromise, armLsKeyPullQuiet, getCloudSyncLastInitResult,
       getFirestoreSyncHealth: function () {
         try {
           var h = window.__cgFsSyncHealth || {};
@@ -19148,7 +19169,7 @@ function __deptUnitsStorageKey() {
             if (m) m.remove();
         }
 
-        // ===== Ficha unidad: en el mismo panel del mapa si existe #buildingMapInlineDetail; si no, modal pantalla completa =====
+        // ===== Ficha unidad: siempre modal emergente (evita mostrar el detalle al final del panel del mapa) =====
         function showUnitDetailModal(unit) {
             var freshU = appState.units.find(function (u) {
                 return __deptSameUnitId(u.id, unit.id);
@@ -19230,7 +19251,7 @@ function __deptUnitsStorageKey() {
             }
 
             var inlineSlot = document.getElementById("buildingMapInlineDetail");
-            var useInline = !!inlineSlot;
+            var useInline = false;
 
             var detailCore = `
                     <h3 id="cg-building-ficha-title" style="color: var(--accent-color); margin-bottom: 6px; font-size: 1.05rem;">Unidad ${unit.unitNumber}</h3>
@@ -19341,7 +19362,8 @@ function __deptUnitsStorageKey() {
                     '<div class="modal-content" style="max-height: 90vh; overflow-y: auto; font-size: 0.875rem;">' +
                     detailCore +
                     "</div>";
-                document.body.appendChild(overlayModal);
+                var _deptModHost = document.getElementById("dept-module-host-inner") || document.getElementById("dept-module-host");
+                (_deptModHost || document.body).appendChild(overlayModal);
                 overlayModal.onclick = function (e) {
                     if (e.target === overlayModal) overlayModal.remove();
                 };
@@ -28383,7 +28405,14 @@ function __deptUnitsStorageKey() {
     if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("proveedores", id);
     var cur = Array.isArray(G.state.proveedores) ? G.state.proveedores : [];
     G.state.proveedores = cur.filter(function (x) { return x.id !== id; });
-    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("proveedores");
+    if (typeof G.cloudPushWarnIfFailed === "function") {
+      G.cloudPushWarnIfFailed(
+        "proveedores",
+        "Eliminación guardada en este equipo. No se pudo sincronizar con la nube ahora; revise la red."
+      );
+    } else if (typeof G.cloudPushKeyImmediate === "function") {
+      G.cloudPushKeyImmediate("proveedores");
+    }
     G.toast("Proveedor eliminado");
     A.renderProveedores();
   };
@@ -28475,7 +28504,14 @@ function __deptUnitsStorageKey() {
           list.push(Object.assign({ id: G.uid() }, o));
         }
         G.state.proveedores = list;
-        if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("proveedores");
+        if (typeof G.cloudPushWarnIfFailed === "function") {
+          G.cloudPushWarnIfFailed(
+            "proveedores",
+            "Proveedor guardado en este equipo. No se pudo sincronizar con la nube ahora; revise la red."
+          );
+        } else if (typeof G.cloudPushKeyImmediate === "function") {
+          G.cloudPushKeyImmediate("proveedores");
+        }
         G.toast("Proveedor guardado");
         f.reset();
         var hid = document.getElementById("prov-pid");
@@ -30357,8 +30393,13 @@ function __deptUnitsStorageKey() {
         endReason: null
       });
       G.state.shiftLogs = list;
-      if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
-        window.CG.cloudPushKeyImmediate("shiftLogs");
+      if (typeof G.cloudPushWarnIfFailed === "function") {
+        G.cloudPushWarnIfFailed(
+          "shiftLogs",
+          "Turno guardado en este equipo. No se pudo sincronizar con la nube ahora; revise la red."
+        );
+      } else if (typeof G.cloudPushKeyImmediate === "function") {
+        G.cloudPushKeyImmediate("shiftLogs");
       }
       G.logConserjeActivity("turno_abrir", "Abrió turno de conserjería (control horario)");
       G.toast("Turno abierto: el tiempo cuenta desde ahora");
@@ -30422,9 +30463,18 @@ function __deptUnitsStorageKey() {
     var novBase = Array.isArray(G.state.novedades) ? G.state.novedades : [];
     G.state.shiftLogs = list;
     G.state.novedades = novBase.concat([novRec]);
-    if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
-      window.CG.cloudPushKeyImmediate("shiftLogs");
-      window.CG.cloudPushKeyImmediate("novedades");
+    if (typeof G.cloudPushKeyImmediate === "function") {
+      Promise.all([G.cloudPushKeyImmediate("shiftLogs"), G.cloudPushKeyImmediate("novedades")]).then(function (results) {
+        var bad = results.some(function (r) {
+          return r && r.ok === false && !r.skipped;
+        });
+        if (bad && typeof G.toast === "function") {
+          G.toast(
+            "Cierre guardado en este equipo. No se pudo sincronizar con la nube ahora; revise la red.",
+            "warn"
+          );
+        }
+      });
     }
     G.logConserjeActivity("turno_cerrar", "Cerró turno de conserjería (control horario)");
     G.toast("Cierre de turno registrado. Vuelva a abrir turno en Libro de novedades para usar el resto de módulos.");
@@ -30495,8 +30545,9 @@ function __deptUnitsStorageKey() {
       return;
     }
     G.state.shiftLogs = list;
+    var pushPromises = [];
     if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
-      window.CG.cloudPushKeyImmediate("shiftLogs");
+      pushPromises.push(window.CG.cloudPushKeyImmediate("shiftLogs"));
     }
     /* Quitar del libro las entradas «Turno cerrado» (y otras) vinculadas a este tramo; si no, siguen viéndose en conserjes. */
     var novList = Array.isArray(G.state.novedades) ? G.state.novedades : [];
@@ -30513,13 +30564,33 @@ function __deptUnitsStorageKey() {
       });
       G.state.novedades = novNext;
       if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
-        window.CG.cloudPushKeyImmediate("novedades");
+        pushPromises.push(window.CG.cloudPushKeyImmediate("novedades"));
       }
     }
-    G.toast("Registro eliminado");
-    A.renderAdmin("turnos");
-    if (typeof A.renderShiftPanelNovedades === "function") A.renderShiftPanelNovedades();
-    if (document.getElementById("tl-nov") && typeof A.renderNovedades === "function") A.renderNovedades();
+    function finishShiftLogDelUi() {
+      A.renderAdmin("turnos");
+      if (typeof A.renderShiftPanelNovedades === "function") A.renderShiftPanelNovedades();
+      if (document.getElementById("tl-nov") && typeof A.renderNovedades === "function") A.renderNovedades();
+    }
+    if (pushPromises.length) {
+      Promise.all(pushPromises).then(function (results) {
+        var bad = results.some(function (r) {
+          return r && r.ok === false && !r.skipped;
+        });
+        if (bad) {
+          G.toast(
+            "Eliminación guardada en este equipo. No se pudo sincronizar con la nube ahora; revise la conexión o el estado de sincronización.",
+            "warn"
+          );
+        } else {
+          G.toast("Registro eliminado");
+        }
+        finishShiftLogDelUi();
+      });
+    } else {
+      G.toast("Registro eliminado");
+      finishShiftLogDelUi();
+    }
   };
 
   A.renderShiftPanelNovedades = function () {
@@ -31167,7 +31238,14 @@ function __deptUnitsStorageKey() {
     if (!confirm("¿Eliminar esta entrada del libro?")) return;
     if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("novedades", id);
     G.state.novedades = (Array.isArray(G.state.novedades) ? G.state.novedades : []).filter(function (n) { return n.id !== id; });
-    if (typeof G.cloudPushKeyImmediate === "function") G.cloudPushKeyImmediate("novedades");
+    if (typeof G.cloudPushWarnIfFailed === "function") {
+      G.cloudPushWarnIfFailed(
+        "novedades",
+        "Eliminación guardada en este equipo. No se pudo sincronizar con la nube ahora; revise la red."
+      );
+    } else if (typeof G.cloudPushKeyImmediate === "function") {
+      G.cloudPushKeyImmediate("novedades");
+    }
     G.toast("Eliminada");
     var admTurnosTab = document.querySelector(".admin-tab[data-adm=\"turnos\"]");
     if (admTurnosTab && admTurnosTab.classList.contains("active")) A.renderAdmin("turnos");
@@ -35490,3 +35568,5 @@ function __deptUnitsStorageKey() {
   </script>
 </body>
 </html>
+
+  
