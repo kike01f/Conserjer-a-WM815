@@ -1054,23 +1054,33 @@
       }
 
       /**
-       * Unidades wm815_* — reglas de fusión remoto + local (por id):
-       * - Se ignoran ids en pending-delete local (__cgReadPendingDeletedIdsForKey).
-       * - Primero se indexa el array remoto (post-filtro): define el conjunto de ids que existen en servidor.
-       * - Para cada fila local con el mismo id: gana la copia con mayor marca temporal (unitMs).
-       *   unitMs = _deptSyncMs numérico, si no unitNoteUpdatedAt parseado, si no 0.
-       * - En empate de marca: gana la copia remota (evita preservar local arbitrariamente ni desempate por tamaño JSON).
-       * - Filas solo en local (id ausente en remoto): se omiten salvo que haya push pendiente a Firestore
-       *   (__cgFsOutboxHasPendingWrite(kvShortKey)), para no resucitar borrados remotos ni basura stale;
-       *   con outbox pendiente se conservan como “cambio local aún no subido”.
-       * - Filas solo en remoto: permanecen tal cual en el resultado.
+       * Unidades wm815_*: fusión por id al aplicar un snapshot remoto sobre el JSON local.
+       *
+       * Reglas:
+       * - Origen remoto se ingiere primero; luego el disco/local (mismo id: conflicto).
+       * - Mayor _deptSyncMs gana; si no hay, unitNoteUpdatedAt (ms).
+       * - Empate numérico: gana la copia ya presente en byId (la remota / primera), no la “más larga” en JSON
+       *   (evita conservar copias locales obsoletas cuando los timestamps no avanzaron).
+       * - Filas solo en local cuyo id no aparece en el snapshot remoto:
+       *   - Si el remoto trae al menos una fila y hay escritura pendiente en outbox para esta clave KV,
+       *     se conservan (subida en curso; el remoto puede estar desfasado).
+       *   - Si no hay outbox pendiente, se interpreta como borrado en otro dispositivo: no se reinyecta la fila.
+       * - Remoto vacío ([]): no se interpreta como “borrar todo”; se conservan filas solo-locales (primer uso / sin doc remoto).
+       * - pendDel: borrados locales pendientes de propagar omiten esa id en ambos lados.
        */
       function mergeDeptWm815Units(kvShortKey, remoteArr, localArr) {
         if (!Array.isArray(remoteArr)) remoteArr = [];
         if (!Array.isArray(localArr)) localArr = [];
         var pendDel = __cgReadPendingDeletedIdsForKey(kvShortKey);
-        var pendingOut =
-          typeof __cgFsOutboxHasPendingWrite === "function" && __cgFsOutboxHasPendingWrite(kvShortKey);
+        var outboxPending =
+          typeof window.__cgFsOutboxHasPendingWrite === "function" && window.__cgFsOutboxHasPendingWrite(kvShortKey);
+        var remoteIds = Object.create(null);
+        var ri, ru;
+        for (ri = 0; ri < remoteArr.length; ri++) {
+          ru = remoteArr[ri];
+          if (!ru || ru.id == null || String(ru.id) === "") continue;
+          remoteIds[String(ru.id)] = true;
+        }
         function unitMs(u) {
           if (!u) return 0;
           var m = u._deptSyncMs;
@@ -1082,36 +1092,41 @@
           }
           return 0;
         }
-        /** Mayor ms gana; empate → preferir remoto (secondArg es local cuando se llama mergeRemoteWithLocal). */
-        function mergeRemoteWithLocal(remoteRow, localRow) {
-          var mr = unitMs(remoteRow);
-          var ml = unitMs(localRow);
-          if (ml > mr) return localRow;
-          return remoteRow;
+        function pickUnit(a, b) {
+          var ma = unitMs(a);
+          var mb = unitMs(b);
+          if (mb > ma) return b;
+          if (ma > mb) return a;
+          return a;
         }
-        var remoteIds = Object.create(null);
-        var remoteById = Object.create(null);
         var byId = Object.create(null);
-        var i, u, id;
+        var i, u, id, ex;
         for (i = 0; i < remoteArr.length; i++) {
           u = remoteArr[i];
           if (!u || u.id == null || String(u.id) === "") continue;
           id = String(u.id);
           if (pendDel[id]) continue;
-          remoteIds[id] = true;
-          remoteById[id] = u;
-          byId[id] = u;
+          ex = byId[id];
+          if (!ex) {
+            byId[id] = u;
+            continue;
+          }
+          byId[id] = pickUnit(ex, u);
         }
         for (i = 0; i < localArr.length; i++) {
           u = localArr[i];
           if (!u || u.id == null || String(u.id) === "") continue;
           id = String(u.id);
           if (pendDel[id]) continue;
-          if (!remoteIds[id]) {
-            if (pendingOut) byId[id] = u;
+          ex = byId[id];
+          if (!ex) {
+            if (remoteArr.length > 0 && !remoteIds[id] && !outboxPending) {
+              continue;
+            }
+            byId[id] = u;
             continue;
           }
-          byId[id] = mergeRemoteWithLocal(remoteById[id], u);
+          byId[id] = pickUnit(ex, u);
         }
         var out = [];
         var k;
@@ -1122,16 +1137,21 @@
       }
 
       /**
-       * Residentes anteriores wm815_former_* — mismas reglas que mergeDeptWm815Units:
-       * rowMs desde _deptSyncMs o exitDate; empate → remoto; solo-local sin remoto solo si pendingOut;
-       * respeta pending-delete local y borrados remotos.
+       * Residentes anteriores wm815_former_*: misma política que mergeDeptWm815Units (rowMs con exitDate).
        */
       function mergeDeptFormerResidents(kvShortKey, remoteArr, localArr) {
         if (!Array.isArray(remoteArr)) remoteArr = [];
         if (!Array.isArray(localArr)) localArr = [];
         var pendDel = __cgReadPendingDeletedIdsForKey(kvShortKey);
-        var pendingOut =
-          typeof __cgFsOutboxHasPendingWrite === "function" && __cgFsOutboxHasPendingWrite(kvShortKey);
+        var outboxPending =
+          typeof window.__cgFsOutboxHasPendingWrite === "function" && window.__cgFsOutboxHasPendingWrite(kvShortKey);
+        var remoteIds = Object.create(null);
+        var ri2, rr;
+        for (ri2 = 0; ri2 < remoteArr.length; ri2++) {
+          rr = remoteArr[ri2];
+          if (!rr || rr.id == null || String(rr.id) === "") continue;
+          remoteIds[String(rr.id)] = true;
+        }
         function rowMs(r) {
           if (!r) return 0;
           var m = r._deptSyncMs;
@@ -1143,35 +1163,41 @@
           }
           return 0;
         }
-        function mergeRemoteWithLocal(remoteRow, localRow) {
-          var mr = rowMs(remoteRow);
-          var ml = rowMs(localRow);
-          if (ml > mr) return localRow;
-          return remoteRow;
+        function pickRow(a, b) {
+          var ma = rowMs(a);
+          var mb = rowMs(b);
+          if (mb > ma) return b;
+          if (ma > mb) return a;
+          return a;
         }
-        var remoteIds = Object.create(null);
-        var remoteById = Object.create(null);
         var byId = Object.create(null);
-        var i, r, id;
+        var i, r, id, ex;
         for (i = 0; i < remoteArr.length; i++) {
           r = remoteArr[i];
           if (!r || r.id == null || String(r.id) === "") continue;
           id = String(r.id);
           if (pendDel[id]) continue;
-          remoteIds[id] = true;
-          remoteById[id] = r;
-          byId[id] = r;
+          ex = byId[id];
+          if (!ex) {
+            byId[id] = r;
+            continue;
+          }
+          byId[id] = pickRow(ex, r);
         }
         for (i = 0; i < localArr.length; i++) {
           r = localArr[i];
           if (!r || r.id == null || String(r.id) === "") continue;
           id = String(r.id);
           if (pendDel[id]) continue;
-          if (!remoteIds[id]) {
-            if (pendingOut) byId[id] = r;
+          ex = byId[id];
+          if (!ex) {
+            if (remoteArr.length > 0 && !remoteIds[id] && !outboxPending) {
+              continue;
+            }
+            byId[id] = r;
             continue;
           }
-          byId[id] = mergeRemoteWithLocal(remoteById[id], r);
+          byId[id] = pickRow(ex, r);
         }
         var out2 = [];
         var k2;
@@ -4384,15 +4410,13 @@
       box-shadow: 0 2px 18px rgba(0, 0, 0, 0.28), 0 1px 4px rgba(0, 0, 0, 0.15);
     }
     /* Departamentos embebido: sombra en el bloque .form-section, no duplicar en el <form> interior */
-    #dept-module-host .cg-dept-module-inner form,
-    #mapa-edificio-module-host .cg-dept-module-inner form {
+    #dept-module-host-inner form {
       box-shadow: none;
       padding: 0;
       background: transparent;
       border: none;
     }
-    #dept-module-host .cg-dept-module-inner .form-section,
-    #mapa-edificio-module-host .cg-dept-module-inner .form-section {
+    #dept-module-host-inner .form-section {
       box-shadow: 0 2px 14px rgba(148, 163, 184, 0.16), 0 1px 4px rgba(100, 116, 139, 0.09);
     }
     .btn {
@@ -7425,7 +7449,7 @@
       min-width: 0;
       justify-content: flex-end;
     }
-    #mapa-edificio-module-host.cg-dept-host--mapa-solo .cg-dept-module-inner .container {
+    #mapa-edificio-module-host.cg-dept-host--mapa-solo #dept-module-host-inner .container {
       max-width: none;
       width: 100%;
       margin: 0;
@@ -9079,8 +9103,7 @@
       box-sizing: border-box;
     }
 
-    html[data-cg-theme="dark"] #dept-module-host .cg-dept-module-inner,
-    html[data-cg-theme="dark"] #mapa-edificio-module-host .cg-dept-module-inner {
+    html[data-cg-theme="dark"] #dept-module-host-inner {
       --gray-50: #121820;
       --gray-100: #181f2a;
       --gray-200: #243044;
@@ -9097,38 +9120,30 @@
       --border-color: #2d3a4f;
       --shadow: 0 4px 28px rgba(0, 0, 0, 0.5);
     }
-    html[data-cg-theme="dark"] #dept-module-host .cg-dept-module-inner .header h1,
-    html[data-cg-theme="dark"] #mapa-edificio-module-host .cg-dept-module-inner .header h1 {
+    html[data-cg-theme="dark"] #dept-module-host-inner .header h1 {
       color: #f8fafc;
     }
-    html[data-cg-theme="dark"] #dept-module-host .cg-dept-module-inner .nav-tab,
-    html[data-cg-theme="dark"] #mapa-edificio-module-host .cg-dept-module-inner .nav-tab {
+    html[data-cg-theme="dark"] #dept-module-host-inner .nav-tab {
       color: var(--secondary-text);
     }
-    html[data-cg-theme="dark"] #dept-module-host .cg-dept-module-inner .nav-tab:hover,
-    html[data-cg-theme="dark"] #mapa-edificio-module-host .cg-dept-module-inner .nav-tab:hover {
+    html[data-cg-theme="dark"] #dept-module-host-inner .nav-tab:hover {
       color: var(--primary-text);
     }
-    html[data-cg-theme="dark"] #dept-module-host .cg-dept-module-inner .nav-tab.active,
-    html[data-cg-theme="dark"] #mapa-edificio-module-host .cg-dept-module-inner .nav-tab.active {
+    html[data-cg-theme="dark"] #dept-module-host-inner .nav-tab.active {
       color: var(--blue-400);
       border-bottom-color: var(--blue-500);
     }
-    html[data-cg-theme="dark"] #dept-module-host .cg-dept-module-inner .form-input,
-    html[data-cg-theme="dark"] #mapa-edificio-module-host .cg-dept-module-inner .form-input {
+    html[data-cg-theme="dark"] #dept-module-host-inner .form-input {
       background: var(--gray-100);
       color: var(--primary-text);
       border-color: var(--gray-300);
     }
-    html[data-cg-theme="dark"] #dept-module-host .cg-dept-module-inner .form-input:focus,
-    html[data-cg-theme="dark"] #mapa-edificio-module-host .cg-dept-module-inner .form-input:focus {
+    html[data-cg-theme="dark"] #dept-module-host-inner .form-input:focus {
       border-color: var(--blue-400);
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue-500) 25%, transparent);
     }
-    html[data-cg-theme="dark"] #dept-module-host .cg-dept-module-inner table th,
-    html[data-cg-theme="dark"] #dept-module-host .cg-dept-module-inner table td,
-    html[data-cg-theme="dark"] #mapa-edificio-module-host .cg-dept-module-inner table th,
-    html[data-cg-theme="dark"] #mapa-edificio-module-host .cg-dept-module-inner table td {
+    html[data-cg-theme="dark"] #dept-module-host-inner table th,
+    html[data-cg-theme="dark"] #dept-module-host-inner table td {
       border-color: var(--border-color);
     }
     /* Modal edición E- (tema oscuro, sin variables del antiguo hub) */
@@ -14399,7 +14414,7 @@
   }
   window.CG.migrateDeptStorageKeysOnce = __migrateLegacyDeptStorageOnce;
 
-  var CG_DEPT_INNER_HTML = `<div class="cg-dept-module-inner"><div class="container"><nav class="nav-tabs">
+  var CG_DEPT_INNER_HTML = `<div id="dept-module-host-inner"><div class="container"><nav class="nav-tabs">
             <button class="nav-tab active" data-tab="units">📋 Unidades</button>
             <button class="nav-tab" data-tab="residents">👥 Residentes</button>
             <button class="nav-tab" data-tab="owners">🏠 Propietarios</button>
@@ -14443,19 +14458,17 @@
                 <form id="unitForm" action="#" method="post">
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Número de Unidad *
+                            <label for="unitNumber">Número de Unidad *</label>
                             <input type="text" id="unitNumber" class="form-input" required placeholder="Ej: 1501">
-                            </label>
                         </div>
                         <div class="form-group">
-                            <label>Uso de Unidad *
+                            <label for="unitUse">Uso de Unidad *</label>
                             <select id="unitUse" class="form-input" required>
                                 <option value="">Seleccionar...</option>
                                 <option value="Habitacional">🏠 Habitacional</option>
                                 <option value="Arriendo">🏘️ Arriendo</option>
                                 <option value="Airbnb / temporal">🟡 Airbnb / temporal</option>
                             </select>
-                            </label>
                         </div>
                     </div>
 
@@ -14912,7 +14925,7 @@
             --danger: #dc2626;
         }
 
-        .cg-dept-module-inner {
+        #dept-module-host-inner {
             position: relative;
             font-family: "Nunito", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
             color: var(--primary-text);
@@ -15366,7 +15379,7 @@
             color: var(--primary-text);
         }
 
-        .cg-dept-module-inner .empty-state p {
+        #dept-module-host-inner .empty-state p {
             color: var(--secondary-text);
             max-width: 28rem;
             margin-left: auto;
@@ -15875,8 +15888,8 @@
 
   function __cgBuildScopedDeptCss() {
     var raw = String(CG_DEPT_CSS || "");
-    raw = raw.replace(/\n\s*:root\s*\{/g, "\n.cg-dept-module-inner {");
-    return "@scope (.cg-dept-module-inner) {\n" + raw + "\n}\n";
+    raw = raw.replace(/\n\s*:root\s*\{/g, "\n#dept-module-host-inner {");
+    return "@scope (#dept-module-host-inner) {\n" + raw + "\n}\n";
   }
 
   function __injectDeptStylesOnce() {
@@ -16344,46 +16357,6 @@ function __deptUnitsStorageKey() {
         const appState = window.__CG_DEPT_APP_STATE;
         if (typeof appState.lastKnownGoodUnits === "undefined") appState.lastKnownGoodUnits = null;
         if (typeof appState.lastKnownGoodFormerResidents === "undefined") appState.lastKnownGoodFormerResidents = null;
-
-        var CG_DEPT_MOUNT_SCOPES = ["main", "mapa"];
-        function __cgDeptScopedDomId(scope, localId) {
-            return "cgdept--" + scope + "--" + localId;
-        }
-        function __cgDeptScopeTemplateHtml(html, scope) {
-            var p = __cgDeptScopedDomId(scope, "");
-            return html.replace(/\bid="/g, 'id="' + p);
-        }
-        window.__cgDeptScopeTemplateHtml = __cgDeptScopeTemplateHtml;
-        function cgDeptEl(localId) {
-            var i, el;
-            for (i = 0; i < CG_DEPT_MOUNT_SCOPES.length; i++) {
-                el = document.getElementById(__cgDeptScopedDomId(CG_DEPT_MOUNT_SCOPES[i], localId));
-                if (el) return el;
-            }
-            return null;
-        }
-        function cgDeptEls(localId) {
-            var out = [], i, el;
-            for (i = 0; i < CG_DEPT_MOUNT_SCOPES.length; i++) {
-                el = document.getElementById(__cgDeptScopedDomId(CG_DEPT_MOUNT_SCOPES[i], localId));
-                if (el) out.push(el);
-            }
-            return out;
-        }
-        function cgDeptSetTextAll(localId, text) {
-            cgDeptEls(localId).forEach(function (el) {
-                el.textContent = text;
-            });
-        }
-        function cgDeptEachMount(fn) {
-            var i, scope;
-            for (i = 0; i < CG_DEPT_MOUNT_SCOPES.length; i++) {
-                scope = CG_DEPT_MOUNT_SCOPES[i];
-                if (document.getElementById(__cgDeptScopedDomId(scope, "units"))) {
-                    fn(scope);
-                }
-            }
-        }
 
         // Función para migrar residentes existentes sin fecha de registro individual
         function migrateExistingResidents() {
@@ -16970,29 +16943,23 @@ function __deptUnitsStorageKey() {
 
         // ===== NAVEGACIÓN =====
         
-        function showTab(tabName, navButtonEl) {
-            function activateInHost(host) {
-                if (!host) return;
-                var scope = host.getAttribute("data-cg-dept-scope") || "main";
-                host.querySelectorAll(".tab-content").forEach(function (tab) {
-                    tab.classList.remove("active");
-                });
-                host.querySelectorAll(".nav-tab").forEach(function (tab) {
-                    tab.classList.remove("active");
-                });
-                var tabEl = document.getElementById(__cgDeptScopedDomId(scope, tabName));
-                if (tabEl) tabEl.classList.add("active");
-                var navBtn = host.querySelector('.nav-tab[data-tab="' + tabName + '"]');
-                if (navBtn) navBtn.classList.add("active");
-            }
-            if (navButtonEl && navButtonEl.closest) {
-                var hostOne = navButtonEl.closest("#dept-module-host, #mapa-edificio-module-host");
-                if (hostOne) activateInHost(hostOne);
-            } else {
-                activateInHost(document.getElementById("dept-module-host"));
-                activateInHost(document.getElementById("mapa-edificio-module-host"));
-            }
+        function showTab(tabName) {
+            // Ocultar todas las pestañas
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
 
+            const tabEl = document.getElementById(tabName);
+            if (!tabEl) return;
+            tabEl.classList.add('active');
+            const navBtn = document.querySelector('[data-tab="' + tabName + '"]');
+            if (navBtn) navBtn.classList.add('active');
+
+            // Actualizar contenido según la pestaña
             if (tabName === 'residents') updateResidentsTable();
             if (tabName === 'owners') updateOwnersTable();
             if (tabName === 'building') updateBuildingMap();
@@ -17026,9 +16993,8 @@ function __deptUnitsStorageKey() {
             return '';
         }
 
-        function addResident(resident, residentsListElOpt) {
-            if (resident === undefined) resident = null;
-            const residentsList = residentsListElOpt || cgDeptEl('residentsList');
+        function addResident(resident = null) {
+            const residentsList = document.getElementById('residentsList');
             if (!residentsList) return;
             const residentItem = document.createElement('div');
             let tipo = (resident && resident.type) ? resident.type.toLowerCase() : '';
@@ -17199,7 +17165,7 @@ function __deptUnitsStorageKey() {
                                         residentItem.remove();
                                         updateRemoveButtons();
                                         showNotification('success', `✅ Propietario "${residentName}" eliminado`);
-                                        const uNum = cgDeptEl('unitNumber') ? cgDeptEl('unitNumber').value : '';
+                                        const uNum = document.getElementById('unitNumber') ? document.getElementById('unitNumber').value : '';
                                     }
                                 }
                             );
@@ -17214,7 +17180,7 @@ function __deptUnitsStorageKey() {
                                 residentItem.remove();
                                 updateRemoveButtons();
                                 showNotification('success', `✅ Residente "${residentName}" eliminado`);
-                                const uNum = cgDeptEl('unitNumber') ? cgDeptEl('unitNumber').value : '';
+                                const uNum = document.getElementById('unitNumber') ? document.getElementById('unitNumber').value : '';
                             } else {
                                 showNotification('error', '❌ No se puede eliminar el último residente de la unidad');
                             }
@@ -17231,7 +17197,7 @@ function __deptUnitsStorageKey() {
 
         // Función para agregar campo de estacionamiento
         function addParkingField(value = '') {
-            cgDeptEls('parkingList').forEach(function (parkingList) {
+            const parkingList = document.getElementById('parkingList');
             if (!parkingList) return;
             const parkingItem = document.createElement('div');
             parkingItem.className = 'parking-item';
@@ -17284,12 +17250,11 @@ function __deptUnitsStorageKey() {
             });
 
             parkingList.appendChild(parkingItem);
-            });
         }
 
         // Función para agregar campo de bodega
         function addStorageField(value = '') {
-            cgDeptEls('storageList').forEach(function (storageList) {
+            const storageList = document.getElementById('storageList');
             if (!storageList) return;
             const storageItem = document.createElement('div');
             storageItem.className = 'storage-item';
@@ -17327,17 +17292,15 @@ function __deptUnitsStorageKey() {
             });
 
             storageList.appendChild(storageItem);
-            });
         }
 
         // Función para agregar campo de bicicletero (máx. 3 por unidad)
         const MAX_BIKE_STORAGES = 3;
         function addBikeField(numberValue = '', detailValue = '') {
-            cgDeptEls('bikeList').forEach(function (bikeList) {
+            const bikeList = document.getElementById('bikeList');
+            const addBikeBtn = document.getElementById('addBikeBtn');
             if (!bikeList) return;
-            if (bikeList.children.length >= MAX_BIKE_STORAGES) {
-                return;
-            }
+            if (bikeList.children.length >= MAX_BIKE_STORAGES) return;
             const bikeItem = document.createElement('div');
             bikeItem.className = 'bike-item';
             bikeItem.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;';
@@ -17388,24 +17351,12 @@ function __deptUnitsStorageKey() {
                 bikeItem.appendChild(warn);
             }
             bikeList.appendChild(bikeItem);
-            });
-            cgDeptEls('addBikeBtn').forEach(function (addBikeBtn) {
-                var hide = false;
-                cgDeptEls('bikeList').forEach(function (bl) {
-                    if (bl && bl.children.length >= MAX_BIKE_STORAGES) hide = true;
-                });
-                if (addBikeBtn) addBikeBtn.style.display = hide ? 'none' : '';
-            });
+            if (bikeList.children.length >= MAX_BIKE_STORAGES && addBikeBtn) addBikeBtn.style.display = 'none';
         }
         function removeBikeField(btn) {
             btn.closest('.bike-item').remove();
-            cgDeptEls('addBikeBtn').forEach(function (addBikeBtn) {
-                var hide = false;
-                cgDeptEls('bikeList').forEach(function (bl) {
-                    if (bl && bl.children.length >= MAX_BIKE_STORAGES) hide = true;
-                });
-                if (addBikeBtn) addBikeBtn.style.display = hide ? 'none' : '';
-            });
+            const addBikeBtn = document.getElementById('addBikeBtn');
+            if (addBikeBtn) addBikeBtn.style.display = '';
         }
 
         // Hacer funciones globales
@@ -17415,30 +17366,38 @@ function __deptUnitsStorageKey() {
         window.removeBikeField = removeBikeField;
 
         function updateRemoveButtons() {
-            cgDeptEls('residentsList').forEach(function (residentsList) {
-                if (!residentsList) return;
-                const removeButtons = residentsList.querySelectorAll('.remove-btn');
-                removeButtons.forEach((btn, index) => {
-                    const residentItem = btn.closest('.resident-item');
-                    const typeSelect = residentItem.querySelector('.resident-type');
-                    const residentType = typeSelect ? typeSelect.value : '';
-                    if (residentsList.children.length <= 1) {
-                        btn.style.display = 'none';
-                        return;
-                    }
-                    if (residentType === 'Propietario') {
-                        const allResidents = Array.from(residentsList.children);
-                        const otherOwners = allResidents.filter(item => {
-                            if (item === residentItem) return false;
-                            const itemTypeSelect = item.querySelector('.resident-type');
-                            return itemTypeSelect && itemTypeSelect.value === 'Propietario';
-                        });
-                        btn.style.display = otherOwners.length > 0 ? 'flex' : 'none';
-                    } else {
-                        btn.style.display = 'flex';
-                    }
-                });
+            const residentsList = document.getElementById('residentsList');
+            const removeButtons = residentsList.querySelectorAll('.remove-btn');
+            
+            removeButtons.forEach((btn, index) => {
+                const residentItem = btn.closest('.resident-item');
+                const typeSelect = residentItem.querySelector('.resident-type');
+                const residentType = typeSelect ? typeSelect.value : '';
+                
+                // Ocultar botón si es el último residente
+                if (residentsList.children.length <= 1) {
+                    btn.style.display = 'none';
+                    return;
+                }
+                
+                // Para propietarios, verificar si es el único
+                if (residentType === 'Propietario') {
+                    const allResidents = Array.from(residentsList.children);
+                    const otherOwners = allResidents.filter(item => {
+                        if (item === residentItem) return false;
+                        const itemTypeSelect = item.querySelector('.resident-type');
+                        return itemTypeSelect && itemTypeSelect.value === 'Propietario';
+                    });
+                    
+                    // Mostrar botón solo si hay otros propietarios
+                    btn.style.display = otherOwners.length > 0 ? 'flex' : 'none';
+                } else {
+                    // Para otros tipos, mostrar normalmente
+                    btn.style.display = 'flex';
+                }
             });
+            
+            // Actualizar el mapa del edificio cuando se modifican los residentes
             updateBuildingMap();
         }
 
@@ -17472,10 +17431,6 @@ function __deptUnitsStorageKey() {
         async function handleUnitFormSubmit(e) {
             e.preventDefault();
             try {
-                var formRoot = e.target && e.target.closest ? e.target.closest('.cg-dept-module-inner') : null;
-                if (!formRoot) {
-                    throw new Error('No se pudo localizar el formulario de unidad.');
-                }
                 // Preservar la nota existente si estamos editando
                 const existingUnit = appState.editingUnitId ? appState.units.find(u => __deptSameUnitId(u.id, appState.editingUnitId)) : null;
                 if (appState.editingUnitId && !existingUnit) {
@@ -17486,7 +17441,7 @@ function __deptUnitsStorageKey() {
                 console.log('Nota existente:', existingUnit ? existingUnit.unitNote : 'N/A');
                 
                 // Obtener y validar estacionamientos (array); prefijo E- fijo en UI
-                const parkingItems = formRoot.querySelectorAll('[id$="--parkingList"] .parking-item');
+                const parkingItems = document.querySelectorAll('#parkingList .parking-item');
                 const parkingNumbers = Array.from(parkingItems)
                     .map(function (item) {
                         const suf = item.querySelector('.parking-suffix-input');
@@ -17525,7 +17480,7 @@ function __deptUnitsStorageKey() {
                 }
                 
                 // Obtener bodegas (array); prefijo B- fijo en UI
-                const storageItems = formRoot.querySelectorAll('[id$="--storageList"] .storage-item');
+                const storageItems = document.querySelectorAll('#storageList .storage-item');
                 const storageNumbers = Array.from(storageItems)
                     .map(function (item) {
                         const suf = item.querySelector('.storage-suffix-input');
@@ -17570,17 +17525,15 @@ function __deptUnitsStorageKey() {
                 } else if (!formData.id) {
                     formData.id = Date.now().toString();
                 }
-                var unitNumInp = formRoot.querySelector('[id$="--unitNumber"]');
-                var unitUseInp = formRoot.querySelector('[id$="--unitUse"]');
-                formData.unitNumber = unitNumInp ? unitNumInp.value.trim() : '';
-                formData.unitUse = formatText(unitUseInp ? unitUseInp.value : '');
+                formData.unitNumber = document.getElementById('unitNumber').value.trim();
+                formData.unitUse = formatText(document.getElementById('unitUse').value);
                 formData.parkingNumber = parkingNumbers.length > 0 ? parkingNumbers[0] : ''; // Mantener compatibilidad con código existente
                 formData.parkingNumbers = parkingNumbers; // Nuevo campo array
                 formData.storageNumber = storageNumbers.length > 0 ? storageNumbers[0] : ''; // Mantener compatibilidad
                 formData.storageNumbers = storageNumbers; // Nuevo campo array
                 // Bicicleteros (máx. 3): arrays número + detalle
-                const bikeNumberInputs = formRoot.querySelectorAll('.bike-number-input');
-                const bikeDetailInputs = formRoot.querySelectorAll('.bike-detail-input');
+                const bikeNumberInputs = document.querySelectorAll('.bike-number-input');
+                const bikeDetailInputs = document.querySelectorAll('.bike-detail-input');
                 const bikeStorageNumbers = [];
                 const bikeStorageDetails = [];
                 bikeNumberInputs.forEach((numInput, i) => {
@@ -17639,7 +17592,7 @@ function __deptUnitsStorageKey() {
                 
                 console.log('Nota preservada en formData:', formData.unitNote);
                 // Obtener residentes del formulario (solo filas dentro de la lista de unidad)
-                const residentItems = formRoot.querySelectorAll('[id$="--residentsList"] .resident-item');
+                const residentItems = document.querySelectorAll('#residentsList .resident-item');
                 residentItems.forEach((item, rowIdx) => {
                     const name = item.querySelector('.resident-name').value.trim();
                     const rut = item.querySelector('.resident-rut').value.trim();
@@ -17811,29 +17764,23 @@ function __deptUnitsStorageKey() {
         }
 
         function resetForm() {
-            cgDeptEls('unitForm').forEach(function (unitFormEl) {
-                if (unitFormEl && typeof unitFormEl.reset === 'function') unitFormEl.reset();
-            });
-            cgDeptEls('residentsList').forEach(function (residentsListEl) {
-                if (residentsListEl) residentsListEl.innerHTML = '';
-                addResident(null, residentsListEl);
-            });
-            cgDeptEls('parkingList').forEach(function (parkingListEl) {
-                if (parkingListEl) parkingListEl.innerHTML = '';
-            });
-            cgDeptEls('storageList').forEach(function (storageListEl) {
-                if (storageListEl) storageListEl.innerHTML = '';
-            });
-            cgDeptEls('bikeList').forEach(function (bikeListEl) {
-                if (bikeListEl) bikeListEl.innerHTML = '';
-            });
-            cgDeptEls('addBikeBtn').forEach(function (addBikeBtn) {
-                if (addBikeBtn) addBikeBtn.style.display = '';
-            });
+            var unitFormEl = document.getElementById('unitForm');
+            if (unitFormEl && typeof unitFormEl.reset === 'function') unitFormEl.reset();
+            var residentsListEl = document.getElementById('residentsList');
+            if (residentsListEl) residentsListEl.innerHTML = '';
+            addResident();
+            var parkingListEl = document.getElementById('parkingList');
+            if (parkingListEl) parkingListEl.innerHTML = '';
+            var storageListEl = document.getElementById('storageList');
+            if (storageListEl) storageListEl.innerHTML = '';
+            var bikeListEl = document.getElementById('bikeList');
+            if (bikeListEl) bikeListEl.innerHTML = '';
+            const addBikeBtn = document.getElementById('addBikeBtn');
+            if (addBikeBtn) addBikeBtn.style.display = '';
+            // Limpiar el estado de edición
             appState.editingUnitId = null;
-            cgDeptEls('unitFormSubmitBtn').forEach(function (ufsb) {
-                if (ufsb) ufsb.textContent = '✅ Registrar Unidad';
-            });
+            var ufsb = document.getElementById('unitFormSubmitBtn');
+            if (ufsb) ufsb.textContent = '✅ Registrar Unidad';
         }
 
         function deleteUnit(unitId) {
@@ -17886,8 +17833,7 @@ function __deptUnitsStorageKey() {
                 updateFormerResidentsTable();
             }
         }
-        window.__cgDeptRefreshEmbeddedUI = updateAllUI;
-
+        
         // ===== FUNCIÓN PARA DAR SALIDA A ARRENDATARIOS =====
         // Bandera para evitar ejecuciones múltiples simultáneas
         let isProcessingExit = false;
@@ -17970,16 +17916,16 @@ function __deptUnitsStorageKey() {
                                 El ${residentTypeLabel} será movido a "Residentes Anteriores" y se eliminará de la unidad actual.
                             </p>
                             <div style="display: flex; gap: 10px; justify-content: center;">
-                                <button id="confirmExitBtn" class="btn btn-danger">✅ Confirmar Salida</button>
-                                <button id="cancelExitBtn" class="btn btn-secondary">❌ Cancelar</button>
+                                <button type="button" data-cg-dept-dialog-action="confirm" class="btn btn-danger">✅ Confirmar Salida</button>
+                                <button type="button" data-cg-dept-dialog-action="cancel" class="btn btn-secondary">❌ Cancelar</button>
                             </div>
                         </div>
                     `;
                     document.body.appendChild(confirmModal);
                     
                     // Usar addEventListener en lugar de onclick para mejor compatibilidad
-                    const confirmBtn = confirmModal.querySelector('#confirmExitBtn');
-                    const cancelBtn = confirmModal.querySelector('#cancelExitBtn');
+                    const confirmBtn = confirmModal.querySelector('[data-cg-dept-dialog-action="confirm"]');
+                    const cancelBtn = confirmModal.querySelector('[data-cg-dept-dialog-action="cancel"]');
                     
                     confirmBtn.addEventListener('click', async function() {
                         // Prevenir ejecuciones múltiples
@@ -17998,7 +17944,7 @@ function __deptUnitsStorageKey() {
                         
                         // Agregar indicador de carga al modal
                         const loadingIndicator = document.createElement('div');
-                        loadingIndicator.id = 'exitLoadingIndicator';
+                        loadingIndicator.setAttribute("data-cg-dept-exit-loading", "1");
                         loadingIndicator.style.cssText = 'text-align: center; padding: 20px; margin-top: 15px;';
                         loadingIndicator.innerHTML = `
                             <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid var(--border-color); border-top-color: var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
@@ -18185,49 +18131,57 @@ function __deptUnitsStorageKey() {
         
         // ===== FUNCIÓN PARA ACTUALIZAR TABLA DE RESIDENTES ANTERIORES =====
         window.updateFormerResidentsTable = function() {
-            var base = (appState.formerResidents || []).slice();
-            cgDeptEachMount(function (scope) {
-                var tableBody = document.getElementById(__cgDeptScopedDomId(scope, "formerResidentsTableBody"));
-                var emptyState = document.getElementById(__cgDeptScopedDomId(scope, "formerResidentsEmptyState"));
-                if (!tableBody || !emptyState) return;
-                var filterInput = document.getElementById(__cgDeptScopedDomId(scope, "formerResidentsFilter"));
-                var filterValue = filterInput ? filterInput.value.toLowerCase().trim() : "";
-                var filteredResidents = base.slice();
+            const tableBody = document.getElementById('formerResidentsTableBody');
+            const emptyState = document.getElementById('formerResidentsEmptyState');
+            if (!tableBody || !emptyState) {
+                return;
+            }
+            const filterInput = document.getElementById('formerResidentsFilter');
+            const filterValue = filterInput ? filterInput.value.toLowerCase().trim() : '';
+            
+            let filteredResidents = appState.formerResidents || [];
+            
+            // Aplicar filtro si hay texto
+            if (filterValue) {
+                filteredResidents = filteredResidents.filter(resident => 
+                    resident.name.toLowerCase().includes(filterValue) ||
+                    resident.unitNumber.toLowerCase().includes(filterValue) ||
+                    (resident.email && resident.email.toLowerCase().includes(filterValue)) ||
+                    (resident.phone && resident.phone.toLowerCase().includes(filterValue)) ||
+                    (resident.rut && resident.rut.toLowerCase().includes(filterValue)) ||
+                    (resident.type && String(resident.type).toLowerCase().includes(filterValue))
+                );
+            }
+            
+            if (filteredResidents.length === 0) {
+                tableBody.innerHTML = '';
+                emptyState.style.display = 'block';
                 if (filterValue) {
-                    filteredResidents = filteredResidents.filter(function (resident) {
-                        return (
-                            resident.name.toLowerCase().includes(filterValue) ||
-                            resident.unitNumber.toLowerCase().includes(filterValue) ||
-                            (resident.email && resident.email.toLowerCase().includes(filterValue)) ||
-                            (resident.phone && resident.phone.toLowerCase().includes(filterValue)) ||
-                            (resident.rut && resident.rut.toLowerCase().includes(filterValue)) ||
-                            (resident.type && String(resident.type).toLowerCase().includes(filterValue))
-                        );
-                    });
+                    emptyState.innerHTML = `
+                        <div class="icon" style="font-size: 1.8rem; margin-bottom: 8px;">🔍</div>
+                        <h3 style="font-size: 1rem; margin-bottom: 4px;">No se encontraron residentes anteriores</h3>
+                        <p style="font-size: 0.85rem;">Intenta con otros términos de búsqueda</p>
+                    `;
+                } else {
+                    emptyState.innerHTML = `
+                        <div class="icon" style="font-size: 1.8rem; margin-bottom: 8px;">📦</div>
+                        <h3 style="font-size: 1rem; margin-bottom: 4px;">No hay residentes anteriores</h3>
+                        <p style="font-size: 0.85rem;">Los arrendatarios y visitas autorizadas dados de salida aparecerán aquí</p>
+                    `;
                 }
-                if (filteredResidents.length === 0) {
-                    tableBody.innerHTML = "";
-                    emptyState.style.display = "block";
-                    if (filterValue) {
-                        emptyState.innerHTML =
-                            '<div class="icon" style="font-size: 1.8rem; margin-bottom: 8px;">🔍</div>' +
-                            '<h3 style="font-size: 1rem; margin-bottom: 4px;">No se encontraron residentes anteriores</h3>' +
-                            '<p style="font-size: 0.85rem;">Intenta con otros términos de búsqueda</p>';
-                    } else {
-                        emptyState.innerHTML =
-                            '<div class="icon" style="font-size: 1.8rem; margin-bottom: 8px;">📦</div>' +
-                            '<h3 style="font-size: 1rem; margin-bottom: 4px;">No hay residentes anteriores</h3>' +
-                            '<p style="font-size: 0.85rem;">Los arrendatarios y visitas autorizadas dados de salida aparecerán aquí</p>';
-                    }
-                    return;
-                }
-                emptyState.style.display = "none";
-                filteredResidents.sort(function (a, b) {
-                    var dateA = new Date(a.exitDate || 0);
-                    var dateB = new Date(b.exitDate || 0);
-                    return dateB - dateA;
-                });
-                tableBody.innerHTML = filteredResidents.map(function (resident) {
+                return;
+            }
+            
+            emptyState.style.display = 'none';
+            
+            // Ordenar por fecha de salida (más recientes primero)
+            filteredResidents.sort((a, b) => {
+                const dateA = new Date(a.exitDate || 0);
+                const dateB = new Date(b.exitDate || 0);
+                return dateB - dateA;
+            });
+            
+            tableBody.innerHTML = filteredResidents.map(resident => {
                 const exitDate = resident.exitDate ? new Date(resident.exitDate).toLocaleDateString('es-ES', {
                     year: 'numeric',
                     month: 'short',
@@ -18262,72 +18216,80 @@ function __deptUnitsStorageKey() {
                     </tr>
                 `;
             }).join('');
-            });
+            
+            // Actualizar el estado del checkbox "seleccionar todos"
             updateSelectAllCheckbox();
+            // Actualizar contador de seleccionados
             updateSelectedCount();
         };
         
         // ===== FUNCIÓN PARA TOGGLE SELECCIONAR TODOS =====
         window.toggleSelectAllFormerResidents = function() {
-            var first = cgDeptEl("selectAllFormerResidents");
-            if (!first) return;
-            var isChecked = first.checked;
-            cgDeptEls("selectAllFormerResidents").forEach(function (cb) {
-                cb.checked = isChecked;
-            });
-            document.querySelectorAll(".former-resident-checkbox").forEach(function (checkbox) {
+            const selectAllCheckbox = document.getElementById('selectAllFormerResidents');
+            if (!selectAllCheckbox) return;
+            const checkboxes = document.querySelectorAll('.former-resident-checkbox');
+            const isChecked = selectAllCheckbox.checked;
+            
+            checkboxes.forEach(checkbox => {
                 checkbox.checked = isChecked;
             });
+            
             updateSelectedCount();
         };
         
         // ===== FUNCIÓN PARA ACTUALIZAR CHECKBOX SELECCIONAR TODOS =====
         function updateSelectAllCheckbox() {
-            var checkboxes = document.querySelectorAll(".former-resident-checkbox");
-            var total = checkboxes.length;
-            var checkedCount = Array.from(checkboxes).filter(function (cb) {
-                return cb.checked;
-            }).length;
-            cgDeptEls("selectAllFormerResidents").forEach(function (selectAllCheckbox) {
-                if (total === 0) {
-                    selectAllCheckbox.checked = false;
-                    selectAllCheckbox.indeterminate = false;
-                } else if (checkedCount === 0) {
-                    selectAllCheckbox.checked = false;
-                    selectAllCheckbox.indeterminate = false;
-                } else if (checkedCount === total) {
-                    selectAllCheckbox.checked = true;
-                    selectAllCheckbox.indeterminate = false;
-                } else {
-                    selectAllCheckbox.checked = false;
-                    selectAllCheckbox.indeterminate = true;
-                }
-            });
+            const selectAllCheckbox = document.getElementById('selectAllFormerResidents');
+            const checkboxes = document.querySelectorAll('.former-resident-checkbox');
+            if (!selectAllCheckbox) return;
+            
+            if (checkboxes.length === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+                return;
+            }
+            
+            const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            
+            if (checkedCount === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else if (checkedCount === checkboxes.length) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
         }
         
         // ===== FUNCIÓN PARA ACTUALIZAR CONTADOR DE SELECCIONADOS =====
         window.updateSelectedCount = function() {
-            var idSeen = Object.create(null);
-            document.querySelectorAll(".former-resident-checkbox:checked").forEach(function (cb) {
-                var rid = cb.getAttribute("data-resident-id");
-                if (rid) idSeen[rid] = true;
-            });
-            var selectedCount = Object.keys(idSeen).length;
-            cgDeptEls("selectedCount").forEach(function (countSpan) {
-                countSpan.textContent = String(selectedCount);
-            });
-            cgDeptEls("deleteSelectedBtn").forEach(function (deleteBtn) {
-                deleteBtn.style.display = selectedCount > 0 ? "inline-block" : "none";
-            });
+            const checkboxes = document.querySelectorAll('.former-resident-checkbox:checked');
+            const selectedCount = checkboxes.length;
+            const countSpan = document.getElementById('selectedCount');
+            const deleteBtn = document.getElementById('deleteSelectedBtn');
+            
+            if (countSpan) {
+                countSpan.textContent = selectedCount;
+            }
+            
+            if (deleteBtn) {
+                if (selectedCount > 0) {
+                    deleteBtn.style.display = 'inline-block';
+                } else {
+                    deleteBtn.style.display = 'none';
+                }
+            }
+            
+            // Actualizar estado del checkbox "seleccionar todos"
             updateSelectAllCheckbox();
         };
         
         // ===== FUNCIÓN PARA ELIMINAR RESIDENTES SELECCIONADOS =====
         window.deleteSelectedFormerResidents = async function() {
             const checkboxes = document.querySelectorAll('.former-resident-checkbox:checked');
-            const selectedIds = Array.from(
-                new Set(Array.from(checkboxes).map(function (cb) { return cb.dataset.residentId; }).filter(Boolean))
-            );
+            const selectedIds = Array.from(checkboxes).map(cb => cb.dataset.residentId);
             
             if (selectedIds.length === 0) {
                 showNotification('error', '❌ No hay residentes seleccionados');
@@ -18356,14 +18318,14 @@ function __deptUnitsStorageKey() {
                                 Esta acción no se puede deshacer.
                             </p>
                             <div style="display: flex; gap: 10px; justify-content: center;">
-                                <button type="button" class="btn btn-danger cg-dept-modal-confirm">✅ Sí, Eliminar ${selectedIds.length}</button>
-                                <button type="button" class="btn btn-secondary cg-dept-modal-cancel">❌ Cancelar</button>
+                                <button id="confirmDeleteSelectedBtn" class="btn btn-danger">✅ Sí, Eliminar ${selectedIds.length}</button>
+                                <button id="cancelDeleteSelectedBtn" class="btn btn-secondary">❌ Cancelar</button>
                             </div>
                         </div>
                     `;
                     document.body.appendChild(confirmModal);
                     
-                    confirmModal.querySelector('.cg-dept-modal-confirm').onclick = async () => {
+                    confirmModal.querySelector('#confirmDeleteSelectedBtn').onclick = async () => {
                         try {
                             // Eliminar de appState
                             appState.formerResidents = appState.formerResidents.filter(r => !selectedIds.includes(r.id));
@@ -18384,7 +18346,7 @@ function __deptUnitsStorageKey() {
                         }
                     };
                     
-                    confirmModal.querySelector('.cg-dept-modal-cancel').onclick = () => {
+                    confirmModal.querySelector('#cancelDeleteSelectedBtn').onclick = () => {
                         confirmModal.remove();
                     };
                     
@@ -18623,14 +18585,14 @@ function __deptUnitsStorageKey() {
                                 Esta acción no se puede deshacer.
                             </p>
                             <div style="display: flex; gap: 10px; justify-content: center;">
-                                <button type="button" class="btn btn-danger cg-dept-modal-confirm">✅ Sí, Eliminar</button>
-                                <button type="button" class="btn btn-secondary cg-dept-modal-cancel">❌ Cancelar</button>
+                                <button type="button" data-cg-dept-dialog-action="confirm" class="btn btn-danger">✅ Sí, Eliminar</button>
+                                <button type="button" data-cg-dept-dialog-action="cancel" class="btn btn-secondary">❌ Cancelar</button>
                             </div>
                         </div>
                     `;
                     document.body.appendChild(confirmModal);
                     
-                    confirmModal.querySelector('.cg-dept-modal-confirm').onclick = async () => {
+                    confirmModal.querySelector('[data-cg-dept-dialog-action="confirm"]').onclick = async () => {
                         try {
                             // Eliminar de appState
                             appState.formerResidents = appState.formerResidents.filter(r => r.id !== residentId);
@@ -18649,7 +18611,7 @@ function __deptUnitsStorageKey() {
                         }
                     };
                     
-                    confirmModal.querySelector('.cg-dept-modal-cancel').onclick = () => {
+                    confirmModal.querySelector('[data-cg-dept-dialog-action="cancel"]').onclick = () => {
                         confirmModal.remove();
                     };
                     
@@ -18718,7 +18680,7 @@ function __deptUnitsStorageKey() {
                         if (!unit1507) {
                             showNotification('warning', '⚠️ No se encontró la unidad 1507 en el archivo');
                             modal.remove();
-                            cgDeptEls('importJsonFile').forEach(function (inp) { inp.value = ''; });
+                            document.getElementById('importJsonFile').value = '';
                             return;
                         }
                         
@@ -18738,7 +18700,7 @@ function __deptUnitsStorageKey() {
                         await saveUnitsToCloud();
                         updateAllUI();
                         modal.remove();
-                        cgDeptEls('importJsonFile').forEach(function (inp) { inp.value = ''; });
+                        document.getElementById('importJsonFile').value = '';
                     } catch (error) {
                         console.error('Error importando unidad 1507:', error);
                         showNotification('error', '❌ Error al importar unidad 1507');
@@ -18753,7 +18715,7 @@ function __deptUnitsStorageKey() {
                         if (formerResidents.length === 0) {
                             showNotification('warning', '⚠️ No se encontraron residentes anteriores en el archivo');
                             modal.remove();
-                            cgDeptEls('importJsonFile').forEach(function (inp) { inp.value = ''; });
+                            document.getElementById('importJsonFile').value = '';
                             return;
                         }
                         
@@ -18783,7 +18745,7 @@ function __deptUnitsStorageKey() {
                         await saveFormerResidentsToCloud();
                         updateFormerResidentsTable();
                         modal.remove();
-                        cgDeptEls('importJsonFile').forEach(function (inp) { inp.value = ''; });
+                        document.getElementById('importJsonFile').value = '';
                     } catch (error) {
                         console.error('Error importando residentes anteriores:', error);
                         showNotification('error', '❌ Error al importar residentes anteriores');
@@ -18810,7 +18772,7 @@ function __deptUnitsStorageKey() {
                         updateAllUI();
                         showNotification('success', '✅ Todos los datos importados desde archivo JSON');
                         modal.remove();
-                        cgDeptEls('importJsonFile').forEach(function (inp) { inp.value = ''; });
+                        document.getElementById('importJsonFile').value = '';
                     } catch (error) {
                         console.error('Error importando todos los datos:', error);
                         showNotification('error', '❌ Error al importar datos');
@@ -18820,7 +18782,7 @@ function __deptUnitsStorageKey() {
                 modal.onclick = (e) => {
                     if (e.target === modal) {
                         modal.remove();
-                        cgDeptEls('importJsonFile').forEach(function (inp) { inp.value = ''; });
+                        document.getElementById('importJsonFile').value = '';
                     }
                 };
                 
@@ -18878,10 +18840,16 @@ function __deptUnitsStorageKey() {
             // Calcular tasa de ocupación
             const occupancyRate = totalUnits > 0 ? Math.round((unidadesEfectivamenteOcupadas / totalUnits) * 100) : 0;
             
-            cgDeptSetTextAll("totalUnits", String(totalUnits));
-            cgDeptSetTextAll("occupiedUnits", String(unidadesEfectivamenteOcupadas));
-            cgDeptSetTextAll("totalResidents", String(totalResidents));
-            cgDeptSetTextAll("totalOwners", String(totalOwners));
+            // Actualizar elementos principales (verificando que existan)
+            const totalUnitsEl = document.getElementById('totalUnits');
+            const occupiedUnitsEl = document.getElementById('occupiedUnits');
+            const totalResidentsEl = document.getElementById('totalResidents');
+            const totalOwnersEl = document.getElementById('totalOwners');
+            
+            if (totalUnitsEl) totalUnitsEl.textContent = totalUnits;
+            if (occupiedUnitsEl) occupiedUnitsEl.textContent = unidadesEfectivamenteOcupadas;
+            if (totalResidentsEl) totalResidentsEl.textContent = totalResidents;
+            if (totalOwnersEl) totalOwnersEl.textContent = totalOwners;
             } catch (error) {
                 console.error('❌ Error en updateStats:', error);
             }
@@ -18889,97 +18857,90 @@ function __deptUnitsStorageKey() {
 
 
         function updateUnitsTable() {
-            cgDeptEachMount(function (scope) {
-                var tableBody = document.getElementById(__cgDeptScopedDomId(scope, "unitsTableBody"));
-                var emptyState = document.getElementById(__cgDeptScopedDomId(scope, "unitsEmptyState"));
-                if (!tableBody || !emptyState) return;
-                var filterInput = document.getElementById(__cgDeptScopedDomId(scope, "unitsFilter"));
-                var filterValue = filterInput ? filterInput.value.toLowerCase() : "";
-                var filteredUnits = appState.units;
+            const tableBody = document.getElementById('unitsTableBody');
+            const emptyState = document.getElementById('unitsEmptyState');
+            if (!tableBody || !emptyState) {
+                return;
+            }
+            const filterInput = document.getElementById('unitsFilter');
+            const filterValue = filterInput ? filterInput.value.toLowerCase() : '';
+            
+            let filteredUnits = appState.units;
+            
+            // Aplicar filtro si hay texto
+            if (filterValue) {
+                filteredUnits = appState.units.filter(unit => 
+                    unit.unitNumber.toLowerCase().includes(filterValue) ||
+                    unit.unitUse.toLowerCase().includes(filterValue) ||
+                    (unit.parkingNumber && unit.parkingNumber.toLowerCase().includes(filterValue)) ||
+                    (unit.storageNumber && unit.storageNumber.toLowerCase().includes(filterValue)) ||
+                    (unit.bikeStorageNumber && unit.bikeStorageNumber.toLowerCase().includes(filterValue)) ||
+                    (unit.bikeStorageDetail && unit.bikeStorageDetail.toLowerCase().includes(filterValue)) ||
+                    (Array.isArray(unit.residents) &&
+                        unit.residents.some(function (resident) {
+                            if (!resident) return false;
+                            return (
+                                (resident.name && resident.name.toLowerCase().includes(filterValue)) ||
+                                (resident.type && resident.type.toLowerCase().includes(filterValue))
+                            );
+                        }))
+                );
+            }
+            
+            if (filteredUnits.length === 0) {
+                tableBody.innerHTML = '';
+                emptyState.style.display = 'block';
                 if (filterValue) {
-                    filteredUnits = appState.units.filter(function (unit) {
-                        return (
-                            unit.unitNumber.toLowerCase().includes(filterValue) ||
-                            unit.unitUse.toLowerCase().includes(filterValue) ||
-                            (unit.parkingNumber && unit.parkingNumber.toLowerCase().includes(filterValue)) ||
-                            (unit.storageNumber && unit.storageNumber.toLowerCase().includes(filterValue)) ||
-                            (unit.bikeStorageNumber && unit.bikeStorageNumber.toLowerCase().includes(filterValue)) ||
-                            (unit.bikeStorageDetail && unit.bikeStorageDetail.toLowerCase().includes(filterValue)) ||
-                            (Array.isArray(unit.residents) &&
-                                unit.residents.some(function (resident) {
-                                    if (!resident) return false;
-                                    return (
-                                        (resident.name && resident.name.toLowerCase().includes(filterValue)) ||
-                                        (resident.type && resident.type.toLowerCase().includes(filterValue))
-                                    );
-                                }))
-                        );
-                    });
+                    emptyState.innerHTML = `
+                        <div class="icon" style="font-size: 1.8rem; margin-bottom: 8px;">🔍</div>
+                        <h3 style="font-size: 1rem; margin-bottom: 4px;">No se encontraron unidades</h3>
+                        <p style="font-size: 0.85rem;">Intenta con otros términos de búsqueda</p>
+                    `;
+                } else {
+                    emptyState.innerHTML = `
+                        <div class="icon" style="font-size: 1.8rem; margin-bottom: 8px;">🏠</div>
+                        <h3 style="font-size: 1rem; margin-bottom: 4px;">No hay unidades registradas</h3>
+                        <p style="font-size: 0.85rem;">Registra la primera unidad usando el formulario superior</p>
+                    `;
                 }
-                if (filteredUnits.length === 0) {
-                    tableBody.innerHTML = "";
-                    emptyState.style.display = "block";
-                    if (filterValue) {
-                        emptyState.innerHTML =
-                            '<div class="icon" style="font-size: 1.8rem; margin-bottom: 8px;">🔍</div>' +
-                            '<h3 style="font-size: 1rem; margin-bottom: 4px;">No se encontraron unidades</h3>' +
-                            '<p style="font-size: 0.85rem;">Intenta con otros términos de búsqueda</p>';
-                    } else {
-                        emptyState.innerHTML =
-                            '<div class="icon" style="font-size: 1.8rem; margin-bottom: 8px;">🏠</div>' +
-                            '<h3 style="font-size: 1rem; margin-bottom: 4px;">No hay unidades registradas</h3>' +
-                            '<p style="font-size: 0.85rem;">Registra la primera unidad usando el formulario superior</p>';
-                    }
-                    return;
+                return;
+            }
+            
+            emptyState.style.display = 'none';
+            
+            tableBody.innerHTML = filteredUnits.map(unit => {
+                const bikeInfo = getBikeStorageDisplay(unit);
+                // Formatear estacionamientos (array o valor único)
+                let parkingInfo = 'N/A';
+                if (unit.parkingNumbers && Array.isArray(unit.parkingNumbers) && unit.parkingNumbers.length > 0) {
+                    parkingInfo = unit.parkingNumbers.join(', ');
+                } else if (unit.parkingNumber) {
+                    parkingInfo = unit.parkingNumber;
                 }
-                emptyState.style.display = "none";
-                tableBody.innerHTML = filteredUnits
-                    .map(function (unit) {
-                        var bikeInfo = getBikeStorageDisplay(unit);
-                        var parkingInfo = "N/A";
-                        if (unit.parkingNumbers && Array.isArray(unit.parkingNumbers) && unit.parkingNumbers.length > 0) {
-                            parkingInfo = unit.parkingNumbers.join(", ");
-                        } else if (unit.parkingNumber) {
-                            parkingInfo = unit.parkingNumber;
-                        }
-                        var storageInfo = "N/A";
-                        if (unit.storageNumbers && Array.isArray(unit.storageNumbers) && unit.storageNumbers.length > 0) {
-                            storageInfo = unit.storageNumbers.join(", ");
-                        } else if (unit.storageNumber) {
-                            storageInfo = unit.storageNumber;
-                        }
-                        return (
-                            "<tr>" +
-                            '<td style="padding: 6px 8px; font-size: calc(0.882rem * 1.01);"><strong>' +
-                            __h(unit.unitNumber) +
-                            "</strong></td>" +
-                            '<td style="padding: 6px 8px; font-size: calc(0.882rem * 1.01);">' +
-                            __h(unit.unitUse) +
-                            "</td>" +
-                            '<td style="padding: 6px 8px; font-size: calc(0.833rem * 1.01);">' +
-                            __h(parkingInfo) +
-                            "</td>" +
-                            '<td style="padding: 6px 8px; font-size: calc(0.833rem * 1.01);">' +
-                            __h(storageInfo) +
-                            "</td>" +
-                            '<td style="padding: 6px 8px; font-size: calc(0.833rem * 1.01);">' +
-                            __h(bikeInfo) +
-                            "</td>" +
-                            '<td style="padding: 6px 8px; font-size: calc(0.833rem * 1.01);">' +
-                            unit.residents.length +
-                            " residentes</td>" +
-                            '<td style="padding: 6px 8px; white-space: nowrap;">' +
-                            '<button type="button" class="btn btn-sm btn-secondary" data-cg-win="editUnit" data-cg-id="' +
-                            __a(unit.id) +
-                            '" style="padding: 4px 8px; font-size: 0.8rem; margin-right: 4px;">✏️</button>' +
-                            '<button type="button" class="btn btn-sm btn-danger" data-cg-win="deleteUnit" data-cg-id="' +
-                            __a(unit.id) +
-                            '" style="padding: 4px 8px; font-size: 0.8rem;">🗑️</button>' +
-                            "</td></tr>"
-                        );
-                    })
-                    .join("");
-            });
+                
+                // Formatear bodegas (array o valor único)
+                let storageInfo = 'N/A';
+                if (unit.storageNumbers && Array.isArray(unit.storageNumbers) && unit.storageNumbers.length > 0) {
+                    storageInfo = unit.storageNumbers.join(', ');
+                } else if (unit.storageNumber) {
+                    storageInfo = unit.storageNumber;
+                }
+                
+                return `
+                    <tr>
+                        <td style="padding: 6px 8px; font-size: calc(0.882rem * 1.01);"><strong>${__h(unit.unitNumber)}</strong></td>
+                        <td style="padding: 6px 8px; font-size: calc(0.882rem * 1.01);">${__h(unit.unitUse)}</td>
+                        <td style="padding: 6px 8px; font-size: calc(0.833rem * 1.01);">${__h(parkingInfo)}</td>
+                        <td style="padding: 6px 8px; font-size: calc(0.833rem * 1.01);">${__h(storageInfo)}</td>
+                        <td style="padding: 6px 8px; font-size: calc(0.833rem * 1.01);">${__h(bikeInfo)}</td>
+                        <td style="padding: 6px 8px; font-size: calc(0.833rem * 1.01);">${unit.residents.length} residentes</td>
+                        <td style="padding: 6px 8px; white-space: nowrap;">
+                            <button type="button" class="btn btn-sm btn-secondary" data-cg-win="editUnit" data-cg-id="${__a(unit.id)}" style="padding: 4px 8px; font-size: 0.8rem; margin-right: 4px;">✏️</button>
+                            <button type="button" class="btn btn-sm btn-danger" data-cg-win="deleteUnit" data-cg-id="${__a(unit.id)}" style="padding: 4px 8px; font-size: 0.8rem;">🗑️</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         function editUnit(unitId) {
@@ -18989,34 +18950,32 @@ function __deptUnitsStorageKey() {
                 return;
             }
             appState.editingUnitId = unit.id;
-            cgDeptEls('unitNumber').forEach(function (el) {
-                el.value = unit.unitNumber;
-            });
-            cgDeptEls('unitUse').forEach(function (el) {
-                el.value = unit.unitUse;
-            });
-            cgDeptEls('parkingList').forEach(function (parkingList) {
-                parkingList.innerHTML = '';
-            });
+            document.getElementById('unitNumber').value = unit.unitNumber;
+            document.getElementById('unitUse').value = unit.unitUse;
+            
+            // Cargar estacionamientos (array o valor único para compatibilidad)
+            const parkingList = document.getElementById('parkingList');
+            parkingList.innerHTML = '';
             if (unit.parkingNumbers && Array.isArray(unit.parkingNumbers) && unit.parkingNumbers.length > 0) {
                 unit.parkingNumbers.forEach(parking => addParkingField(parking));
             } else if (unit.parkingNumber) {
                 addParkingField(unit.parkingNumber);
             }
-            cgDeptEls('storageList').forEach(function (storageList) {
-                storageList.innerHTML = '';
-            });
+            
+            // Cargar bodegas (array o valor único para compatibilidad)
+            const storageList = document.getElementById('storageList');
+            storageList.innerHTML = '';
             if (unit.storageNumbers && Array.isArray(unit.storageNumbers) && unit.storageNumbers.length > 0) {
                 unit.storageNumbers.forEach(storage => addStorageField(storage));
             } else if (unit.storageNumber) {
                 addStorageField(unit.storageNumber);
             }
-            cgDeptEls('bikeList').forEach(function (bikeList) {
-                bikeList.innerHTML = '';
-            });
-            cgDeptEls('addBikeBtn').forEach(function (addBikeBtn) {
-                if (addBikeBtn) addBikeBtn.style.display = '';
-            });
+            
+            // Cargar bicicleteros (array o valor único para compatibilidad)
+            const bikeList = document.getElementById('bikeList');
+            bikeList.innerHTML = '';
+            const addBikeBtn = document.getElementById('addBikeBtn');
+            if (addBikeBtn) addBikeBtn.style.display = '';
             if (unit.bikeStorageNumbers && Array.isArray(unit.bikeStorageNumbers) && unit.bikeStorageNumbers.length > 0) {
                 unit.bikeStorageNumbers.forEach((num, i) => {
                     const detail = (unit.bikeStorageDetails && unit.bikeStorageDetails[i]) || '';
@@ -19025,17 +18984,16 @@ function __deptUnitsStorageKey() {
             } else if (unit.bikeStorageNumber || unit.bikeStorageDetail) {
                 addBikeField(unit.bikeStorageNumber || '', unit.bikeStorageDetail || '');
             }
-            cgDeptEls('residentsList').forEach(function (residentsList) {
-                residentsList.innerHTML = '';
-                if (unit.residents && unit.residents.length) {
-                    unit.residents.forEach(resident => addResident(resident, residentsList));
-                } else {
-                    addResident(null, residentsList);
-                }
-            });
-            cgDeptEls('unitFormSubmitBtn').forEach(function (ufsbEdit) {
-                if (ufsbEdit) ufsbEdit.textContent = '💾 Guardar Cambios';
-            });
+            
+            const residentsList = document.getElementById('residentsList');
+            residentsList.innerHTML = '';
+            if (unit.residents && unit.residents.length) {
+                unit.residents.forEach(resident => addResident(resident));
+            } else {
+                addResident();
+            }
+            var ufsbEdit = document.getElementById('unitFormSubmitBtn');
+            if (ufsbEdit) ufsbEdit.textContent = '💾 Guardar Cambios';
             showTab('units');
             
             // Actualizar el mapa después de cargar los residentes para edición
@@ -19043,52 +19001,65 @@ function __deptUnitsStorageKey() {
         }
 
         function updateResidentsTable() {
-            var allResidents = [];
-            appState.units.forEach(function (unit) {
+            const tableBody = document.getElementById('residentsTableBody');
+            const emptyState = document.getElementById('residentsEmptyState');
+            if (!tableBody || !emptyState) {
+                return;
+            }
+            const filterInput = document.getElementById('residentsFilter');
+            const filterValue = filterInput ? filterInput.value.toLowerCase() : '';
+            
+            const allResidents = [];
+            appState.units.forEach(unit => {
                 if (!unit.residents || !Array.isArray(unit.residents)) return;
-                unit.residents.forEach(function (resident) {
-                    if (resident.type === "Propietario" && unit.unitUse === "Arriendo") {
-                        return;
+                unit.residents.forEach(resident => {
+                    // Filtrar propietarios de unidades de arriendo
+                    if (resident.type === 'Propietario' && unit.unitUse === 'Arriendo') {
+                        return; // Saltar este residente
                     }
-                    allResidents.push(
-                        Object.assign({}, resident, {
-                            unitNumber: unit.unitNumber
-                        })
-                    );
+                    
+                    allResidents.push({
+                        ...resident,
+                        unitNumber: unit.unitNumber
+                    });
                 });
             });
-            cgDeptEachMount(function (scope) {
-                var tableBody = document.getElementById(__cgDeptScopedDomId(scope, "residentsTableBody"));
-                var emptyState = document.getElementById(__cgDeptScopedDomId(scope, "residentsEmptyState"));
-                if (!tableBody || !emptyState) return;
-                var filterInput = document.getElementById(__cgDeptScopedDomId(scope, "residentsFilter"));
-                var filterValue = filterInput ? filterInput.value.toLowerCase() : "";
-                var filteredResidents = allResidents;
+            
+            let filteredResidents = allResidents;
+            
+            // Aplicar filtro si hay texto
+            if (filterValue) {
+                filteredResidents = allResidents.filter(resident => 
+                    resident.name.toLowerCase().includes(filterValue) ||
+                    resident.type.toLowerCase().includes(filterValue) ||
+                    resident.unitNumber.toLowerCase().includes(filterValue) ||
+                    resident.email.toLowerCase().includes(filterValue) ||
+                    (resident.phone && resident.phone.toLowerCase().includes(filterValue))
+                );
+            }
+            
+            if (filteredResidents.length === 0) {
+                tableBody.innerHTML = '';
+                emptyState.style.display = 'block';
                 if (filterValue) {
-                    filteredResidents = allResidents.filter(function (resident) {
-                        return (
-                            resident.name.toLowerCase().includes(filterValue) ||
-                            resident.type.toLowerCase().includes(filterValue) ||
-                            resident.unitNumber.toLowerCase().includes(filterValue) ||
-                            resident.email.toLowerCase().includes(filterValue) ||
-                            (resident.phone && resident.phone.toLowerCase().includes(filterValue))
-                        );
-                    });
+                    emptyState.innerHTML = `
+                        <div class="icon">🔍</div>
+                        <h3>No se encontraron residentes</h3>
+                        <p>Intenta con otros términos de búsqueda</p>
+                    `;
+                } else {
+                    emptyState.innerHTML = `
+                        <div class="icon">👥</div>
+                        <h3>No hay residentes registrados</h3>
+                        <p>Los residentes aparecerán aquí cuando registres unidades</p>
+                    `;
                 }
-                if (filteredResidents.length === 0) {
-                    tableBody.innerHTML = "";
-                    emptyState.style.display = "block";
-                    if (filterValue) {
-                        emptyState.innerHTML =
-                            '<div class="icon">🔍</div><h3>No se encontraron residentes</h3><p>Intenta con otros términos de búsqueda</p>';
-                    } else {
-                        emptyState.innerHTML =
-                            '<div class="icon">👥</div><h3>No hay residentes registrados</h3><p>Los residentes aparecerán aquí cuando registres unidades</p>';
-                    }
-                    return;
-                }
-                emptyState.style.display = "none";
-                tableBody.innerHTML = filteredResidents.map(function (resident) {
+                return;
+            }
+            
+            emptyState.style.display = 'none';
+            
+            tableBody.innerHTML = filteredResidents.map(resident => {
                 let tipo = (resident.type || '').toLowerCase();
                 let badgeClass = '';
                 if (tipo === 'propietario') badgeClass = 'type-badge--propietario';
@@ -19139,7 +19110,6 @@ function __deptUnitsStorageKey() {
                     </tr>
                 `;
             }).join('');
-            });
         }
 
         /** Formatea la fecha/hora de última modificación de la nota para mostrar en fichas */
@@ -19456,58 +19426,63 @@ function __deptUnitsStorageKey() {
         }
 
         function updateOwnersTable() {
-            var allOwners = [];
-            appState.units.forEach(function (unit) {
+            const tableBody = document.getElementById('ownersTableBody');
+            const emptyState = document.getElementById('ownersEmptyState');
+            if (!tableBody || !emptyState) {
+                return;
+            }
+            const filterInput = document.getElementById('ownersFilter');
+            const filterValue = filterInput ? filterInput.value.toLowerCase() : '';
+            
+            const allOwners = [];
+            appState.units.forEach(unit => {
                 if (!unit.residents || !Array.isArray(unit.residents)) return;
-                var owners = unit.residents.filter(function (r) {
-                    return r.type === "Propietario";
-                });
-                owners.forEach(function (owner) {
-                    allOwners.push(
-                        Object.assign({}, owner, {
-                            unitNumber: unit.unitNumber,
-                            parkingNumber: unit.parkingNumber,
-                            storageNumber: unit.storageNumber
-                        })
-                    );
+                const owners = unit.residents.filter(r => r.type === 'Propietario');
+                owners.forEach(owner => {
+                    allOwners.push({
+                        ...owner,
+                        unitNumber: unit.unitNumber,
+                        parkingNumber: unit.parkingNumber,
+                        storageNumber: unit.storageNumber
+                    });
                 });
             });
-            cgDeptEachMount(function (scope) {
-                var tableBody = document.getElementById(__cgDeptScopedDomId(scope, "ownersTableBody"));
-                var emptyState = document.getElementById(__cgDeptScopedDomId(scope, "ownersEmptyState"));
-                if (!tableBody || !emptyState) return;
-                var filterInput = document.getElementById(__cgDeptScopedDomId(scope, "ownersFilter"));
-                var filterValue = filterInput ? filterInput.value.toLowerCase() : "";
-                var filteredOwners = allOwners;
+            
+            let filteredOwners = allOwners;
+            
+            // Aplicar filtro si hay texto
+            if (filterValue) {
+                filteredOwners = allOwners.filter(owner => 
+                    owner.name.toLowerCase().includes(filterValue) ||
+                    owner.unitNumber.toLowerCase().includes(filterValue) ||
+                    owner.email.toLowerCase().includes(filterValue) ||
+                    (owner.parkingNumber && owner.parkingNumber.toLowerCase().includes(filterValue)) ||
+                    (owner.storageNumber && owner.storageNumber.toLowerCase().includes(filterValue))
+                );
+            }
+            
+            if (filteredOwners.length === 0) {
+                tableBody.innerHTML = '';
+                emptyState.style.display = 'block';
                 if (filterValue) {
-                    filteredOwners = allOwners.filter(function (owner) {
-                        return (
-                            owner.name.toLowerCase().includes(filterValue) ||
-                            owner.unitNumber.toLowerCase().includes(filterValue) ||
-                            owner.email.toLowerCase().includes(filterValue) ||
-                            (owner.parkingNumber && owner.parkingNumber.toLowerCase().includes(filterValue)) ||
-                            (owner.storageNumber && owner.storageNumber.toLowerCase().includes(filterValue))
-                        );
-                    });
+                    emptyState.innerHTML = `
+                        <div class="icon" style="font-size: 1.8rem; margin-bottom: 8px;">🔍</div>
+                        <h3 style="font-size: 1rem; margin-bottom: 4px;">No se encontraron propietarios</h3>
+                        <p style="font-size: 0.85rem;">Intenta con otros términos de búsqueda</p>
+                    `;
+                } else {
+                    emptyState.innerHTML = `
+                        <div class="icon" style="font-size: 1.8rem; margin-bottom: 8px;">🏠</div>
+                        <h3 style="font-size: 1rem; margin-bottom: 4px;">No hay propietarios registrados</h3>
+                        <p style="font-size: 0.85rem;">Los propietarios aparecerán aquí cuando registres unidades</p>
+                    `;
                 }
-                if (filteredOwners.length === 0) {
-                    tableBody.innerHTML = "";
-                    emptyState.style.display = "block";
-                    if (filterValue) {
-                        emptyState.innerHTML =
-                            '<div class="icon" style="font-size: 1.8rem; margin-bottom: 8px;">🔍</div>' +
-                            '<h3 style="font-size: 1rem; margin-bottom: 4px;">No se encontraron propietarios</h3>' +
-                            '<p style="font-size: 0.85rem;">Intenta con otros términos de búsqueda</p>';
-                    } else {
-                        emptyState.innerHTML =
-                            '<div class="icon" style="font-size: 1.8rem; margin-bottom: 8px;">🏠</div>' +
-                            '<h3 style="font-size: 1rem; margin-bottom: 4px;">No hay propietarios registrados</h3>' +
-                            '<p style="font-size: 0.85rem;">Los propietarios aparecerán aquí cuando registres unidades</p>';
-                    }
-                    return;
-                }
-                emptyState.style.display = "none";
-                tableBody.innerHTML = filteredOwners.map(function (owner) {
+                return;
+            }
+            
+            emptyState.style.display = 'none';
+            
+            tableBody.innerHTML = filteredOwners.map(owner => {
                 let tipo = (owner.type || '').toLowerCase();
                 let badgeClass = '';
                 if (tipo === 'propietario') badgeClass = 'type-badge--propietario';
@@ -19526,7 +19501,6 @@ function __deptUnitsStorageKey() {
                     </tr>
                 `;
             }).join('');
-            });
         }
 
         // ===== EDITAR RESIDENTE DESDE FICHA DEL MAPA =====
@@ -19548,7 +19522,7 @@ function __deptUnitsStorageKey() {
                     : '';
             editUnit(unitId);
             setTimeout(() => {
-                const list = cgDeptEl('residentsList');
+                const list = document.getElementById('residentsList');
                 if (!list) return;
                 var item = null;
                 if (lineId) {
@@ -19574,15 +19548,11 @@ function __deptUnitsStorageKey() {
         }
 
         function cgCloseBuildingUnitFichaOverlay() {
-            var slots = cgDeptEls("buildingMapInlineDetail");
-            var si;
-            for (si = 0; si < slots.length; si++) {
-                var slot = slots[si];
-                if (slot && !slot.hidden) {
-                    slot.innerHTML = "";
-                    slot.hidden = true;
-                    return;
-                }
+            var slot = document.getElementById("buildingMapInlineDetail");
+            if (slot && !slot.hidden) {
+                slot.innerHTML = "";
+                slot.hidden = true;
+                return;
             }
             var m = document.querySelector(".modal.cg-building-unit-ficha-modal");
             if (m) m.remove();
@@ -19635,7 +19605,7 @@ function __deptUnitsStorageKey() {
             let noteSection = '';
             if (unit.unitNote && unit.unitNote.trim() !== '') {
                 const noteUpdatedAtFormatted = unit.unitNoteUpdatedAt ? formatNoteUpdatedAt(unit.unitNoteUpdatedAt) : '';
-                noteSection = `<div data-cg-dept-unit-note-wrap="1" style="background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 6px; margin: 6px 0;">
+                noteSection = `<div data-cg-dept-ficha="note-section" style="background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 6px; margin: 6px 0;">
                     <div style="margin-bottom: 2px; font-size: 0.78rem;"><b>Nota:</b></div>
                     <div style="margin-bottom: 4px; color: var(--primary-text); font-size: 0.8rem; line-height: 1.3;">${unit.unitNote.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
                     ${noteUpdatedAtFormatted ? '<div style="font-size: 0.7rem; color: var(--secondary-text); margin-bottom: 4px;">Modificado: ' + noteUpdatedAtFormatted.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' : ''}
@@ -19645,7 +19615,7 @@ function __deptUnitsStorageKey() {
                     </div>
                 </div>`;
             } else {
-                noteSection = `<div data-cg-dept-unit-note-wrap="1" style="margin: 6px 0;"><button type="button" data-cg-dept-note-action="add" class="btn btn-sm btn-secondary" style="padding: 2px 6px; font-size: 0.75rem;">📝 Agregar Nota</button></div>`;
+                noteSection = `<div data-cg-dept-ficha="note-section" style="margin: 6px 0;"><button type="button" data-cg-dept-note-action="add" class="btn btn-sm btn-secondary" style="padding: 2px 6px; font-size: 0.75rem;">📝 Agregar Nota</button></div>`;
             }
             // Obtener estacionamientos (array o valor único)
             let parkingInfo = 'N/A';
@@ -19669,15 +19639,7 @@ function __deptUnitsStorageKey() {
                 storageInfo = unit.storageNumber;
             }
 
-            var inlineSlot = null;
-            cgDeptEls("buildingMapInlineDetail").forEach(function (s) {
-                var h = s.closest("#dept-module-host, #mapa-edificio-module-host");
-                if (!h) return;
-                var scope = h.getAttribute("data-cg-dept-scope") || "main";
-                var buildingPanel = document.getElementById(__cgDeptScopedDomId(scope, "building"));
-                if (buildingPanel && buildingPanel.classList.contains("active")) inlineSlot = s;
-            });
-            if (!inlineSlot) inlineSlot = cgDeptEl("buildingMapInlineDetail");
+            var inlineSlot = document.getElementById("buildingMapInlineDetail");
             var useInline = !!inlineSlot;
 
             var detailCore = `
@@ -19796,7 +19758,7 @@ function __deptUnitsStorageKey() {
                 rootEl = overlayModal;
             }
             // Lógica para editar/agregar/eliminar nota
-            const noteSectionDiv = rootEl.querySelector("[data-cg-dept-unit-note-wrap]");
+            const noteSectionDiv = rootEl.querySelector("[data-cg-dept-ficha=\"note-section\"]");
             if (noteSectionDiv) {
                 const editBtn = noteSectionDiv.querySelector('[data-cg-dept-note-action="edit"]');
                 const deleteBtn = noteSectionDiv.querySelector('[data-cg-dept-note-action="delete"]');
@@ -19820,14 +19782,14 @@ function __deptUnitsStorageKey() {
                                         <h3 style="color: var(--danger-color); margin-bottom: 15px;">⚠️ Confirmar Eliminación</h3>
                                         <p style="margin-bottom: 20px;">¿Estás seguro de que quieres eliminar esta nota?</p>
                                         <div style="display: flex; gap: 10px; justify-content: center;">
-                                            <button type="button" class="btn btn-danger cg-dept-modal-confirm">✅ Sí, Eliminar</button>
-                                            <button type="button" class="btn btn-secondary cg-dept-modal-cancel">❌ Cancelar</button>
+                                            <button type="button" data-cg-dept-dialog-action="confirm" class="btn btn-danger">✅ Sí, Eliminar</button>
+                                            <button type="button" data-cg-dept-dialog-action="cancel" class="btn btn-secondary">❌ Cancelar</button>
                                         </div>
                                     </div>
                                 `;
                                 document.body.appendChild(confirmModal);
                                 
-                                confirmModal.querySelector('.cg-dept-modal-confirm').onclick = async () => {
+                                confirmModal.querySelector('[data-cg-dept-dialog-action="confirm"]').onclick = async () => {
                                     // Preservar rentalParkingNumber antes de eliminar la nota
                                     const existingRentalParking = unit.rentalParkingNumber || '';
                                     unit.unitNote = '';
@@ -19856,7 +19818,7 @@ function __deptUnitsStorageKey() {
                                     }
                                 };
                                 
-                                confirmModal.querySelector('.cg-dept-modal-cancel').onclick = () => {
+                                confirmModal.querySelector('[data-cg-dept-dialog-action="cancel"]').onclick = () => {
                                     confirmModal.remove();
                                 };
                                 
@@ -19877,19 +19839,14 @@ function __deptUnitsStorageKey() {
         }
 
         function updateBuildingMap() {
-            const buildingMaps = cgDeptEls('buildingMap');
-            if (!buildingMaps.length) {
+            const buildingMap = document.getElementById('buildingMap');
+            if (!buildingMap) {
                 return;
             }
-            const filterInputs = cgDeptEls('buildingMapFilter');
-            const filterValue =
-                filterInputs[0] && filterInputs[0].value
-                    ? filterInputs[0].value.toLowerCase().trim()
-                    : '';
+            const filterInput = document.getElementById('buildingMapFilter');
+            const filterValue = filterInput ? filterInput.value.toLowerCase().trim() : '';
             
-            buildingMaps.forEach(function (bm) {
-                bm.innerHTML = '';
-            });
+            buildingMap.innerHTML = '';
             const now = new Date();
             const NUEVO_RESIDENTE_MAP_MS = 3 * 24 * 60 * 60 * 1000;
             const MAX_COLUMNAS_POR_PISO = 15;
@@ -19941,12 +19898,15 @@ function __deptUnitsStorageKey() {
             });
             const vacias = totalUnidades - unidadesOcupadas;
             const pct = totalUnidades > 0 ? Math.round((unidadesOcupadas / totalUnidades) * 100) : 0;
-            cgDeptSetTextAll('edificioTotalUnidades', String(totalUnidades));
-            cgDeptSetTextAll('edificioOcupadas', String(unidadesOcupadas));
-            cgDeptSetTextAll('edificioVacias', String(vacias));
-            cgDeptSetTextAll('edificioPorcentaje', pct + '%');
-
-            function paintBuildingMapInto(buildingMap) {
+            const elTotal = document.getElementById('edificioTotalUnidades');
+            const elOcupadas = document.getElementById('edificioOcupadas');
+            const elVacias = document.getElementById('edificioVacias');
+            const elPct = document.getElementById('edificioPorcentaje');
+            if (elTotal) elTotal.textContent = totalUnidades;
+            if (elOcupadas) elOcupadas.textContent = unidadesOcupadas;
+            if (elVacias) elVacias.textContent = vacias;
+            if (elPct) elPct.textContent = pct + '%';
+            
             Object.keys(structure)
                 .sort((a, b) => parseInt(b, 10) - parseInt(a, 10))
                 .forEach(floor => {
@@ -20046,8 +20006,6 @@ function __deptUnitsStorageKey() {
                     }
                     if (hasVisibleUnits || !filterValue) buildingMap.appendChild(floorDiv);
                 });
-            }
-            buildingMaps.forEach(paintBuildingMapInto);
         }
 
         // ===== INICIALIZACIÓN (index: tras inyectar HTML en #dept-module-host) =====
@@ -20106,22 +20064,15 @@ function __deptUnitsStorageKey() {
             document.querySelectorAll('.nav-tab').forEach(tab => {
                 tab.addEventListener('click', () => {
                     const tabName = tab.getAttribute('data-tab');
-                    if (tabName) showTab(tabName, tab);
+                    if (tabName) showTab(tabName);
                 });
             });
-            cgDeptEls('unitForm').forEach(function (unitFormEl) {
-                unitFormEl.addEventListener('submit', handleUnitFormSubmit);
-            });
-            document.querySelectorAll('.cg-dept-module-inner .add-resident-btn').forEach(function (addResidentBtn) {
-                addResidentBtn.addEventListener('click', function () {
-                    var inner = addResidentBtn.closest('.cg-dept-module-inner');
-                    var list = inner ? inner.querySelector('.residents-list') : null;
-                    addResident(null, list);
-                });
-            });
-            cgDeptEls('residentsList').forEach(function (residentsListEl) {
-                if (residentsListEl && residentsListEl.children.length === 0) addResident(null, residentsListEl);
-            });
+            const unitFormEl = document.getElementById('unitForm');
+            if (unitFormEl) unitFormEl.addEventListener('submit', handleUnitFormSubmit);
+            const addResidentBtn = document.querySelector('.add-resident-btn');
+            if (addResidentBtn) addResidentBtn.addEventListener('click', () => addResident());
+            const residentsListEl = document.getElementById('residentsList');
+            if (residentsListEl && residentsListEl.children.length === 0) addResident();
             
             // Nota: Los filtros ya tienen event listeners en el HTML (oninput)
             // No es necesario agregar addEventListener aquí para evitar duplicados
@@ -20129,21 +20080,19 @@ function __deptUnitsStorageKey() {
             // ya están configurados con oninput en el HTML
             
             // Event listeners para filtros de mapas (no tienen oninput en HTML)
-            cgDeptEls('buildingMapFilter').forEach(function (buildingMapFilterEl) {
-                buildingMapFilterEl.addEventListener('input', updateBuildingMap);
-            });
+            const buildingMapFilterEl = document.getElementById('buildingMapFilter');
+            if (buildingMapFilterEl) buildingMapFilterEl.addEventListener('input', updateBuildingMap);
             
             // Nota: Los event listeners para estacionamientos ahora se manejan dinámicamente
             // en la función addParkingField() cuando se crean los campos
             
             updateAllUI();
-            cgDeptEls('exportExcelBtn').forEach(function (exportExcelEl) {
-                exportExcelEl.addEventListener('click', exportToExcel);
-            });
-            cgDeptEls('exportResidentsExcelBtn').forEach(function (exportResidentsEl) {
-                exportResidentsEl.addEventListener('click', exportResidentsDetailedReport);
-            });
-            cgDeptEls('syncCloudBtn').forEach(function (syncCloudEl) {
+            const exportExcelEl = document.getElementById('exportExcelBtn');
+            if (exportExcelEl) exportExcelEl.addEventListener('click', exportToExcel);
+            const exportResidentsEl = document.getElementById('exportResidentsExcelBtn');
+            if (exportResidentsEl) exportResidentsEl.addEventListener('click', exportResidentsDetailedReport);
+            const syncCloudEl = document.getElementById('syncCloudBtn');
+            if (syncCloudEl) {
                 syncCloudEl.addEventListener('click', async () => {
                     try {
                         await saveUnitsToCloud();
@@ -20152,7 +20101,7 @@ function __deptUnitsStorageKey() {
                         showNotification('error', '❌ Error al sincronizar');
                     }
                 });
-            });
+            }
 
             // #building: vista en el menú «Departamentos» (mismos datos wm815_*)
             const hash = (window.location.hash || '').replace(/^#/, '');
@@ -20728,6 +20677,9 @@ function __deptUnitsStorageKey() {
             console.log(`- Entregas c/ propietario: obra ${porcentajeEntregasObra}% (${unidadesConPropietarioAsignado}/${TOTAL_UNIDADES_EDIFICIO}) · registro ${porcentajeEntregasRegistro}% (${unidadesConPropietarioAsignado}/${n})`);
             console.log(`- E- no disponibles (inventario): ${estacionamientosAsignados}/${totalEstacionamientos} (${porcentajeEstacionamientos}%)`);
             
+            const progressBar = document.getElementById('statsProgressBar');
+            const progressText = document.getElementById('statsProgressText');
+            const progressRegLine = document.getElementById('statsProgressRegistryLine');
             const paintDeptStatsBars = function (pOcc, pPark, pDel) {
                 const rows = [
                     ['statsProgressBar', pOcc],
@@ -20736,10 +20688,10 @@ function __deptUnitsStorageKey() {
                 ];
                 const apply = function () {
                     rows.forEach(function (row) {
-                        cgDeptEls(row[0]).forEach(function (el) {
-                            const p = Math.max(0, Math.min(100, Number(row[1]) || 0));
-                            el.style.width = p + '%';
-                        });
+                        const el = document.getElementById(row[0]);
+                        if (!el) return;
+                        const p = Math.max(0, Math.min(100, Number(row[1]) || 0));
+                        el.style.width = p + '%';
                     });
                 };
                 apply();
@@ -20748,54 +20700,66 @@ function __deptUnitsStorageKey() {
                     requestAnimationFrame(apply);
                 });
             };
-            cgDeptEls('statsProgressBar').forEach(function (el) {
-                el.textContent = '';
-            });
-            console.log(`✅ Barra ocupación (obra) ${porcentajeOcupacionObra}%`);
-            cgDeptSetTextAll(
-                'statsProgressText',
-                `${porcentajeOcupacionObra}% — Ocupación efectiva sobre total edificio (${unidadesEfectivamenteOcupadas}/${TOTAL_UNIDADES_EDIFICIO})`
-            );
-            cgDeptSetTextAll(
-                'statsProgressRegistryLine',
-                n > 0
+            if (progressBar) {
+                progressBar.textContent = '';
+                console.log(`✅ Barra ocupación (obra) ${porcentajeOcupacionObra}%`);
+            }
+            if (progressText) {
+                progressText.textContent = `${porcentajeOcupacionObra}% — Ocupación efectiva sobre total edificio (${unidadesEfectivamenteOcupadas}/${TOTAL_UNIDADES_EDIFICIO})`;
+            }
+            if (progressRegLine) {
+                progressRegLine.textContent = n > 0
                     ? `Sobre unidades en registro: ${porcentajeOcupacionRegistro}% (${unidadesEfectivamenteOcupadas}/${n} filas cargadas)`
-                    : 'Sobre registro: sin filas cargadas (importe o cree unidades para ver % registro).'
-            );
-            cgDeptEls('statsParkingBar').forEach(function (el) {
-                el.textContent = '';
-            });
-            console.log(`✅ Barra estacionamientos actualizada a ${porcentajeEstacionamientos}%`);
-            cgDeptSetTextAll(
-                'statsParkingText',
-                `${porcentajeEstacionamientos}% — Cupos no disponibles (inventario E-): ${estacionamientosAsignados}/${totalEstacionamientos}`
-            );
-            cgDeptSetTextAll(
-                'statsParkingDetailLine',
-                pkStatsFromConserjeria
-                    ? `Asignados en mapa: ${pkAsignadosMapa} · Ref. arriendo: ${pkRefArriendo} · Disponibles: ${pkDisponibles}`
-                    : 'Conteo por campos de unidad (sin datos de mapa/conserjería en esta sesión).'
-            );
-            cgDeptEls('statsDeliveryBar').forEach(function (el) {
-                el.textContent = '';
-            });
-            console.log(`✅ Barra entregas (obra) ${porcentajeEntregasObra}%`);
+                    : 'Sobre registro: sin filas cargadas (importe o cree unidades para ver % registro).';
+            }
+            
+            // Actualizar barra de estacionamientos
+            const parkingBar = document.getElementById('statsParkingBar');
+            const parkingText = document.getElementById('statsParkingText');
+            const parkingDetailLine = document.getElementById('statsParkingDetailLine');
+            if (parkingBar) {
+                parkingBar.textContent = '';
+                console.log(`✅ Barra estacionamientos actualizada a ${porcentajeEstacionamientos}%`);
+            }
+            if (parkingText) {
+                parkingText.textContent = `${porcentajeEstacionamientos}% — Cupos no disponibles (inventario E-): ${estacionamientosAsignados}/${totalEstacionamientos}`;
+            }
+            if (parkingDetailLine) {
+                if (pkStatsFromConserjeria) {
+                    parkingDetailLine.textContent = `Asignados en mapa: ${pkAsignadosMapa} · Ref. arriendo: ${pkRefArriendo} · Disponibles: ${pkDisponibles}`;
+                } else {
+                    parkingDetailLine.textContent = 'Conteo por campos de unidad (sin datos de mapa/conserjería en esta sesión).';
+                }
+            }
+            
+            // Actualizar barra de entregas con propietario
+            const deliveryBar = document.getElementById('statsDeliveryBar');
+            const deliveryText = document.getElementById('statsDeliveryText');
+            const deliveryRegLine = document.getElementById('statsDeliveryRegistryLine');
+            if (deliveryBar) {
+                deliveryBar.textContent = '';
+                console.log(`✅ Barra entregas (obra) ${porcentajeEntregasObra}%`);
+            }
             paintDeptStatsBars(porcentajeOcupacionObra, porcentajeEstacionamientos, porcentajeEntregasObra);
-            cgDeptSetTextAll(
-                'statsDeliveryText',
-                `${porcentajeEntregasObra}% — Unidades con propietario sobre total edificio (${unidadesConPropietarioAsignado}/${TOTAL_UNIDADES_EDIFICIO})`
-            );
-            cgDeptSetTextAll(
-                'statsDeliveryRegistryLine',
-                n > 0
+            if (deliveryText) {
+                deliveryText.textContent = `${porcentajeEntregasObra}% — Unidades con propietario sobre total edificio (${unidadesConPropietarioAsignado}/${TOTAL_UNIDADES_EDIFICIO})`;
+            }
+            if (deliveryRegLine) {
+                deliveryRegLine.textContent = n > 0
                     ? `Sobre unidades en registro: ${porcentajeEntregasRegistro}% (${unidadesConPropietarioAsignado}/${n} filas cargadas)`
-                    : 'Sobre registro: sin filas cargadas.'
-            );
-            cgDeptSetTextAll('statsOwnersCount', String(totalPropietarios));
-            cgDeptSetTextAll('statsParkingCount', String(estacionamientosAsignados));
-            cgDeptSetTextAll('statsParkingTotal', String(totalEstacionamientos));
+                    : 'Sobre registro: sin filas cargadas.';
+            }
+            
+            // Actualizar contadores
+            const ownersCount = document.getElementById('statsOwnersCount');
+            const parkingCount = document.getElementById('statsParkingCount');
+            const parkingTotalSpan = document.getElementById('statsParkingTotal');
+            if (ownersCount) ownersCount.textContent = totalPropietarios;
+            if (parkingCount) parkingCount.textContent = estacionamientosAsignados;
+            if (parkingTotalSpan) parkingTotalSpan.textContent = String(totalEstacionamientos);
 
-            cgDeptEls('statsDetailBreakdown').forEach(function (detailBreakdown) {
+            const detailBreakdown = document.getElementById('statsDetailBreakdown');
+            if (detailBreakdown) {
                 detailBreakdown.textContent = '';
                 function addBreakdownPart(label, value, strong) {
                     if (detailBreakdown.firstChild) detailBreakdown.appendChild(document.createTextNode(' \u00a0|\u00a0 '));
@@ -20822,7 +20786,7 @@ function __deptUnitsStorageKey() {
                     warnSp.textContent = '\u26a0\ufe0f ' + unidadesConMultiplesPropietarios + ' unidades con m\u00faltiples propietarios';
                     detailBreakdown.appendChild(warnSp);
                 }
-            });
+            }
             
             // Actualizar estadísticas detalladas
             // Conteo real de personas que habitan en el edificio:
@@ -20876,31 +20840,43 @@ function __deptUnitsStorageKey() {
                 'statsDeliveryRate': deliveryRateObra + '%'
             };
             
-            Object.entries(statsElements).forEach(function (ent) {
-                cgDeptSetTextAll(ent[0], ent[1]);
+            Object.entries(statsElements).forEach(([id, value]) => {
+                const element = document.getElementById(id);
+                if (element) element.textContent = value;
             });
-            cgDeptSetTextAll(
-                'statsOccupancyRateRegistro',
-                n > 0
+            const occRegEl = document.getElementById('statsOccupancyRateRegistro');
+            const delRegEl = document.getElementById('statsDeliveryRateRegistro');
+            if (occRegEl) {
+                occRegEl.textContent = n > 0
                     ? `Registro (${n}): ${porcentajeOcupacionRegistro}% · ${unidadesEfectivamenteOcupadas}/${n} ocupadas`
-                    : 'Registro: 0 filas'
-            );
-            cgDeptSetTextAll(
-                'statsDeliveryRateRegistro',
-                n > 0
+                    : 'Registro: 0 filas';
+            }
+            if (delRegEl) {
+                delRegEl.textContent = n > 0
                     ? `Registro (${n}): ${porcentajeEntregasRegistro}% · ${unidadesConPropietarioAsignado}/${n} con propietario`
-                    : 'Registro: 0 filas'
-            );
+                    : 'Registro: 0 filas';
+            }
 
             var kpiU = typeof window.__cgFabricaDeptKpiUnidades === "function" ? window.__cgFabricaDeptKpiUnidades() : TOTAL_UNIDADES_EDIFICIO;
-            cgDeptSetTextAll("deptStatsKpiOcupacionTitulo", "Ocupación efectiva · KPI obra (" + kpiU + " unidades)");
-            cgDeptSetTextAll("deptStatsKpiEntregasTitulo", "Entregas con propietario · KPI obra (" + kpiU + " unidades)");
-            cgDeptSetTextAll("deptStatsSummaryKpiUnidades", String(kpiU));
-            cgDeptSetTextAll("deptStatsCardOccLabel", "Ocupación efectiva (obra " + kpiU + ")");
-            cgDeptSetTextAll("deptStatsCardDelLabel", "Entregas c/ propietario (obra " + kpiU + ")");
-            cgDeptSetTextAll("statsUnitsWithOwners", String(unidadesEfectivamenteOcupadas));
-            cgDeptSetTextAll("statsTotalIndividualOwners", String(totalPropietarios));
-            cgDeptSetTextAll("statsMultipleOwnersUnits", String(unidadesConMultiplesPropietarios));
+            var tOccTit = document.getElementById("deptStatsKpiOcupacionTitulo");
+            if (tOccTit) tOccTit.textContent = "Ocupación efectiva · KPI obra (" + kpiU + " unidades)";
+            var tEntTit = document.getElementById("deptStatsKpiEntregasTitulo");
+            if (tEntTit) tEntTit.textContent = "Entregas con propietario · KPI obra (" + kpiU + " unidades)";
+            var sumKpi = document.getElementById("deptStatsSummaryKpiUnidades");
+            if (sumKpi) sumKpi.textContent = String(kpiU);
+            var cOcc = document.getElementById("deptStatsCardOccLabel");
+            if (cOcc) cOcc.textContent = "Ocupación efectiva (obra " + kpiU + ")";
+            var cDel = document.getElementById("deptStatsCardDelLabel");
+            if (cDel) cDel.textContent = "Entregas c/ propietario (obra " + kpiU + ")";
+            
+            // Actualizar elementos de la nueva sección de relación propietarios vs unidades
+            const unitsWithOwnersElement = document.getElementById('statsUnitsWithOwners');
+            const totalIndividualOwnersElement = document.getElementById('statsTotalIndividualOwners');
+            const multipleOwnersUnitsElement = document.getElementById('statsMultipleOwnersUnits');
+            
+            if (unitsWithOwnersElement) unitsWithOwnersElement.textContent = unidadesEfectivamenteOcupadas;
+            if (totalIndividualOwnersElement) totalIndividualOwnersElement.textContent = totalPropietarios;
+            if (multipleOwnersUnitsElement) multipleOwnersUnitsElement.textContent = unidadesConMultiplesPropietarios;
 
             } catch (error) {
                 console.error('❌ Error calculando estadísticas:', error);
@@ -20953,10 +20929,10 @@ function __deptUnitsStorageKey() {
                         </div>
                     </div>
                     ` : ''}
-                    <textarea id="noteTextarea" class="form-input" rows="4" placeholder="Escribe tu nota aquí..." style="width: 100%; margin-bottom: 15px;">${__h(currentNote)}</textarea>
+                    <textarea data-cg-dept-note-ui="textarea" class="form-input" rows="4" placeholder="Escribe tu nota aquí..." style="width: 100%; margin-bottom: 15px;">${__h(currentNote)}</textarea>
                     <div style="margin-bottom: 12px;">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="checkbox" id="rentalContractCheckbox" ${unit.hasRentalContract ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer;">
+                            <input type="checkbox" data-cg-dept-note-ui="rental-contract" ${unit.hasRentalContract ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer;">
                             <span style="color: var(--secondary-text); font-size:0.9rem;">📄 Contrato de arriendo</span>
                         </label>
                         <small style="color: var(--secondary-text); font-size: 0.8rem; display: block; margin-top: 4px; margin-left: 26px;">
@@ -20964,32 +20940,32 @@ function __deptUnitsStorageKey() {
                         </small>
                     </div>
                     <div style="margin-bottom: 12px;">
-                        <label for="rentalParkingInput" style="display:block; margin-bottom:4px; color: var(--secondary-text); font-size:0.9rem;">
+                        <span style="display:block; margin-bottom:4px; color: var(--secondary-text); font-size:0.9rem;">
                             🚗 Estacionamiento de arriendo (opcional)
-                        </label>
+                        </span>
                         <div style="display: flex; gap: 8px; align-items: center;">
-                            <input id="rentalParkingInput" class="form-input" placeholder="Ej: E-101" value="${unit.rentalParkingNumber || ''}" style="flex: 1;">
-                            ${unit.rentalParkingNumber ? `<button id="clearRentalParkingBtn" class="btn btn-sm btn-danger" style="white-space: nowrap;" title="Eliminar estacionamiento de arriendo">🗑️</button>` : ''}
+                            <input data-cg-dept-note-ui="rental-parking" class="form-input" placeholder="Ej: E-101" value="${unit.rentalParkingNumber || ''}" style="flex: 1;" aria-label="Estacionamiento de arriendo (opcional)">
+                            ${unit.rentalParkingNumber ? `<button type="button" data-cg-dept-note-ui="clear-rental" class="btn btn-sm btn-danger" style="white-space: nowrap;" title="Eliminar estacionamiento de arriendo">🗑️</button>` : ''}
                         </div>
                         <small style="color: var(--secondary-text); font-size: 0.8rem;">
                             Usa un número válido del mapa (31-58 o 65-201). Se mostrará en el mapa con color especial.
                         </small>
                     </div>
                     <div style="display: flex; gap: 10px; justify-content: center;">
-                        <button id="saveNoteBtn" class="btn btn-primary">💾 Guardar</button>
-                        <button id="cancelNoteBtn" class="btn btn-secondary">❌ Cancelar</button>
+                        <button type="button" data-cg-dept-note-ui="save" class="btn btn-primary">💾 Guardar</button>
+                        <button type="button" data-cg-dept-note-ui="cancel" class="btn btn-secondary">❌ Cancelar</button>
                     </div>
                 </div>
             `;
             document.body.appendChild(modal);
             
             // Enfocar el textarea
-            const textarea = modal.querySelector('#noteTextarea');
+            const textarea = modal.querySelector('[data-cg-dept-note-ui="textarea"]');
             textarea.focus();
             textarea.setSelectionRange(textarea.value.length, textarea.value.length);
             
-            const rentalParkingInput = modal.querySelector('#rentalParkingInput');
-            const clearRentalParkingBtn = modal.querySelector('#clearRentalParkingBtn');
+            const rentalParkingInput = modal.querySelector('[data-cg-dept-note-ui="rental-parking"]');
+            const clearRentalParkingBtn = modal.querySelector('[data-cg-dept-note-ui="clear-rental"]');
             
             // Variable para rastrear si el usuario quiere eliminar explícitamente el estacionamiento
             let shouldClearRentalParking = false;
@@ -21004,13 +20980,13 @@ function __deptUnitsStorageKey() {
             }
             
             // Eventos
-            modal.querySelector('#saveNoteBtn').onclick = async () => {
+            modal.querySelector('[data-cg-dept-note-ui="save"]').onclick = async () => {
                 const prevContract = !!unit.hasRentalContract;
                 const prevRentalParking = (unit.rentalParkingNumber || '').trim();
 
                 const newNote = textarea.value.trim();
                 const rentalParking = rentalParkingInput.value.trim();
-                const rentalContractCheckbox = modal.querySelector('#rentalContractCheckbox');
+                const rentalContractCheckbox = modal.querySelector('[data-cg-dept-note-ui="rental-contract"]');
                 const hasRentalContract = rentalContractCheckbox ? rentalContractCheckbox.checked : false;
                 
                 // Validar formato básico del estacionamiento de arriendo (si se ingresó)
@@ -21079,7 +21055,7 @@ function __deptUnitsStorageKey() {
                 }
             };
             
-            modal.querySelector('#cancelNoteBtn').onclick = () => {
+            modal.querySelector('[data-cg-dept-note-ui="cancel"]').onclick = () => {
                 modal.remove();
             };
             
@@ -21178,13 +21154,7 @@ function __deptUnitsStorageKey() {
     if (!host) return;
     if (mapaSolo) host.classList.add("cg-dept-host--mapa-solo");
     else host.classList.remove("cg-dept-host--mapa-solo");
-    var deptScope = hostId.indexOf("mapa") >= 0 ? "mapa" : "main";
-    host.setAttribute("data-cg-dept-scope", deptScope);
-    var deptHtmlRaw = CG_DEPT_INNER_HTML;
-    if (typeof window.__cgDeptScopeTemplateHtml === "function") {
-      deptHtmlRaw = window.__cgDeptScopeTemplateHtml(deptHtmlRaw, deptScope);
-    }
-    host.innerHTML = deptHtmlRaw;
+    host.innerHTML = CG_DEPT_INNER_HTML;
     if (typeof __cgDeptRunAfterInject === "function") {
       await __cgDeptRunAfterInject();
     }
@@ -21194,7 +21164,7 @@ function __deptUnitsStorageKey() {
       host.querySelectorAll(".tab-content").forEach(function (t) {
         t.classList.remove("active");
       });
-      var bEl = host.querySelector("#cgdept--" + deptScope + "--building");
+      var bEl = host.querySelector("#building");
       if (bEl) bEl.classList.add("active");
       if (typeof updateBuildingMap === "function") updateBuildingMap();
     }
@@ -26677,20 +26647,17 @@ function __deptUnitsStorageKey() {
     A.syncParkingSlotsFromBuilding();
     if (typeof G.attachVirtualAdminDepartment === "function") G.attachVirtualAdminDepartment();
 
-    var cvSync = UI.getCurrentView ? UI.getCurrentView() : null;
-    if (cvSync === "departamentos" || cvSync === "mapaEdificio") {
-      if (typeof window.__cgDeptRefreshEmbeddedUI === "function") {
-        try {
-          window.__cgDeptRefreshEmbeddedUI();
-        } catch (eRf) {}
-      }
+    /* Alinear appState del módulo embebido con el mismo LS usado arriba y repintar tablas/mapa/notas (silent respeta edición en curso). */
+    try {
       if (typeof window.loadUnitsFromCloud === "function") {
         window.loadUnitsFromCloud(true).catch(function () {});
       }
+    } catch (eLdU) {}
+    try {
       if (typeof window.loadFormerResidentsFromCloud === "function") {
         window.loadFormerResidentsFromCloud(true).catch(function () {});
       }
-    }
+    } catch (eLdF) {}
   };
 
   A.initDepartamentosEmbeddedModule = function () {
@@ -26704,12 +26671,6 @@ function __deptUnitsStorageKey() {
         return;
       }
       A.syncDepartamentosModuleFromLocal();
-      if (typeof window.loadUnitsFromCloud === "function") {
-        window.loadUnitsFromCloud(true).catch(function () {});
-      }
-      if (typeof window.loadFormerResidentsFromCloud === "function") {
-        window.loadFormerResidentsFromCloud(true).catch(function () {});
-      }
     }, 3000);
   };
 
@@ -36561,24 +36522,19 @@ function __deptUnitsStorageKey() {
             return;
           }
         }
-        var deptFilterSuffix =
-          el.id && el.id.indexOf("cgdept--") === 0 ? el.id.split("--").pop() : null;
-        if (deptFilterSuffix === "unitsFilter" && typeof window.updateUnitsTable === "function") {
+        if (el.id === "unitsFilter" && typeof window.updateUnitsTable === "function") {
           window.updateUnitsTable();
           return;
         }
-        if (deptFilterSuffix === "residentsFilter" && typeof window.updateResidentsTable === "function") {
+        if (el.id === "residentsFilter" && typeof window.updateResidentsTable === "function") {
           window.updateResidentsTable();
           return;
         }
-        if (deptFilterSuffix === "ownersFilter" && typeof window.updateOwnersTable === "function") {
+        if (el.id === "ownersFilter" && typeof window.updateOwnersTable === "function") {
           window.updateOwnersTable();
           return;
         }
-        if (
-          deptFilterSuffix === "formerResidentsFilter" &&
-          typeof window.updateFormerResidentsTable === "function"
-        ) {
+        if (el.id === "formerResidentsFilter" && typeof window.updateFormerResidentsTable === "function") {
           window.updateFormerResidentsTable();
         }
       },
@@ -36628,16 +36584,11 @@ function __deptUnitsStorageKey() {
           if (CG_ACTIONS.renderAdmin) CG_ACTIONS.renderAdmin("turnos");
           return;
         }
-        var deptChSuffix =
-          el.id && el.id.indexOf("cgdept--") === 0 ? el.id.split("--").pop() : null;
-        if (deptChSuffix === "importJsonFile" && typeof window.importFromJsonFile === "function") {
+        if (el.id === "importJsonFile" && typeof window.importFromJsonFile === "function") {
           window.importFromJsonFile(e);
           return;
         }
-        if (
-          deptChSuffix === "selectAllFormerResidents" &&
-          typeof window.toggleSelectAllFormerResidents === "function"
-        ) {
+        if (el.id === "selectAllFormerResidents" && typeof window.toggleSelectAllFormerResidents === "function") {
           window.toggleSelectAllFormerResidents();
           return;
         }
