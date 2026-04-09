@@ -1891,9 +1891,8 @@
                 remoteRevKnown && typeof metaRev === "number" && metaRev === metaRev ? Math.floor(metaRev) : 0;
               var localRev = __cgReadLocalStaffChatRevFromLs(LS);
 
-              if (remoteRevKnown && remoteRev < localRev) {
-                return;
-              }
+              /* No hacer return aquí si remoteRev < localRev: se ignoraban mensajes del otro equipo (sync
+               * bidireccional roto). El meta rev puede ir desfasado; mergeStaffChatMessages une por id. */
 
               /* Si el remoto trae revisión mayor, el documento en nube manda (incl. vaciar chat a propósito). */
               if (remoteRevKnown && remoteRev > localRev) {
