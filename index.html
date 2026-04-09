@@ -33744,6 +33744,92 @@ function __deptUnitsStorageKey() {
     G.toast("Respaldo descargado. Guárdelo en un lugar seguro.");
   };
 
+  /**
+   * Descarga todos los documentos KV desde Firestore (equivalente a rehidratar la colección en local).
+   * Útil cuando otro equipo registró datos y la UI aún no los muestra (listener retrasado o caché).
+   */
+  A.adminForceCloudPullAll = function () {
+    var cu = G.currentUser();
+    if (!G.userIsAdmin(cu)) {
+      G.toast("Solo el administrador puede forzar la descarga completa desde el servidor.", "error");
+      return;
+    }
+    var gh = typeof G.getFirestoreSyncHealth === "function" ? G.getFirestoreSyncHealth() : null;
+    if (!gh || gh.cloudSyncEnabled !== true) {
+      G.toast(
+        "La sincronización en la nube no está activa. Sin Firestore, los datos de otros equipos no pueden traerse aquí; revise la configuración o use un respaldo JSON.",
+        "warn"
+      );
+      return;
+    }
+    if (typeof G.cloudPullAllOnce !== "function") {
+      G.toast("Función de descarga remota no disponible en esta página.", "error");
+      return;
+    }
+    var btn = document.getElementById("btn-admin-force-cloud-pull");
+    var prevHtml = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "<i class=\"fa-solid fa-spinner fa-spin\"></i> Descargando…";
+    }
+    try {
+      if (typeof G.flushPendingCloudWritesNow === "function") G.flushPendingCloudWritesNow();
+    } catch (eFl) {}
+    G.cloudPullAllOnce()
+      .then(function () {
+        if (typeof window.__cgRefreshFirestoreSyncBanner === "function") window.__cgRefreshFirestoreSyncBanner();
+        G.toast("Datos del servidor aplicados en este navegador. Revise el panel, visitas, novedades y demás módulos.", "success");
+        try {
+          if (typeof G.scheduleValidateCurrentSessionPermissions === "function") {
+            G.scheduleValidateCurrentSessionPermissions();
+          }
+        } catch (eVal) {}
+        try {
+          var cv = typeof getCurrentView === "function" ? getCurrentView() : null;
+          if (cv === "dashboard" && typeof updateDashboardChartsSummaryAndActivity === "function") {
+            updateDashboardChartsSummaryAndActivity();
+          } else if (cv === "visitas" && typeof A.renderVisitas === "function") {
+            A.renderVisitas();
+          } else if (cv === "novedades" && typeof A.renderNovedades === "function") {
+            A.renderNovedades();
+          } else if (cv === "encomiendas" && typeof A.renderEncomiendas === "function") {
+            A.renderEncomiendas();
+          } else if (cv === "reservas" && typeof A.renderReservas === "function") {
+            A.renderReservas();
+          } else if (cv === "proveedores" && typeof A.renderProveedores === "function") {
+            A.renderProveedores();
+          } else if (cv === "bodegas" && typeof A.renderBodegas === "function") {
+            A.renderBodegas();
+          } else if (cv === "estacionamientos" && typeof A.syncParkingSlotsFromBuilding === "function" && typeof A.renderParkingGrid === "function") {
+            A.syncParkingSlotsFromBuilding();
+            A.renderParkingGrid();
+          } else if (cv === "admin" && typeof A.renderAdmin === "function") {
+            var at = document.querySelector(".admin-tab.active");
+            var ak = at && at.getAttribute("data-adm");
+            if (ak) A.renderAdmin(ak);
+          }
+          renderNav();
+          renderTopUser();
+        } catch (eRf) {}
+      })
+      .catch(function (err) {
+        console.warn("[CG] adminForceCloudPullAll", err);
+        var code = err && err.code != null ? String(err.code) : "";
+        G.toast(
+          code === "permission-denied"
+            ? "Firestore denegó la descarga (permission-denied). Revise reglas y autenticación."
+            : "No se pudo descargar desde el servidor. Compruebe la red y la consola (F12).",
+          "error"
+        );
+      })
+      .finally(function () {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = prevHtml || "<i class=\"fa-solid fa-cloud-arrow-down\"></i> Descargar todo desde la nube ahora";
+        }
+      });
+  };
+
   A.backupReminderIntervalSave = function () {
     var cu = G.currentUser();
     if (!G.userIsAdmin(cu)) return;
@@ -34539,8 +34625,16 @@ function __deptUnitsStorageKey() {
         "<p class=\"page-desc\" style=\"margin:0.35rem 0 0;font-size:0.8rem\">Al abrir cualquier pestaña de administración se muestra un aviso (como máximo una vez al día natural) si ya pasó el plazo desde el último respaldo descargado.</p></div>" +
         "<p class=\"page-desc\" style=\"margin:0.85rem 0 0;font-size:0.78rem;color:var(--danger-color)\"><strong>Restaurar todo</strong> borra el almacenamiento local de la app y lo sustituye por el archivo. <strong>Importar módulos</strong> solo sobrescribe las claves de los grupos que elija; el resto no se toca. Con nube/Firestore, valide coherencia tras cualquier restauración.</p>" +
         "</div></div>";
+      var syncCloudCard =
+        "<div class=\"card\" style=\"margin-bottom:1rem;border-color:#93c5fd\"><div class=\"card-h\"><h3>Sincronización: traer todo desde el servidor</h3></div><div class=\"card-b\">" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Si otro conserje o equipo ya guardó visitas, novedades, turnos, encomiendas, etc., y usted <strong>no</strong> los ve en esta sesión, pulse el botón para descargar de nuevo <strong>todos</strong> los datos desde Firestore a este navegador. " +
+        "No filtra por persona: se alinean todos los módulos con la nube.</p>" +
+        "<button type=\"button\" class=\"btn btn-primary\" id=\"btn-admin-force-cloud-pull\" data-cg-act=\"adminForceCloudPullAll\"><i class=\"fa-solid fa-cloud-arrow-down\"></i> Descargar todo desde la nube ahora</button>" +
+        "<p class=\"page-desc\" style=\"margin:0.55rem 0 0;font-size:0.8rem\">Requiere Firestore activo. Si falla, revise el aviso de sincronización arriba o la consola (F12).</p>" +
+        "</div></div>";
       p.innerHTML =
         (typeof G.getPersistenceDiagnosticsPanelHtml === "function" ? G.getPersistenceDiagnosticsPanelHtml() : "") +
+        syncCloudCard +
         "<div class=\"card\"><div class=\"card-h\"><h3>Rango estacionamientos (códigos E-)</h3></div><div class=\"card-b\">" +
         "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Los valores <em>Desde</em>/<em>Hasta</em> son numéricos; en el mapa se crean como <strong>E-1</strong> … <strong>E-</strong><em>n</em> si aún no existen.</p>" +
         "<div class=\"toolbar\" style=\"gap:1rem\"><label>Desde <input type=\"number\" id=\"cfg-pk-a\" value=\"" + G.escapeAttr(String(pkFrom)) + "\" /></label>" +
