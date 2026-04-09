@@ -1352,6 +1352,149 @@
         return out2;
       }
 
+      /**
+       * Arrays de negocio (encomiendas, reservas, etc.): fusión por id al aplicar snapshot remoto.
+       * Política alineada con novedades/shiftLogs: respeta __cgPendingDeleted[kvKey]; si el remoto trae filas,
+       * los ids solo-locales no presentes en el snapshot remoto se omiten salvo outbox (subida en curso).
+       * Conflicto mismo id: gana mayor rowMs; empate → copia local (segunda ingesta).
+       */
+      function mergeFabricaKvArrayById(kvKey, remoteArr, localArr, rowMs) {
+        if (!Array.isArray(remoteArr)) remoteArr = [];
+        if (!Array.isArray(localArr)) localArr = [];
+        var pendDel = __cgReadPendingDeletedIdsForKey(kvKey);
+        var remoteIds = Object.create(null);
+        var ix, row;
+        for (ix = 0; ix < remoteArr.length; ix++) {
+          row = remoteArr[ix];
+          if (row && row.id != null && String(row.id) !== "") remoteIds[String(row.id)] = true;
+        }
+        var remoteNonEmpty = remoteArr.length > 0;
+        var outboxPending =
+          typeof window.__cgFsOutboxHasPendingWrite === "function" &&
+          window.__cgFsOutboxHasPendingWrite(kvKey);
+        var byId = Object.create(null);
+        function ingestFab(arr, fromLocal) {
+          var j, x, id2, ex, mx, mcur;
+          for (j = 0; j < arr.length; j++) {
+            x = arr[j];
+            if (!x || x.id == null || String(x.id) === "") continue;
+            id2 = String(x.id);
+            if (pendDel[id2]) continue;
+            if (fromLocal && remoteNonEmpty && !remoteIds[id2] && !outboxPending) continue;
+            ex = byId[id2];
+            if (!ex) {
+              byId[id2] = x;
+              continue;
+            }
+            mx = rowMs(x);
+            mcur = rowMs(ex);
+            if (mx > mcur) byId[id2] = x;
+            else if (mx === mcur && fromLocal) byId[id2] = x;
+          }
+        }
+        ingestFab(remoteArr, false);
+        ingestFab(localArr, true);
+        var outFab = [];
+        var kFab;
+        for (kFab in byId) {
+          if (Object.prototype.hasOwnProperty.call(byId, kFab)) outFab.push(byId[kFab]);
+        }
+        return outFab;
+      }
+
+      /** Bitácora panel: unión por id (misma entrada no duplicar; orden por fecha desc.; tope 200). */
+      function mergeConserjeActivityLog(remoteArr, localArr) {
+        if (!Array.isArray(remoteArr)) remoteArr = [];
+        if (!Array.isArray(localArr)) localArr = [];
+        function atMsAct(x) {
+          if (!x || x.at == null) return 0;
+          var t = new Date(x.at).getTime();
+          return t !== t ? 0 : t;
+        }
+        var byIdAct = Object.create(null);
+        function ingestAct(arr) {
+          var j, x, id2;
+          for (j = 0; j < arr.length; j++) {
+            x = arr[j];
+            if (!x || x.id == null || String(x.id) === "") continue;
+            id2 = String(x.id);
+            if (!byIdAct[id2] || atMsAct(x) >= atMsAct(byIdAct[id2])) byIdAct[id2] = x;
+          }
+        }
+        ingestAct(remoteArr);
+        ingestAct(localArr);
+        var outAct = [];
+        var kAct;
+        for (kAct in byIdAct) {
+          if (Object.prototype.hasOwnProperty.call(byIdAct, kAct)) outAct.push(byIdAct[kAct]);
+        }
+        outAct.sort(function (a, b) {
+          return atMsAct(b) - atMsAct(a);
+        });
+        if (outAct.length > 200) outAct.length = 200;
+        return outAct;
+      }
+
+      function __cgFabricaEncMs(e) {
+        if (!e) return 0;
+        var m = 0;
+        function bump(iso) {
+          if (!iso) return;
+          var t = new Date(iso).getTime();
+          if (isFinite(t) && t > m) m = t;
+        }
+        bump(e.receivedAt);
+        bump(e.entregadoAt);
+        bump(e.notifiedInAt);
+        bump(e.notifiedOutAt);
+        if (typeof e.updatedAt === "number" && isFinite(e.updatedAt)) m = Math.max(m, e.updatedAt);
+        return m;
+      }
+      function __cgFabricaReservaMs(r) {
+        if (!r) return 0;
+        var a = r.start ? new Date(r.start).getTime() : 0;
+        var b = r.end ? new Date(r.end).getTime() : 0;
+        if (!isFinite(a)) a = 0;
+        if (!isFinite(b)) b = 0;
+        return Math.max(a, b);
+      }
+      function __cgFabricaProveedorMs(p) {
+        if (!p) return 0;
+        if (typeof p.updatedAt === "number" && isFinite(p.updatedAt)) return p.updatedAt;
+        return 0;
+      }
+      function __cgFabricaJsonLenMs(o) {
+        try {
+          return JSON.stringify(o).length;
+        } catch (eJ) {
+          return 0;
+        }
+      }
+      function __cgFabricaBuildingResidentMs(r) {
+        if (!r) return 0;
+        if (typeof r._deptSyncMs === "number" && isFinite(r._deptSyncMs)) return r._deptSyncMs;
+        if (r.fechaRegistro) {
+          var t = new Date(r.fechaRegistro).getTime();
+          if (isFinite(t)) return t;
+        }
+        return __cgFabricaJsonLenMs(r);
+      }
+      function __cgFabricaDeptRowMs(d) {
+        if (!d) return 0;
+        if (typeof d._deptSyncMs === "number" && isFinite(d._deptSyncMs)) return d._deptSyncMs;
+        return __cgFabricaJsonLenMs(d);
+      }
+      function __cgFabricaParkingSlotMs(s) {
+        if (!s) return 0;
+        if (typeof s.updatedAt === "number" && isFinite(s.updatedAt)) return s.updatedAt;
+        return __cgFabricaJsonLenMs(s);
+      }
+      function __cgFabricaBodegaMs(b) {
+        if (!b) return 0;
+        if (typeof b.updatedAt === "number" && isFinite(b.updatedAt)) return b.updatedAt;
+        return __cgFabricaJsonLenMs(b);
+      }
+
       /** Metadato numérico en el doc Firestore `staffChatMessages` (no es una clave KV aparte). */
       function __cgParseFirestoreStaffChatRev(docData) {
         if (!docData || typeof docData !== "object") return { n: 0, known: false };
@@ -1976,8 +2119,20 @@
           var __cgDeptKvF =
             typeof window.__cgFabricaDeptKvFormer === "function" ? window.__cgFabricaDeptKvFormer() : "wm815_former_residents";
           var __cgDeptKvMerge = shortKey === __cgDeptKvU || shortKey === __cgDeptKvF;
-          /* novedades, visits, shiftLogs, wm815_*: siempre pasar al merge aunque haya push en vuelo; si no, se pierden
+          /* novedades, visits, shiftLogs, wm815_*, encomiendas/reservas/…: siempre pasar al merge aunque haya push en vuelo; si no, se pierden
            * cambios remotos (otros equipos) o la fusión con memoria local durante la subida. */
+          var __cgFabricaConcurrentMergeKey =
+            shortKey === "encomiendas" ||
+            shortKey === "reservas" ||
+            shortKey === "proveedores" ||
+            shortKey === "bodegas" ||
+            shortKey === "departments" ||
+            shortKey === "parkingSlots" ||
+            shortKey === "buildingUnits" ||
+            shortKey === "buildingResidents" ||
+            shortKey === "buildingFormerResidents" ||
+            shortKey === "buildingParking" ||
+            shortKey === "conserjeActivityLog";
           if (
             shortKey !== "staffChatMessages" &&
             shortKey !== "novedades" &&
@@ -1995,6 +2150,7 @@
             shortKey !== "dashScheduledAlerts" &&
             shortKey !== "staffBirthdays" &&
             !__cgDeptKvMerge &&
+            !__cgFabricaConcurrentMergeKey &&
             typeof curMem0 === "string" &&
             curMem0 !== next &&
             (inflC > 0 || writeTimerPending)
@@ -2223,6 +2379,259 @@
             }
           }
 
+          if (shortKey === "encomiendas") {
+            try {
+              var prevStrEnc = window.__cgFsMem[shortKey];
+              if (typeof prevStrEnc !== "string" || !prevStrEnc) {
+                prevStrEnc = tryLocalStorageGet(full);
+              }
+              var locEnc = [];
+              if (typeof prevStrEnc === "string" && prevStrEnc) {
+                var locParsedEnc = JSON.parse(prevStrEnc);
+                if (Array.isArray(locParsedEnc)) locEnc = locParsedEnc;
+              }
+              var remEnc = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remEnc)) {
+                next = JSON.stringify(mergeFabricaKvArrayById("encomiendas", remEnc, locEnc, __cgFabricaEncMs));
+              }
+            } catch (eEncMerge) {
+              console.warn("[CG][Firestore] merge encomiendas falló:", eEncMerge && eEncMerge.message ? eEncMerge.message : eEncMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
+          if (shortKey === "reservas") {
+            try {
+              var prevStrRes = window.__cgFsMem[shortKey];
+              if (typeof prevStrRes !== "string" || !prevStrRes) {
+                prevStrRes = tryLocalStorageGet(full);
+              }
+              var locRes = [];
+              if (typeof prevStrRes === "string" && prevStrRes) {
+                var locParsedRes = JSON.parse(prevStrRes);
+                if (Array.isArray(locParsedRes)) locRes = locParsedRes;
+              }
+              var remRes = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remRes)) {
+                next = JSON.stringify(mergeFabricaKvArrayById("reservas", remRes, locRes, __cgFabricaReservaMs));
+              }
+            } catch (eResMerge) {
+              console.warn("[CG][Firestore] merge reservas falló:", eResMerge && eResMerge.message ? eResMerge.message : eResMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
+          if (shortKey === "proveedores") {
+            try {
+              var prevStrProv = window.__cgFsMem[shortKey];
+              if (typeof prevStrProv !== "string" || !prevStrProv) {
+                prevStrProv = tryLocalStorageGet(full);
+              }
+              var locProv = [];
+              if (typeof prevStrProv === "string" && prevStrProv) {
+                var locParsedProv = JSON.parse(prevStrProv);
+                if (Array.isArray(locParsedProv)) locProv = locParsedProv;
+              }
+              var remProv = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remProv)) {
+                next = JSON.stringify(mergeFabricaKvArrayById("proveedores", remProv, locProv, __cgFabricaProveedorMs));
+              }
+            } catch (eProvMerge) {
+              console.warn("[CG][Firestore] merge proveedores falló:", eProvMerge && eProvMerge.message ? eProvMerge.message : eProvMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
+          if (shortKey === "bodegas") {
+            try {
+              var prevStrBod = window.__cgFsMem[shortKey];
+              if (typeof prevStrBod !== "string" || !prevStrBod) {
+                prevStrBod = tryLocalStorageGet(full);
+              }
+              var locBod = [];
+              if (typeof prevStrBod === "string" && prevStrBod) {
+                var locParsedBod = JSON.parse(prevStrBod);
+                if (Array.isArray(locParsedBod)) locBod = locParsedBod;
+              }
+              var remBod = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remBod)) {
+                next = JSON.stringify(mergeFabricaKvArrayById("bodegas", remBod, locBod, __cgFabricaBodegaMs));
+              }
+            } catch (eBodMerge) {
+              console.warn("[CG][Firestore] merge bodegas falló:", eBodMerge && eBodMerge.message ? eBodMerge.message : eBodMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
+          if (shortKey === "departments") {
+            try {
+              var prevStrDep = window.__cgFsMem[shortKey];
+              if (typeof prevStrDep !== "string" || !prevStrDep) {
+                prevStrDep = tryLocalStorageGet(full);
+              }
+              var locDep = [];
+              if (typeof prevStrDep === "string" && prevStrDep) {
+                var locParsedDep = JSON.parse(prevStrDep);
+                if (Array.isArray(locParsedDep)) locDep = locParsedDep;
+              }
+              var remDep = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remDep)) {
+                next = JSON.stringify(mergeFabricaKvArrayById("departments", remDep, locDep, __cgFabricaDeptRowMs));
+              }
+            } catch (eDepMerge) {
+              console.warn("[CG][Firestore] merge departments falló:", eDepMerge && eDepMerge.message ? eDepMerge.message : eDepMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
+          if (shortKey === "parkingSlots") {
+            try {
+              var prevStrPk = window.__cgFsMem[shortKey];
+              if (typeof prevStrPk !== "string" || !prevStrPk) {
+                prevStrPk = tryLocalStorageGet(full);
+              }
+              var locPk = [];
+              if (typeof prevStrPk === "string" && prevStrPk) {
+                var locParsedPk = JSON.parse(prevStrPk);
+                if (Array.isArray(locParsedPk)) locPk = locParsedPk;
+              }
+              var remPk = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remPk)) {
+                next = JSON.stringify(mergeFabricaKvArrayById("parkingSlots", remPk, locPk, __cgFabricaParkingSlotMs));
+              }
+            } catch (ePkMerge) {
+              console.warn("[CG][Firestore] merge parkingSlots falló:", ePkMerge && ePkMerge.message ? ePkMerge.message : ePkMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
+          if (shortKey === "buildingUnits") {
+            try {
+              var prevStrBU = window.__cgFsMem[shortKey];
+              if (typeof prevStrBU !== "string" || !prevStrBU) {
+                prevStrBU = tryLocalStorageGet(full);
+              }
+              var locBU = [];
+              if (typeof prevStrBU === "string" && prevStrBU) {
+                var locParsedBU = JSON.parse(prevStrBU);
+                if (Array.isArray(locParsedBU)) locBU = locParsedBU;
+              }
+              var remBU = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remBU)) {
+                next = JSON.stringify(mergeDeptWm815Units("buildingUnits", remBU, locBU));
+              }
+            } catch (eBUMerge) {
+              console.warn("[CG][Firestore] merge buildingUnits falló:", eBUMerge && eBUMerge.message ? eBUMerge.message : eBUMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
+          if (shortKey === "buildingResidents") {
+            try {
+              var prevStrBR = window.__cgFsMem[shortKey];
+              if (typeof prevStrBR !== "string" || !prevStrBR) {
+                prevStrBR = tryLocalStorageGet(full);
+              }
+              var locBR = [];
+              if (typeof prevStrBR === "string" && prevStrBR) {
+                var locParsedBR = JSON.parse(prevStrBR);
+                if (Array.isArray(locParsedBR)) locBR = locParsedBR;
+              }
+              var remBR = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remBR)) {
+                next = JSON.stringify(mergeFabricaKvArrayById("buildingResidents", remBR, locBR, __cgFabricaBuildingResidentMs));
+              }
+            } catch (eBRMerge) {
+              console.warn("[CG][Firestore] merge buildingResidents falló:", eBRMerge && eBRMerge.message ? eBRMerge.message : eBRMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
+          if (shortKey === "buildingFormerResidents") {
+            try {
+              var prevStrBFR = window.__cgFsMem[shortKey];
+              if (typeof prevStrBFR !== "string" || !prevStrBFR) {
+                prevStrBFR = tryLocalStorageGet(full);
+              }
+              var locBFR = [];
+              if (typeof prevStrBFR === "string" && prevStrBFR) {
+                var locParsedBFR = JSON.parse(prevStrBFR);
+                if (Array.isArray(locParsedBFR)) locBFR = locParsedBFR;
+              }
+              var remBFR = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remBFR)) {
+                next = JSON.stringify(mergeDeptFormerResidents("buildingFormerResidents", remBFR, locBFR));
+              }
+            } catch (eBFRMerge) {
+              console.warn("[CG][Firestore] merge buildingFormerResidents falló:", eBFRMerge && eBFRMerge.message ? eBFRMerge.message : eBFRMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
+          if (shortKey === "buildingParking") {
+            try {
+              var prevStrBP = window.__cgFsMem[shortKey];
+              if (typeof prevStrBP !== "string" || !prevStrBP) {
+                prevStrBP = tryLocalStorageGet(full);
+              }
+              var locBP = [];
+              if (typeof prevStrBP === "string" && prevStrBP) {
+                var locParsedBP = JSON.parse(prevStrBP);
+                if (Array.isArray(locParsedBP)) locBP = locParsedBP;
+              }
+              var remBP = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remBP)) {
+                next = JSON.stringify(mergeFabricaKvArrayById("buildingParking", remBP, locBP, __cgFabricaParkingSlotMs));
+              }
+            } catch (eBPMerge) {
+              console.warn("[CG][Firestore] merge buildingParking falló:", eBPMerge && eBPMerge.message ? eBPMerge.message : eBPMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
+          if (shortKey === "conserjeActivityLog") {
+            try {
+              var prevStrAct = window.__cgFsMem[shortKey];
+              if (typeof prevStrAct !== "string" || !prevStrAct) {
+                prevStrAct = tryLocalStorageGet(full);
+              }
+              var locAct = [];
+              if (typeof prevStrAct === "string" && prevStrAct) {
+                var locParsedAct = JSON.parse(prevStrAct);
+                if (Array.isArray(locParsedAct)) locAct = locParsedAct;
+              }
+              var remAct = JSON.parse(remoteSnapshot);
+              if (Array.isArray(remAct)) {
+                next = JSON.stringify(mergeConserjeActivityLog(remAct, locAct));
+              }
+            } catch (eActMerge) {
+              console.warn("[CG][Firestore] merge conserjeActivityLog falló:", eActMerge && eActMerge.message ? eActMerge.message : eActMerge);
+            }
+            if (window.__cgFsMem[shortKey] === next) {
+              return;
+            }
+          }
+
           var __cgAdminKvMergeKeys = {
             roleModules: true,
             config: true,
@@ -2296,7 +2705,8 @@
           /* Solo re-subir fusión si hay escritura local pendiente (outbox): evita bucles merge→push→merge en clientes pasivos. */
           if (
             __cgFsOutboxHasPendingWrite(shortKey) &&
-            (shortKey === "visits" ||
+            (__cgFabricaConcurrentMergeKey ||
+              shortKey === "visits" ||
               shortKey === "staffChatMessages" ||
               shortKey === "novedades" ||
               shortKey === "shiftLogs" ||
@@ -10973,6 +11383,16 @@
     }
 
     /**
+     * Operaciones destructivas o sensibles en un módulo (p. ej. eliminar fila): administrador o conserje con ese módulo en roleModules.
+     */
+    function userMayOperateModule(modId) {
+      var u = currentUser();
+      if (!u) return false;
+      if (roleIsAdmin(u.role)) return true;
+      return canSeeModule(modId);
+    }
+
+    /**
      * Primer módulo operativo para el usuario actual (conserje según roleModules; admin → primer id de MODULES).
      * null si el conserje no tiene ningún módulo asignado.
      */
@@ -13931,7 +14351,7 @@
       currentUser, directoryUserById, setSession, setSessionRoleMode, userHasDualRoleInSession, clearSession, rehydrateSessionFromStorage, loginBlockedByOpenConserjeShift, kickConserjeIfOpenShiftConflict, closeOpenConserjeShiftBeforeLogout, __cgDiagnoseShiftLogsOpenByUser,
       reconcileShiftLogsLocally, pullShiftLogsForRelayConsistency, diagnoseShiftLogsRelay, diagnoseShiftLogsRelayAsync,
       cleanupStaffDirectoryAndShiftOrphans,
-      canSeeModule, cgFirstAllowedModuleForCurrentUser, validateCurrentSessionPermissions, scheduleValidateCurrentSessionPermissions,
+      canSeeModule, userMayOperateModule, cgFirstAllowedModuleForCurrentUser, validateCurrentSessionPermissions, scheduleValidateCurrentSessionPermissions,
       toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, reservaOcurreEnDiaChile, reservaEnCursoAhora, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, proveedorServicioIconClass, proveedorServicioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
       proveedorSelectOptionsHtml,
@@ -21458,7 +21878,13 @@ function __deptUnitsStorageKey() {
         return;
       }
       var uNav = G.currentUser();
-      if (uNav && G.roleIsConserje(uNav.role) && view && typeof G.canSeeModule === "function" && !G.canSeeModule(view)) {
+      if (
+        uNav &&
+        !G.roleIsAdmin(uNav.role) &&
+        view &&
+        typeof G.canSeeModule === "function" &&
+        !G.canSeeModule(view)
+      ) {
         var fbNav =
           typeof G.cgFirstAllowedModuleForCurrentUser === "function" ? G.cgFirstAllowedModuleForCurrentUser() : null;
         if (fbNav) {
@@ -22728,7 +23154,7 @@ function __deptUnitsStorageKey() {
 
     function pageDepartamentos() {
       var xlsxImportCard =
-        G.userIsAdmin(G.currentUser())
+        G.userMayOperateModule("departamentos")
           ? "<div class=\"card cg-dept-toolbar\">" +
             "<div class=\"card-h\" style=\"align-items:center;flex-wrap:wrap;gap:0.5rem\">" +
             "<h3 style=\"margin:0\">Importación masiva (Excel)</h3>" +
@@ -28089,8 +28515,8 @@ function __deptUnitsStorageKey() {
   };
 
   A.encomiendaDel = function (id) {
-    if (!G.userIsAdmin(G.currentUser())) {
-      G.toast("Solo el administrador puede eliminar encomiendas", "warn");
+    if (!G.userMayOperateModule("encomiendas")) {
+      G.toast("No tiene permiso para eliminar encomiendas en su perfil.", "warn");
       return;
     }
     if (!confirm("¿Eliminar este registro de encomienda?")) return;
@@ -28121,7 +28547,7 @@ function __deptUnitsStorageKey() {
     }
     var w = document.getElementById("enc-wrap");
     if (!w) return;
-    var isAdmEnc = G.currentUser() && G.userIsAdmin(G.currentUser());
+    var mayDelEnc = G.userMayOperateModule("encomiendas");
     var flt = ((document.getElementById("enc-flt") || {}).value || "pend");
     var q = ((document.getElementById("enc-q") || {}).value || "").toLowerCase();
     var rows = (G.state.encomiendas || []).slice().sort(function (a, b) { return new Date(b.receivedAt) - new Date(a.receivedAt); });
@@ -28198,11 +28624,11 @@ function __deptUnitsStorageKey() {
           "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"encomiendaOpen\" data-cg-id=\"" +
           G.escapeHtml(e.id) +
           "\"><i class=\"fa-solid fa-pen\"></i></button>";
-        if (isAdmEnc) {
+        if (mayDelEnc) {
           html +=
             " <button type=\"button\" class=\"btn btn-danger btn-sm\" data-cg-act=\"encomiendaDel\" data-cg-id=\"" +
             G.escapeHtml(e.id) +
-            "\" title=\"Eliminar (solo administrador)\"><i class=\"fa-solid fa-trash\"></i></button>";
+            "\" title=\"Eliminar registro\"><i class=\"fa-solid fa-trash\"></i></button>";
         }
         html += "</td></tr>";
       });
@@ -28532,6 +28958,10 @@ function __deptUnitsStorageKey() {
   };
 
   A.proveedorDel = function (id) {
+    if (!G.userMayOperateModule("proveedores")) {
+      G.toast("No tiene permiso para eliminar proveedores en su perfil.", "warn");
+      return;
+    }
     if (!confirm("¿Eliminar este proveedor del registro?")) return;
     if (typeof G.registerPendingDeletedLsKey === "function") G.registerPendingDeletedLsKey("proveedores", id);
     var cur = Array.isArray(G.state.proveedores) ? G.state.proveedores : [];
@@ -29461,7 +29891,7 @@ function __deptUnitsStorageKey() {
         "<div class=\"cg-stat-chip cg-stat-chip--visit\"><span class=\"cg-stat-chip-val\">" + openN + "</span><span class=\"cg-stat-chip-lbl\">Dentro del edificio</span></div>" +
         "<div class=\"cg-stat-chip cg-stat-chip--visit\"><span class=\"cg-stat-chip-val\">" + vehOpenN + "</span><span class=\"cg-stat-chip-lbl\">Vehíc. sin salida</span></div>";
     }
-    var isAdmVis = G.currentUser() && G.userIsAdmin(G.currentUser());
+    var mayDelVis = G.userMayOperateModule("visitas");
     var html =
       "<table class=\"data-table\"><thead><tr><th class=\"cg-vis-mail-th\" title=\"Aviso por correo a la unidad marcado como enviado\"><span class=\"sr-only\">Correo</span><i class=\"fa-solid fa-envelope\" style=\"font-size:0.65rem;opacity:0.75\" aria-hidden=\"true\"></i></th><th>Ingreso</th><th>Depto</th><th>Fecha ingreso</th><th>Vehíc.</th><th>Tiempo</th><th>Salida</th><th>Conserje</th><th></th></tr></thead><tbody>";
     if (!rows.length) html += "<tr><td class=\"cg-empty-table\" colspan=\"9\">Sin resultados. Cambie el filtro, la búsqueda o registre un nuevo ingreso.</td></tr>";
@@ -29574,11 +30004,11 @@ function __deptUnitsStorageKey() {
           G.escapeHtml(v.id) +
           "\" title=\"Parte por estadía ≥ 5 h + 15 min de gracia (disponible aunque ya haya salida)\">Parte (multa)</button>";
       }
-      if (isAdmVis) {
+      if (mayDelVis) {
         html +=
           " <button type=\"button\" class=\"btn btn-danger btn-sm\" data-cg-act=\"visitDel\" data-cg-id=\"" +
           G.escapeHtml(v.id) +
-          "\" title=\"Eliminar registro (solo administrador)\"><i class=\"fa-solid fa-trash\"></i></button>";
+          "\" title=\"Eliminar registro\"><i class=\"fa-solid fa-trash\"></i></button>";
       }
       html += "</td></tr>";
     });
@@ -29739,8 +30169,8 @@ function __deptUnitsStorageKey() {
   };
 
   A.visitDel = function (id) {
-    if (!G.userIsAdmin(G.currentUser())) {
-      G.toast("Solo el administrador puede eliminar visitas", "warn");
+    if (!G.userMayOperateModule("visitas")) {
+      G.toast("No tiene permiso para eliminar visitas en su perfil.", "warn");
       return;
     }
     if (!confirm("¿Eliminar este registro de visita? No se puede deshacer.")) return;
@@ -30130,8 +30560,8 @@ function __deptUnitsStorageKey() {
   };
 
   A.reservaDel = async function (id) {
-    if (!G.userIsAdmin(G.currentUser())) {
-      G.toast("Solo el administrador puede eliminar reservas o eventos", "warn");
+    if (!G.userMayOperateModule("reservas")) {
+      G.toast("No tiene permiso para eliminar reservas en su perfil.", "warn");
       return;
     }
     if (!confirm("¿Eliminar reserva?")) return;
@@ -30277,7 +30707,7 @@ function __deptUnitsStorageKey() {
     var spFilt = (selSp && selSp.value ? String(selSp.value).trim() : "") || "";
     var w = document.getElementById("tbl-res-wrap");
     if (!w) return;
-    var isAdmRes = G.currentUser() && G.userIsAdmin(G.currentUser());
+    var mayDelRes = G.userMayOperateModule("reservas");
     var nowF = new Date();
     var rows = allR.slice().sort(function (a, b) { return new Date(b.start) - new Date(a.start); });
     if (vigMode === "vig") {
@@ -30336,11 +30766,11 @@ function __deptUnitsStorageKey() {
         "<td><button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"reservaOpen\" data-cg-id=\"" +
         G.escapeHtml(r.id) +
         "\"><i class=\"fa-solid fa-pen\"></i></button>";
-      if (isAdmRes) {
+      if (mayDelRes) {
         html +=
           " <button type=\"button\" class=\"btn btn-danger btn-sm\" data-cg-act=\"reservaDel\" data-cg-id=\"" +
           G.escapeHtml(r.id) +
-          "\" title=\"Eliminar (solo administrador)\"><i class=\"fa-solid fa-trash\"></i></button>";
+          "\" title=\"Eliminar reserva\"><i class=\"fa-solid fa-trash\"></i></button>";
       }
       html += "</td></tr>";
     });
