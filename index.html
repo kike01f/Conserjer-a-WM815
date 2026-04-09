@@ -24110,6 +24110,7 @@ function __deptUnitsStorageKey() {
             A.renderReservas();
           } catch (eResDeptK) {}
         }
+        if (view === "admin") __cgRefreshAdminActiveSubtabIfNeeded();
       }
 
       if (
@@ -24146,6 +24147,13 @@ function __deptUnitsStorageKey() {
             A.renderReservas();
           } catch (eResCfg) {}
         }
+        /* Cualquier subpestaña de Administración puede leer config (nombre edificio, espacios comunes, etc.). */
+        __cgRefreshAdminActiveSubtabIfNeeded();
+      }
+
+      if (k === "parkingConfig") {
+        /* Rangos de estacionamiento en Configuración admin + formularios de visitas/reservas. */
+        __cgRefreshAdminActiveSubtabIfNeeded();
       }
 
       if (k === "personalization") {
@@ -24231,6 +24239,7 @@ function __deptUnitsStorageKey() {
           } catch (eDpv) {}
         }
         if (dash && !remountedMain) updateDashboardChartsSummaryAndActivity();
+        if (view === "admin") __cgRefreshAdminActiveSubtabIfNeeded();
       }
 
       if (k === "encomiendas") {
@@ -24240,6 +24249,7 @@ function __deptUnitsStorageKey() {
           } catch (eEnc) {}
         }
         if (dash && !remountedMain) updateDashboardChartsSummaryAndActivity();
+        if (view === "admin") __cgRefreshAdminActiveSubtabIfNeeded();
       }
 
       if (k === "reservas") {
@@ -24252,6 +24262,7 @@ function __deptUnitsStorageKey() {
           updateDashboardSummaryStatsOnly();
           updateDashboardActivityAndNovBodiesOnly();
         }
+        if (view === "admin") __cgRefreshAdminActiveSubtabIfNeeded();
       }
 
       if (k === "novedades") {
@@ -24274,6 +24285,7 @@ function __deptUnitsStorageKey() {
         if (dash && !remountedMain) {
           updateDashboardActivityAndNovBodiesOnly();
         }
+        if (view === "admin") __cgRefreshAdminActiveSubtabIfNeeded();
       }
 
       if (k === "proveedores") {
@@ -24291,6 +24303,7 @@ function __deptUnitsStorageKey() {
             });
           } catch (eVisProv) {}
         }
+        if (view === "admin") __cgRefreshAdminActiveSubtabIfNeeded();
       }
 
       if (k === "bodegas") {
@@ -24299,10 +24312,12 @@ function __deptUnitsStorageKey() {
             A.renderBodegas();
           } catch (eBo) {}
         }
+        if (view === "admin") __cgRefreshAdminActiveSubtabIfNeeded();
       }
 
       if (k === "conserjeActivityLog") {
         if (dash && !remountedMain) updateDashboardActivityAndNovBodiesOnly();
+        if (view === "admin") __cgRefreshAdminActiveSubtabIfNeeded();
       }
 
       if (dash && !remountedMain && k === "users") {
