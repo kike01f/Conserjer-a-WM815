@@ -23966,6 +23966,20 @@ function __deptUnitsStorageKey() {
       var dash = view === "dashboard";
       var remountedMain = __cgRemoteRefreshMaybeRemountMain(k, view, dash);
 
+      function __cgRefreshAdminActiveSubtabIfNeeded() {
+        try {
+          if (!A || typeof A.renderAdmin !== "function") return;
+          if (typeof getCurrentView !== "function" || getCurrentView() !== "admin") return;
+          var admTabActive = document.querySelector(".admin-tab.active");
+          var admTabKey = admTabActive && admTabActive.getAttribute("data-adm");
+          if (admTabKey) {
+            A.renderAdmin(admTabKey);
+          } else if (document.getElementById("adm-panel")) {
+            A.renderAdmin("staff");
+          }
+        } catch (eAdmSub) {}
+      }
+
       if (k === "roleModules") {
         try {
           renderNav();
@@ -24127,12 +24141,7 @@ function __deptUnitsStorageKey() {
         try {
           G.applyPersonalizationToDom();
         } catch (ePal) {}
-        if (A && typeof A.renderAdmin === "function") {
-          try {
-            var tabPer = document.querySelector(".admin-tab[data-adm=\"personalizacion\"].active");
-            if (tabPer) A.renderAdmin("personalizacion");
-          } catch (ePe) {}
-        }
+        __cgRefreshAdminActiveSubtabIfNeeded();
         if (dash && !remountedMain && typeof renderDashboardQuickLinksMount === "function") {
           try {
             renderDashboardQuickLinksMount();
@@ -24146,12 +24155,7 @@ function __deptUnitsStorageKey() {
             A.renderDashboardStaffBirthdays();
           } catch (eSb) {}
         }
-        if (A && typeof A.renderAdmin === "function") {
-          try {
-            var tabRrhh = document.querySelector(".admin-tab[data-adm=\"rrhh\"].active");
-            if (tabRrhh) A.renderAdmin("rrhh");
-          } catch (eRhh) {}
-        }
+        __cgRefreshAdminActiveSubtabIfNeeded();
       }
 
       if (k === "dashScheduledAlerts") {
@@ -24160,12 +24164,7 @@ function __deptUnitsStorageKey() {
             A.renderDashboardScheduledAlerts();
           } catch (eDsa) {}
         }
-        if (A && typeof A.renderAdmin === "function") {
-          try {
-            var tabDa = document.querySelector(".admin-tab[data-adm=\"dashAlerts\"].active");
-            if (tabDa) A.renderAdmin("dashAlerts");
-          } catch (eDa) {}
-        }
+        __cgRefreshAdminActiveSubtabIfNeeded();
       }
 
       if (k === "absenceAlertPhrases") {
@@ -24178,12 +24177,7 @@ function __deptUnitsStorageKey() {
             }
           } catch (eAusV) {}
         }
-        if (A && typeof A.renderAdmin === "function") {
-          try {
-            var tabAus = document.querySelector(".admin-tab[data-adm=\"ausAusencia\"].active");
-            if (tabAus) A.renderAdmin("ausAusencia");
-          } catch (eAusAd) {}
-        }
+        __cgRefreshAdminActiveSubtabIfNeeded();
       }
 
       if (k === "festiveAmbience") {
@@ -24192,12 +24186,7 @@ function __deptUnitsStorageKey() {
             G.applyFestiveAmbienceToDom();
           } catch (eFest) {}
         }
-        if (A && typeof A.renderAdmin === "function") {
-          try {
-            var tabFe = document.querySelector(".admin-tab[data-adm=\"festive\"].active");
-            if (tabFe) A.renderAdmin("festive");
-          } catch (eFe) {}
-        }
+        __cgRefreshAdminActiveSubtabIfNeeded();
       }
 
       if (k === "visits" || k === "visitVehAlertLog") {
