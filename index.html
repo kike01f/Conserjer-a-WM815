@@ -576,13 +576,11 @@
       window.__cgFsLastError = null;
       window.__cgFsListenerUnsub = null;
       window.__cgFsWriteTimers = Object.create(null);
+      /* staffChatRev: no es un doc kv aparte (la revisión va en el doc staffChatMessages). */
       window.__cgFsSkipFirestoreKey = {
         session: true,
         __cgPendingDeleted: true,
         staffChatRev: true,
-        staffChatMessages: true,
-        chatLastReadByUser: true,
-        staffPresence: true,
         __cgFsKvSeenDocIds: true,
         __cgFsDeleteOutbox: true
       };
@@ -9816,6 +9814,11 @@
       var col = window.cgFsBridge.kvCol();
       function __cgKvSnapshotHandler(snapshot) {
         snapshot.docChanges().forEach(function (chg) {
+          /* No aplicar snapshots locales aún no confirmados por el servidor: evita “perder”
+           * el tiempo real entre dispositivos al pisar con datos optimistas. */
+          try {
+            if (chg.doc && chg.doc.metadata && chg.doc.metadata.hasPendingWrites) return;
+          } catch (eMeta) {}
           var id = chg.doc.id;
           var d = chg.doc.data();
           var js = d && d.json != null ? String(d.json) : null;
