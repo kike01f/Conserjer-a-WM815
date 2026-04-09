@@ -819,6 +819,7 @@
           if (lv && lv.id != null && String(lv.id) !== "") localById[String(lv.id)] = lv;
         }
 
+        var pendDel = __cgReadPendingDeletedVisitIds();
         var out = [];
         for (i = 0; i < remoteArr.length; i++) {
           var rv = remoteArr[i];
@@ -826,6 +827,8 @@
             out.push(rv);
             continue;
           }
+          var rid = String(rv.id);
+          if (pendDel[rid]) continue;
           var loc = localById[String(rv.id)];
           if (!loc) {
             out.push(rv);
@@ -853,7 +856,6 @@
           var oi = out[i];
           if (oi && oi.id != null && String(oi.id) !== "") inOut[String(oi.id)] = true;
         }
-        var pendDel = __cgReadPendingDeletedVisitIds();
         for (i = 0; i < localArr.length; i++) {
           var lx = localArr[i];
           if (!lx || lx.id == null || String(lx.id) === "") continue;
@@ -4577,21 +4579,6 @@
     }
     .cg-firestore-sync-banner code {
       font-size: 0.75em;
-    }
-    .login-session-hint {
-      margin: 0.75rem 0 0;
-      padding: 0.65rem 0.75rem;
-      font-size: 0.78rem;
-      line-height: 1.45;
-      color: var(--secondary-text, #64748b);
-      background: color-mix(in srgb, var(--blue-500) 6%, transparent);
-      border-radius: 8px;
-      border: 1px solid color-mix(in srgb, var(--blue-500) 12%, transparent);
-      text-align: left;
-    }
-    .login-session-hint strong {
-      color: var(--text-color, #0f172a);
-      font-weight: 600;
     }
     /* Pastilla usuario: fondo opaco (sin vidrio / blur) */
     .cg-topbar-user-chip {
@@ -8628,10 +8615,6 @@
           </div>
           <button type="submit" class="btn-login" id="login-submit">Iniciar sesión</button>
         </form>
-        <p class="login-session-hint" id="cg-login-session-hint">
-          <strong>Sesión de la aplicación:</strong> queda en este navegador (sessionStorage); no se transfiere a otro dispositivo ni se sincroniza con Firebase.
-          <strong>Base de datos en la nube:</strong> si Firestore está activo, la app usa además una sesión técnica de Firebase (p. ej. anónima) solo para permitir lectura/escritura según reglas; no sustituye al usuario con el que inicia sesión arriba.
-        </p>
         <button type="button" class="login-manual-btn" id="btn-login-open-manual" aria-haspopup="dialog" aria-label="Abrir manual de usuario (sin iniciar sesión)">
           <span class="login-manual-btn__badge" aria-hidden="true"><i class="fa-solid fa-book-open"></i></span>
           <span class="login-manual-btn__text">
