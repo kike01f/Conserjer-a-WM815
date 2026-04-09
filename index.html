@@ -15574,6 +15574,18 @@ function __deptUnitsStorageKey() {
             }
         }
 
+        /** Aplazar solo si la vista activa es Residentes/Departamentos y hay edición o guardado (evita datos viejos al cambiar de módulo con editingUnitId colgado). */
+        function __deptDeferSilentReloadForOpenEditor() {
+            if (!appState.editingUnitId && !isSaving) return false;
+            try {
+                var cvu =
+                    window.CG_UI && typeof window.CG_UI.getCurrentView === "function" ? window.CG_UI.getCurrentView() : null;
+                return cvu === "departamentos" || cvu === "mapaEdificio";
+            } catch (eDef) {
+                return true;
+            }
+        }
+
         function writeUnitsToStorage(units) {
             var str = window.CG_PERSIST.stringifyForStorage(units);
             if (!str || !window.CG_PERSIST.localSetRaw(__deptUnitsStorageKey(), str)) {
@@ -15646,9 +15658,9 @@ function __deptUnitsStorageKey() {
         };
 
         window.loadUnitsFromCloud = async function(silent) {
-            /* No recargar desde disco en segundo plano mientras se edita una unidad o hay guardado en curso:
-               evita sobrescribir appState y desincronizar el formulario abierto. */
-            if (silent && (appState.editingUnitId || isSaving)) {
+            /* No recargar desde disco en segundo plano mientras se edita una unidad o hay guardado en curso
+               en las vistas Residentes/Departamentos (si el usuario salió a otro módulo, sí recargar: sync remoto). */
+            if (silent && __deptDeferSilentReloadForOpenEditor()) {
                 return true;
             }
             var hadLkg = Array.isArray(appState.lastKnownGoodUnits);
@@ -15784,7 +15796,7 @@ function __deptUnitsStorageKey() {
         };
 
         window.loadFormerResidentsFromCloud = async function(silent) {
-            if (silent && (appState.editingUnitId || isSaving)) {
+            if (silent && __deptDeferSilentReloadForOpenEditor()) {
                 return true;
             }
             var hadLkgFr = Array.isArray(appState.lastKnownGoodFormerResidents);
@@ -19623,6 +19635,8 @@ function __deptUnitsStorageKey() {
             console.log("🚀 Inicializando módulo incrustado wm815 (Residentes / Departamentos — mismos datos en este navegador)");
 
             try {
+                /* DOM nuevo: no arrastrar estado de edición de un montaje anterior (evita loadUnitsFromCloud(silent) sin efecto). */
+                appState.editingUnitId = null;
                 console.log('💾 Cargando datos desde almacenamiento local del navegador...');
                 var deptRemount = !!window.__CG_DEPT_HAS_MOUNTED_ONCE;
                 window.__CG_DEPT_HAS_MOUNTED_ONCE = true;
