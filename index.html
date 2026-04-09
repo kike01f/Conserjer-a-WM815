@@ -24326,6 +24326,7 @@ function __deptUnitsStorageKey() {
      * Debe ejecutarse desde PART 2 para usar getCurrentView / renderNav del mismo closure.
      */
     function refreshUiAfterFullCloudPull() {
+      /* visits / novedades primero: son el núcleo operativo que debe alinearse con la nube antes del resto. */
       var keys = [
         "users",
         "roleModules",
@@ -24373,6 +24374,29 @@ function __deptUnitsStorageKey() {
           refreshAfterRemoteLsKey(keys[i]);
         } catch (eR) {}
       }
+      /* Refuerzo: repintar Visitas y Libro de novedades leyendo ya G.state (tras merge en disco), aunque
+       * la heurística de refreshAfterRemoteLsKey no encontrara aún #tl-nov o la tabla de visitas. */
+      try {
+        var viewVN = getCurrentView();
+        var act = window.CG_ACTIONS;
+        if (act) {
+          if (
+            viewVN === "visitas" ||
+            document.getElementById("tbl-vis-wrap") ||
+            document.getElementById("vis-reg-stack")
+          ) {
+            if (typeof act.renderVisitas === "function") act.renderVisitas();
+          }
+          if (viewVN === "novedades" || document.getElementById("tl-nov")) {
+            if (typeof act.renderNovedades === "function") act.renderNovedades();
+          }
+          if (typeof act.renderShiftPanelNovedades === "function") act.renderShiftPanelNovedades();
+        }
+        if (viewVN === "dashboard") {
+          if (typeof updateDashboardChartsSummaryAndActivity === "function") updateDashboardChartsSummaryAndActivity();
+          if (typeof updateDashboardActivityAndNovBodiesOnly === "function") updateDashboardActivityAndNovBodiesOnly();
+        }
+      } catch (eVn) {}
       try {
         if (window.CG && typeof window.CG.applyPersonalizationToDom === "function") window.CG.applyPersonalizationToDom();
         if (window.CG && typeof window.CG.applyFestiveAmbienceToDom === "function") window.CG.applyFestiveAmbienceToDom();
@@ -34702,8 +34726,8 @@ function __deptUnitsStorageKey() {
         "</div></div>";
       var syncCloudCard =
         "<div class=\"card\" style=\"margin-bottom:1rem;border-color:#93c5fd\"><div class=\"card-h\"><h3>Sincronización: traer todo desde el servidor</h3></div><div class=\"card-b\">" +
-        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Si otro conserje o equipo ya guardó visitas, novedades, turnos, encomiendas, etc., y usted <strong>no</strong> los ve en esta sesión, pulse el botón para descargar de nuevo <strong>todos</strong> los datos desde Firestore a este navegador. " +
-        "No filtra por persona: se alinean todos los módulos con la nube.</p>" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.75rem\">Si otro conserje o equipo ya guardó registros en <strong>Visitas</strong>, <strong>Libro de novedades</strong>, turnos, encomiendas, etc., y usted <strong>no</strong> los ve, pulse el botón: se descarga la colección completa desde Firestore y se repintan esas pantallas con los datos fusionados. " +
+        "No filtra por persona: toda la instalación queda alineada con la nube.</p>" +
         "<button type=\"button\" class=\"btn btn-primary\" id=\"btn-admin-force-cloud-pull\" data-cg-act=\"adminForceCloudPullAll\"><i class=\"fa-solid fa-cloud-arrow-down\"></i> Descargar todo desde la nube ahora</button>" +
         "<p class=\"page-desc\" style=\"margin:0.55rem 0 0;font-size:0.8rem\">Requiere Firestore activo. Si falla, revise el aviso de sincronización arriba o la consola (F12).</p>" +
         "</div></div>";
