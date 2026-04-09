@@ -962,13 +962,24 @@
         if (typeof t === "number" && t === t && isFinite(t)) return t;
         return 0;
       }
-      function __cgMergeFirestoreJsonDocPreferNewer(remoteStr, localStr) {
+      function __cgMergeFirestoreJsonDocPreferNewer(remoteStr, localStr, shortKey) {
         try {
           if (typeof remoteStr !== "string" || typeof localStr !== "string") return null;
+          var sk = String(shortKey || "");
+          var adminAuthorityKv =
+            sk === "roleModules" ||
+            sk === "config" ||
+            sk === "personalization" ||
+            sk === "festiveAmbience" ||
+            sk === "visitVehAlertLog" ||
+            sk === "parkingConfig" ||
+            sk === "absenceAlertPhrases" ||
+            sk === "dashScheduledAlerts" ||
+            sk === "staffBirthdays";
           var r = JSON.parse(remoteStr);
           var l = JSON.parse(localStr);
           if (Array.isArray(r) && Array.isArray(l)) {
-            return localStr;
+            return adminAuthorityKv ? remoteStr : localStr;
           }
           if (
             Array.isArray(r) &&
@@ -977,7 +988,8 @@
             !Array.isArray(l) &&
             Array.isArray(l._cgItems)
           ) {
-            return localStr;
+            if (adminAuthorityKv && __cgJsonDocUpdatedAtMs(l) > 0) return localStr;
+            return adminAuthorityKv ? remoteStr : localStr;
           }
           if (
             r &&
@@ -995,6 +1007,7 @@
           var tl = __cgJsonDocUpdatedAtMs(l);
           if (tl > tr) return localStr;
           if (tr > tl) return remoteStr;
+          if (adminAuthorityKv) return remoteStr;
           return localStr;
         } catch (eCgDoc) {
           return null;
@@ -2200,7 +2213,7 @@
                 prevStrDoc = tryLocalStorageGet(full);
               }
               if (typeof prevStrDoc === "string" && prevStrDoc) {
-                var pickDoc = __cgMergeFirestoreJsonDocPreferNewer(next, prevStrDoc);
+                var pickDoc = __cgMergeFirestoreJsonDocPreferNewer(next, prevStrDoc, shortKey);
                 if (pickDoc != null) next = pickDoc;
               }
             } catch (eAdmKv) {}
@@ -9292,6 +9305,11 @@
             window.CG.ensureCloudInstallBaseline();
           }
         } catch (eBlPull) {}
+        try {
+          if (window.CG && typeof window.CG.scheduleValidateCurrentSessionPermissions === "function") {
+            window.CG.scheduleValidateCurrentSessionPermissions();
+          }
+        } catch (ePullPerm) {}
       }).catch(function (err) {
         window.__cgFsLastError = err;
         __cgSyncLog("warn", "firestore_pull_all", err);
@@ -22847,9 +22865,12 @@ function __deptUnitsStorageKey() {
 
     function refreshAfterRemoteLsKey(k) {
       if (!k || k === "session") return;
-      if ((k === "users" || k === "roleModules") && typeof G.validateCurrentSessionPermissions === "function") {
+      if (
+        (k === "users" || k === "roleModules") &&
+        typeof G.validateCurrentSessionPermissions === "function"
+      ) {
         try {
-          G.validateCurrentSessionPermissions({ fromKey: k });
+          G.validateCurrentSessionPermissions({ fromKey: k, silentModuleRedirect: true });
         } catch (ePermRf) {}
       }
       if (k === "shiftLogsTombstones" || k === "shiftLogs") {
@@ -23157,6 +23178,14 @@ function __deptUnitsStorageKey() {
         } catch (eDashUsers) {}
       }
     }
+
+    window.addEventListener("cg-cloud-storage-applied", function (ev) {
+      var k = ev && ev.detail && ev.detail.key;
+      if (!k) return;
+      try {
+        refreshAfterRemoteLsKey(String(k));
+      } catch (eCloudRf) {}
+    });
 
     function pageEncomiendas() {
       return (
