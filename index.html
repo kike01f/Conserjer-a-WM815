@@ -2219,6 +2219,32 @@
                 if (pickDoc != null) next = pickDoc;
               }
             } catch (eAdmKv) {}
+            /* Misma política que merge de visitas: no reinyectar claves marcadas en __cgPendingDeleted (snapshot remoto desfasado). */
+            if (shortKey === "visitVehAlertLog") {
+              try {
+                var pendVa = __cgReadPendingDeletedIdsForKey("visitVehAlertLog");
+                var nPendVa = 0;
+                var pkVa;
+                for (pkVa in pendVa) {
+                  if (pendVa[pkVa]) nPendVa++;
+                }
+                if (nPendVa) {
+                  var oVa = JSON.parse(next);
+                  if (oVa && typeof oVa === "object" && !Array.isArray(oVa)) {
+                    for (pkVa in pendVa) {
+                      if (
+                        pendVa[pkVa] &&
+                        pkVa !== "_cgUpdatedAt" &&
+                        Object.prototype.hasOwnProperty.call(oVa, pkVa)
+                      ) {
+                        delete oVa[pkVa];
+                      }
+                    }
+                    next = JSON.stringify(oVa);
+                  }
+                }
+              } catch (eVaStrip) {}
+            }
             if (
               next !== adminKvIncoming &&
               window.cgFsBridge &&
