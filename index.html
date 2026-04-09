@@ -10216,6 +10216,16 @@
       if (s === "conserje") return "conserje";
       return role;
     }
+    /** Comprobaciones RBAC: usar en toda la app en lugar de === "admin" / "conserje". */
+    function roleIsAdmin(role) {
+      return String(normalizeRoleForAuth(role) || "") === "admin";
+    }
+    function roleIsConserje(role) {
+      return String(normalizeRoleForAuth(role) || "") === "conserje";
+    }
+    function userIsAdmin(user) {
+      return !!(user && roleIsAdmin(user.role));
+    }
 
     /* ┌─ 4. Autenticación (PBKDF2, verificadores, puerta módulo Estadística) ──────────── */
     /* =============================================================================
@@ -10806,14 +10816,14 @@
      */
     function openShiftSegmentIsConserjeLock(s, byId) {
       if (!s || !shiftLogTramoIsOpen(s)) return false;
-      if (s.role === "admin") return false;
+      if (roleIsAdmin(s.role)) return false;
       var who = s.userId != null ? byId[s.userId] : null;
       if (who) {
-        if (who.role === "admin") return false;
-        return who.role === "conserje";
+        if (roleIsAdmin(who.role)) return false;
+        return roleIsConserje(who.role);
       }
-      if (s.role === "conserje") return true;
-      if (s.role && s.role !== "conserje") return false;
+      if (roleIsConserje(s.role)) return true;
+      if (s.role && !roleIsConserje(s.role)) return false;
       return true;
     }
 
@@ -10854,7 +10864,7 @@
      */
     function closeOpenConserjeShiftBeforeLogout() {
       var u = currentUser();
-      if (!u || u.role !== "conserje") return false;
+      if (!u || !roleIsConserje(u.role)) return false;
       var list = load("shiftLogs", []);
       if (!Array.isArray(list) || list.length === 0) return false;
       var openIds = Object.create(null);
@@ -10947,9 +10957,9 @@
       });
 
       next = next.map(function (seg) {
-        if (!seg || !shiftLogTramoIsOpen(seg) || seg.role === "admin") return seg;
+        if (!seg || !shiftLogTramoIsOpen(seg) || roleIsAdmin(seg.role)) return seg;
         var who = byId[seg.userId];
-        if (!who || who.role !== "conserje") {
+        if (!who || !roleIsConserje(who.role)) {
           changed = true;
           actions.push("close_orphan:" + seg.id);
           return Object.assign({}, seg, { endAt: nowIso, endReason: "limpieza_usuario" });
@@ -10961,7 +10971,7 @@
       var j;
       for (j = 0; j < next.length; j++) {
         var s = next[j];
-        if (!s || !shiftLogTramoIsOpen(s) || s.role === "admin") continue;
+        if (!s || !shiftLogTramoIsOpen(s) || roleIsAdmin(s.role)) continue;
         if (!openShiftSegmentIsConserjeLock(s, byId)) continue;
         var uid = String(s.userId != null ? s.userId : "");
         if (!uid) continue;
@@ -11100,7 +11110,7 @@
         var uid = String(s.userId != null ? s.userId : "?");
         openByUser[uid] = (openByUser[uid] || 0) + 1;
         var who = byId[s.userId];
-        if (!who || who.role !== "conserje") orphans.push({ id: s.id, userId: s.userId, reason: "open_lock_not_conserje_user" });
+        if (!who || !roleIsConserje(who.role)) orphans.push({ id: s.id, userId: s.userId, reason: "open_lock_not_conserje_user" });
       }
       var dupUsers = [];
       var uk;
@@ -11179,7 +11189,7 @@
         var seg = sl[si];
         if (!seg || !shiftLogTramoIsOpen(seg)) continue;
         var who = byId[seg.userId];
-        if (!who || who.role !== "conserje") {
+        if (!who || !roleIsConserje(who.role)) {
           sl[si] = Object.assign({}, seg, { endAt: nowIso, endReason: "limpieza_usuario" });
           closedOrphans++;
         }
@@ -11208,8 +11218,8 @@
         var g = groups[gk];
         if (g.length < 2) return;
         g.sort(function (a, b) {
-          var aa = a.u.role === "admin" ? 0 : 1;
-          var bb = b.u.role === "admin" ? 0 : 1;
+          var aa = roleIsAdmin(a.u.role) ? 0 : 1;
+          var bb = roleIsAdmin(b.u.role) ? 0 : 1;
           if (aa !== bb) return aa - bb;
           var av = a.u.passwordVerifier ? 0 : 1;
           var bv = b.u.passwordVerifier ? 0 : 1;
@@ -11336,7 +11346,7 @@
 
     function kickConserjeIfOpenShiftConflict() {
       var u = currentUser();
-      if (!u || u.role !== "conserje") return false;
+      if (!u || !roleIsConserje(u.role)) return false;
       try {
         reconcileShiftLogsLocally();
       } catch (eKickRec) {}
@@ -11369,7 +11379,7 @@
       if (!u) return false;
       if (!MODULES.some(function (m) { return m.id === modId; })) return false;
       /* Administrador: acceso total a la app; los checkboxes en Control de accesos solo afinan conserjes (y el estado guardado para informes). */
-      if (u.role === "admin") return true;
+      if (roleIsAdmin(u.role)) return true;
       var rm = state.roleModules;
       if (!rm || typeof rm !== "object") return false;
       var co = rm.conserje;
@@ -11383,7 +11393,7 @@
     function cgFirstAllowedModuleForCurrentUser() {
       var u = currentUser();
       if (!u) return null;
-      if (u.role === "admin") return MODULES[0] ? MODULES[0].id : "dashboard";
+      if (roleIsAdmin(u.role)) return MODULES[0] ? MODULES[0].id : "dashboard";
       var prefer = ["novedades", "manual"];
       var pi;
       for (pi = 0; pi < prefer.length; pi++) {
@@ -11442,7 +11452,7 @@
         return { ok: false, action: "role_changed" };
       }
 
-      if (u.role === "admin") {
+      if (roleIsAdmin(u.role)) {
         try {
           window.__cgPermSnapshot = { userId: u.id, role: u.role };
         } catch (eSn1) {}
@@ -11454,7 +11464,7 @@
         return { ok: true, action: "ok" };
       }
 
-      if (u.role === "conserje") {
+      if (roleIsConserje(u.role)) {
         var allowed = cgFirstAllowedModuleForCurrentUser();
         if (!allowed) {
           clearSession();
@@ -12651,7 +12661,7 @@
     }
 
     function shiftSegmentOverlapChileMonth(seg, year, monthIndex0) {
-      if (!seg || seg.role === "admin") return false;
+      if (!seg || roleIsAdmin(seg.role)) return false;
       var lastD = new Date(Date.UTC(year, monthIndex0 + 1, 0)).getUTCDate();
       function pad(n) {
         return n < 10 ? "0" + n : "" + n;
@@ -14304,7 +14314,7 @@
       toast, escapeHtml, escapeAttr, sanitizeAllowBasicFormatting, safeSetHTML, sanitizeFaIconClass, fmtDate, isSameDay, isInCalendarMonth, reservaOcurreEnDiaChile, reservaEnCursoAhora, normalizeActivityName, normalizeNovedadUsuarioTexto, reservaEspacioIconHtml, proveedorServicioIconClass, proveedorServicioIconHtml, deptById, deptLabel, departmentSelectLabel, deptForVisitProveedorTarget, deptResidentDisplayName, occupantsExcludingPropietarioIfArriendo, normalizeUnitNumberKey, findDuplicateUnitNumber,
       normalizeBodegaCodeKey, findBodegaCodeConflictForUnit, findDuplicateBodegaRegistration,
       proveedorSelectOptionsHtml,
-      uid, sameUserId, normalizeRoleForAuth, load, save, LS, persist: P,
+      uid, sameUserId, normalizeRoleForAuth, roleIsAdmin, roleIsConserje, userIsAdmin, load, save, LS, persist: P,
       PERSONALIZATION_PALETTES, PERSONALIZATION_PALETTE_IDS,
       CG_DASH_QUICKLINKS_MAX,
       CG_STAFF_CHAT_VOICE_PHRASE_MAX, CG_STAFF_CHAT_VOICE_DEFAULT_PHRASE, normalizeStaffChatVoicePhrase,
@@ -21170,7 +21180,7 @@ function __deptUnitsStorageKey() {
         window.downloadPdfUnidadesConArrendatario = downloadPdfUnidadesConArrendatario;
 
   function cgDeptSyncImportExportVisibility() {
-    var isAdmin = !!(window.CG && window.CG.currentUser && window.CG.currentUser() && window.CG.currentUser().role === "admin");
+    var isAdmin = !!(window.CG && window.CG.userIsAdmin && window.CG.userIsAdmin(window.CG.currentUser()));
     ["dept-module-host", "mapa-edificio-module-host"].forEach(function (hid) {
       var host = document.getElementById(hid);
       if (!host) return;
@@ -21247,7 +21257,7 @@ function __deptUnitsStorageKey() {
     /** Conserjes (y cualquier rol distinto de admin) necesitan turno abierto para salir de Novedades. */
     function conserjeMustOpenShiftBeforeModules() {
       var u = G.currentUser();
-      return !!(u && u.role !== "admin" && !userHasOpenShift(u.id));
+      return !!(u && !G.userIsAdmin(u) && !userHasOpenShift(u.id));
     }
 
     /* --- Chat flotante del equipo (localStorage + eventos cg-cloud-storage-applied) --- */
@@ -21399,7 +21409,7 @@ function __deptUnitsStorageKey() {
       var i;
       for (i = 0; i < keys.length; i++) {
         var ent = c[keys[i]];
-        if (!ent || typeof ent !== "object" || ent.role !== "conserje") continue;
+        if (!ent || typeof ent !== "object" || !G.roleIsConserje(ent.role)) continue;
         var atMs = ent.at ? Date.parse(String(ent.at)) : 0;
         if (!atMs || now - atMs > STAFF_PRESENCE_STALE_MS) continue;
         var uid = String(ent.userId || "");
@@ -21481,7 +21491,7 @@ function __deptUnitsStorageKey() {
       var i;
       for (i = 0; i < users.length; i++) {
         var usr = users[i];
-        if (!usr || usr.role !== role) continue;
+        if (!usr || String(G.normalizeRoleForAuth(usr.role) || "") !== role) continue;
         var iso = staffChatGetRead(usr.id);
         if (!iso) continue;
         var t = Date.parse(String(iso));
@@ -21504,15 +21514,15 @@ function __deptUnitsStorageKey() {
         if (String(ent.userId || "") === String(u.id)) return;
         var until = Number(ent.chatTypingUntil) || 0;
         if (until <= now) return;
-        if (u.role === "admin") {
-          if (ent.role !== "conserje") return;
-        } else if (u.role === "conserje") {
-          if (ent.role !== "admin") return;
+        if (G.userIsAdmin(u)) {
+          if (!G.roleIsConserje(ent.role)) return;
+        } else if (G.roleIsConserje(u.role)) {
+          if (!G.roleIsAdmin(ent.role)) return;
         } else return;
         var uid = String(ent.userId || "");
         if (uid && seen[uid]) return;
         if (uid) seen[uid] = true;
-        var nm = String(ent.userName || (ent.role === "admin" ? "Administración" : "Conserje")).trim();
+        var nm = String(ent.userName || (G.roleIsAdmin(ent.role) ? "Administración" : "Conserje")).trim();
         names.push(nm || "Usuario");
       });
       if (!names.length) return "";
@@ -21583,7 +21593,7 @@ function __deptUnitsStorageKey() {
       var i;
       for (i = 0; i < users.length; i++) {
         var su = users[i];
-        if (su && G.sameUserId(su.id, uid) && su.role === "admin") return true;
+        if (su && G.sameUserId(su.id, uid) && G.roleIsAdmin(su.role)) return true;
       }
       return false;
     }
@@ -21605,13 +21615,13 @@ function __deptUnitsStorageKey() {
           var mMs = staffChatMessageAtMs(m);
           if (!isFinite(mMs) || mMs <= afterMs) return false;
         }
-        if (u.role === "admin") {
+        if (G.userIsAdmin(u)) {
           if (G.sameUserId(m.userId, u.id)) return false;
-          if (m.role === "conserje") return true;
+          if (G.roleIsConserje(m.role)) return true;
           if (!m.role && m.userId) return true;
           return false;
         }
-        return m.role === "admin";
+        return staffChatMessageIsFromAdminParty(m);
       }).length;
     }
     function staffChatPanelOpen() {
@@ -21892,7 +21902,7 @@ function __deptUnitsStorageKey() {
       var sorted = all.slice().sort(function (a, b) {
         return new Date((a && a.at) || 0) - new Date((b && b.at) || 0);
       });
-      if (u.role === "admin") return sorted;
+      if (G.userIsAdmin(u)) return sorted;
       return sorted.filter(function (m) {
         if (!m || typeof m !== "object") return false;
         if (staffChatMessageIsFromAdminParty(m)) return true;
@@ -22043,14 +22053,14 @@ function __deptUnitsStorageKey() {
       var btn = document.getElementById("cg-chat-clear");
       if (!btn) return;
       var u = G.currentUser();
-      if (u && u.role === "admin") btn.classList.remove("hidden");
+      if (u && G.userIsAdmin(u)) btn.classList.remove("hidden");
       else btn.classList.add("hidden");
     }
     function staffChatSyncPanelSub() {
       var el = document.getElementById("cg-chat-panel-sub");
       var u = G.currentUser();
       if (!el || !u) return;
-      if (u.role === "admin") {
+      if (G.userIsAdmin(u)) {
         el.textContent = staffPresenceConserjesSummaryForAdmin();
       } else {
         el.textContent =
@@ -22059,7 +22069,7 @@ function __deptUnitsStorageKey() {
     }
     function staffChatClearAll() {
       var cuClr = G.currentUser();
-      if (!cuClr || cuClr.role !== "admin") {
+      if (!cuClr || !G.userIsAdmin(cuClr)) {
         G.toast("Solo el administrador puede vaciar el chat", "warn");
         return;
       }
@@ -22090,7 +22100,7 @@ function __deptUnitsStorageKey() {
     }
     function staffChatDeleteMessageById(msgId) {
       var cu = G.currentUser();
-      if (!cu || cu.role !== "admin") {
+      if (!cu || !G.userIsAdmin(cu)) {
         G.toast("Solo el administrador puede eliminar mensajes del chat.", "warn");
         return;
       }
@@ -22173,7 +22183,7 @@ function __deptUnitsStorageKey() {
         var emptyP = document.createElement("p");
         emptyP.className = "cg-chat-empty";
         emptyP.textContent =
-          cu && cu.role === "admin"
+          cu && G.userIsAdmin(cu)
             ? "Sin mensajes aún. Los avisos de los conserjes aparecerán aquí en tiempo real."
             : "Sin mensajes aún. Escriba abajo para contactar a administración; las respuestas del admin llegan al instante.";
         thread.appendChild(emptyP);
@@ -22208,7 +22218,7 @@ function __deptUnitsStorageKey() {
             repBtn.setAttribute("aria-label", "Responder a este mensaje");
             repBtn.innerHTML = "<i class=\"fa-solid fa-reply\" aria-hidden=\"true\"></i>";
             tools.appendChild(repBtn);
-            if (cu && cu.role === "admin") {
+            if (cu && G.userIsAdmin(cu)) {
               var delBtn = document.createElement("button");
               delBtn.type = "button";
               delBtn.className = "cg-chat-msg-delete-btn";
@@ -22262,8 +22272,8 @@ function __deptUnitsStorageKey() {
           if (!effRole && mine && cu) effRole = cu.role;
           if (mine && m.kind !== "buzz" && isFinite(msgAtMs)) {
             var readMs = 0;
-            if (effRole === "admin") readMs = staffChatMaxReadAtForRole("conserje");
-            else if (effRole === "conserje") readMs = staffChatMaxReadAtForRole("admin");
+            if (G.roleIsAdmin(effRole)) readMs = staffChatMaxReadAtForRole("conserje");
+            else if (G.roleIsConserje(effRole)) readMs = staffChatMaxReadAtForRole("admin");
             if (readMs >= msgAtMs) {
               var foot = document.createElement("span");
               foot.className = "cg-chat-bubble-read";
@@ -22830,7 +22840,7 @@ function __deptUnitsStorageKey() {
         navTop.appendChild(themeBtn);
       }
       G.MODULES.forEach(function (m) {
-        if (m.adminOnly && cu.role !== "admin") return;
+        if (m.adminOnly && !G.userIsAdmin(cu)) return;
         if (!G.canSeeModule(m.id)) return;
         const a = document.createElement("button");
         a.type = "button";
@@ -23009,10 +23019,10 @@ function __deptUnitsStorageKey() {
     function pageAusenciaAlertas() {
       var cu = G.currentUser();
       if (!cu) return "<p class=\"page-desc\">Inicie sesión.</p>";
-      if (cu.role !== "conserje" && cu.role !== "admin") {
+      if (!G.roleIsConserje(cu.role) && !G.roleIsAdmin(cu.role)) {
         return "<p class=\"page-desc\">No autorizado.</p>";
       }
-      var isAdmin = cu.role === "admin";
+      var isAdmin = G.userIsAdmin(cu);
       var phrases = Array.isArray(G.state.absenceAlertPhrases) ? G.state.absenceAlertPhrases : [];
       var rt = cgReadAbsenceAlertRuntime();
       var modeOne = rt.mode === "one";
@@ -23107,7 +23117,7 @@ function __deptUnitsStorageKey() {
     function cgBindAusenciaAlertasView() {
       cgAbsenceAlertStop();
       var cu = G.currentUser();
-      if (!cu || (cu.role !== "conserje" && cu.role !== "admin")) return;
+      if (!cu || (!G.roleIsConserje(cu.role) && !G.roleIsAdmin(cu.role))) return;
       var phrases = Array.isArray(G.state.absenceAlertPhrases) ? G.state.absenceAlertPhrases : [];
       var modeEl = document.getElementById("cg-aus-mode");
       var phraseEl = document.getElementById("cg-aus-phrase");
@@ -23235,7 +23245,7 @@ function __deptUnitsStorageKey() {
         return;
       }
       var uNav = G.currentUser();
-      if (uNav && uNav.role === "conserje" && view && typeof G.canSeeModule === "function" && !G.canSeeModule(view)) {
+      if (uNav && G.roleIsConserje(uNav.role) && view && typeof G.canSeeModule === "function" && !G.canSeeModule(view)) {
         var fbNav =
           typeof G.cgFirstAllowedModuleForCurrentUser === "function" ? G.cgFirstAllowedModuleForCurrentUser() : null;
         if (fbNav) {
@@ -23701,7 +23711,7 @@ function __deptUnitsStorageKey() {
       var monthTitle = new Date(y, monthIdx, 1).toLocaleDateString("es-CL", { month: "long", year: "numeric" });
       var norm = G.normalizeActivityName;
       var conserjes = (G.state.users || []).filter(function (u) {
-        return u && u.role === "conserje";
+        return u && G.roleIsConserje(u.role);
       });
       var wm = wm815UnitsRaw();
       var visits = G.state.visits || [];
@@ -23798,7 +23808,7 @@ function __deptUnitsStorageKey() {
             "<table class=\"cg-dash-act-table\"><thead><tr><th>Hora</th><th>Usuario</th><th>Detalle</th></tr></thead><tbody>" +
             actLog
               .map(function (a) {
-                var roleLab = a.role === "admin" ? "Admin" : a.role === "conserje" ? "Conserje" : a.role ? String(a.role) : "—";
+                var roleLab = G.roleIsAdmin(a.role) ? "Admin" : G.roleIsConserje(a.role) ? "Conserje" : a.role ? String(a.role) : "—";
                 return (
                   "<tr><td style=\"white-space:nowrap\">" +
                   G.escapeHtml(G.fmtDate(a.at)) +
@@ -24489,7 +24499,7 @@ function __deptUnitsStorageKey() {
 
     function pageDepartamentos() {
       var xlsxImportCard =
-        G.currentUser().role === "admin"
+        G.userIsAdmin(G.currentUser())
           ? "<div class=\"card cg-dept-toolbar\">" +
             "<div class=\"card-h\" style=\"align-items:center;flex-wrap:wrap;gap:0.5rem\">" +
             "<h3 style=\"margin:0\">Importación masiva (Excel)</h3>" +
@@ -24682,7 +24692,7 @@ function __deptUnitsStorageKey() {
 
     function pageAdmin() {
       var cu = G.currentUser();
-      if (!cu || cu.role !== "admin") {
+      if (!G.userIsAdmin(cu)) {
         return "<p class=\"page-desc\">No autorizado.</p>";
       }
       return (
@@ -29811,7 +29821,7 @@ function __deptUnitsStorageKey() {
   };
 
   A.encomiendaDel = function (id) {
-    if (!G.currentUser() || G.currentUser().role !== "admin") {
+    if (!G.userIsAdmin(G.currentUser())) {
       G.toast("Solo el administrador puede eliminar encomiendas", "warn");
       return;
     }
@@ -29843,7 +29853,7 @@ function __deptUnitsStorageKey() {
     }
     var w = document.getElementById("enc-wrap");
     if (!w) return;
-    var isAdmEnc = G.currentUser() && G.currentUser().role === "admin";
+    var isAdmEnc = G.currentUser() && G.userIsAdmin(G.currentUser());
     var flt = ((document.getElementById("enc-flt") || {}).value || "pend");
     var q = ((document.getElementById("enc-q") || {}).value || "").toLowerCase();
     var rows = (G.state.encomiendas || []).slice().sort(function (a, b) { return new Date(b.receivedAt) - new Date(a.receivedAt); });
@@ -31154,7 +31164,7 @@ function __deptUnitsStorageKey() {
         "<div class=\"cg-stat-chip cg-stat-chip--visit\"><span class=\"cg-stat-chip-val\">" + openN + "</span><span class=\"cg-stat-chip-lbl\">Dentro del edificio</span></div>" +
         "<div class=\"cg-stat-chip cg-stat-chip--visit\"><span class=\"cg-stat-chip-val\">" + vehOpenN + "</span><span class=\"cg-stat-chip-lbl\">Vehíc. sin salida</span></div>";
     }
-    var isAdmVis = G.currentUser() && G.currentUser().role === "admin";
+    var isAdmVis = G.currentUser() && G.userIsAdmin(G.currentUser());
     var html =
       "<table class=\"data-table\"><thead><tr><th class=\"cg-vis-mail-th\" title=\"Aviso por correo a la unidad marcado como enviado\"><span class=\"sr-only\">Correo</span><i class=\"fa-solid fa-envelope\" style=\"font-size:0.65rem;opacity:0.75\" aria-hidden=\"true\"></i></th><th>Ingreso</th><th>Depto</th><th>Fecha ingreso</th><th>Vehíc.</th><th>Tiempo</th><th>Salida</th><th>Conserje</th><th></th></tr></thead><tbody>";
     if (!rows.length) html += "<tr><td class=\"cg-empty-table\" colspan=\"9\">Sin resultados. Cambie el filtro, la búsqueda o registre un nuevo ingreso.</td></tr>";
@@ -31424,7 +31434,7 @@ function __deptUnitsStorageKey() {
   };
 
   A.visitDel = function (id) {
-    if (!G.currentUser() || G.currentUser().role !== "admin") {
+    if (!G.userIsAdmin(G.currentUser())) {
       G.toast("Solo el administrador puede eliminar visitas", "warn");
       return;
     }
@@ -31747,7 +31757,7 @@ function __deptUnitsStorageKey() {
   };
 
   A.reservaDel = function (id) {
-    if (!G.currentUser() || G.currentUser().role !== "admin") {
+    if (!G.userIsAdmin(G.currentUser())) {
       G.toast("Solo el administrador puede eliminar reservas o eventos", "warn");
       return;
     }
@@ -31846,7 +31856,7 @@ function __deptUnitsStorageKey() {
     var q = ((document.getElementById("flt-res-q") || {}).value || "").toLowerCase();
     var w = document.getElementById("tbl-res-wrap");
     if (!w) return;
-    var isAdmRes = G.currentUser() && G.currentUser().role === "admin";
+    var isAdmRes = G.currentUser() && G.userIsAdmin(G.currentUser());
     var rows = allR.slice().sort(function (a, b) { return new Date(b.start) - new Date(a.start); });
     if (q) {
       rows = rows.filter(function (r) {
@@ -31943,7 +31953,7 @@ function __deptUnitsStorageKey() {
    * solo edita las propias entradas creadas desde la apertura de ese tramo. Administrador: sin esta restricción.
    */
   function novedadConserjeMayEdit(n, user) {
-    if (!user || user.role === "admin") return true;
+    if (!user || G.userIsAdmin(user)) return true;
     if (!n || n.category === "Turno") return false;
     if (!n.userId || !G.sameUserId(n.userId, user.id)) return false;
     var open = shiftFindOpen(G.state.shiftLogs || [], user.id);
@@ -31953,7 +31963,7 @@ function __deptUnitsStorageKey() {
 
   /** Conserje: requiere turno abierto para usar el formulario «Nueva entrada». Admin: siempre permitido. */
   function novedadConserjeMayRegisterNew(user) {
-    if (!user || user.role === "admin") return true;
+    if (!user || G.userIsAdmin(user)) return true;
     return !!shiftFindOpen(G.state.shiftLogs || [], user.id);
   }
 
@@ -32061,7 +32071,7 @@ function __deptUnitsStorageKey() {
   A.shiftAbrirTurno = function () {
     var u = G.currentUser();
     if (!u) return;
-    if (u.role === "admin") {
+    if (G.userIsAdmin(u)) {
       G.toast("El control horario no aplica al administrador; solo a conserjes.", "warn");
       return;
     }
@@ -32121,7 +32131,7 @@ function __deptUnitsStorageKey() {
   function shiftCierreTurnoExecute() {
     var u = G.currentUser();
     if (!u) return;
-    if (u.role === "admin") {
+    if (G.userIsAdmin(u)) {
       G.toast("El administrador no registra cierres de turno. Si queda un tramo antiguo suyo, elimínelo en Administración → Turnos.", "warn");
       return;
     }
@@ -32176,7 +32186,7 @@ function __deptUnitsStorageKey() {
   A.shiftCierreTurno = function () {
     var u = G.currentUser();
     if (!u) return;
-    if (u.role === "admin") {
+    if (G.userIsAdmin(u)) {
       G.toast("El administrador no registra cierres de turno. Si queda un tramo antiguo suyo, elimínelo en Administración → Turnos.", "warn");
       return;
     }
@@ -32217,7 +32227,7 @@ function __deptUnitsStorageKey() {
 
   A.shiftLogDel = function (id) {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo administrador", "error");
       return;
     }
@@ -32247,7 +32257,7 @@ function __deptUnitsStorageKey() {
       syncNovedadEntryFormShiftGate();
       return;
     }
-    if (u.role === "admin") {
+    if (G.userIsAdmin(u)) {
       var openAdm = shiftFindOpen(G.state.shiftLogs || [], u.id);
       var orphan =
         openAdm
@@ -32387,7 +32397,7 @@ function __deptUnitsStorageKey() {
       syncNovedadEntryFormShiftGate();
       return;
     }
-    var isAdm = G.currentUser() && G.currentUser().role === "admin";
+    var isAdm = G.currentUser() && G.userIsAdmin(G.currentUser());
     tl.innerHTML = rows.map(function (n) {
       var isTurno = n.category === "Turno";
       var catSlug = novedadCategorySlug(n.category);
@@ -32530,7 +32540,7 @@ function __deptUnitsStorageKey() {
   function shiftClosedSegmentsOptionsHtml(selectedId) {
     var logs = (G.state.shiftLogs || [])
       .filter(function (s) {
-        return s.endAt && s.role !== "admin";
+        return s.endAt && !G.roleIsAdmin(s.role);
       })
       .slice()
       .sort(function (a, b) {
@@ -32553,7 +32563,7 @@ function __deptUnitsStorageKey() {
 
   A.novTurnoOpen = function (id) {
     var cuNt = G.currentUser();
-    if (!cuNt || cuNt.role !== "admin") {
+    if (!G.userIsAdmin(cuNt)) {
       G.toast("Solo administrador", "error");
       return;
     }
@@ -32609,7 +32619,7 @@ function __deptUnitsStorageKey() {
 
   A.novTurnoSave = function () {
     var cuSave = G.currentUser();
-    if (!cuSave || cuSave.role !== "admin") {
+    if (!G.userIsAdmin(cuSave)) {
       G.toast("Solo administrador", "error");
       return;
     }
@@ -32681,14 +32691,14 @@ function __deptUnitsStorageKey() {
     if (!n) return;
     var uNov = G.currentUser();
     if (n.category === "Turno") {
-      if (!uNov || uNov.role !== "admin") {
+      if (!G.userIsAdmin(uNov)) {
         G.toast("Solo el administrador puede editar marcas de turno", "warn");
         return;
       }
       A.novTurnoOpen(id);
       return;
     }
-    if (uNov && uNov.role !== "admin") {
+    if (uNov && !G.userIsAdmin(uNov)) {
       if (!shiftFindOpen(G.state.shiftLogs || [], uNov.id)) {
         G.toast("Abra su turno en este módulo para poder editar entradas del libro.", "warn");
         return;
@@ -32705,7 +32715,7 @@ function __deptUnitsStorageKey() {
         return "<option value=\"" + G.escapeAttr(c) + "\"" + (n.category === c ? " selected" : "") + ">" + G.escapeHtml(c) + "</option>";
       })
       .join("");
-    var isAdminNov = !!(uNov && uNov.role === "admin");
+    var isAdminNov = !!G.userIsAdmin(uNov);
     var adminHint = isAdminNov
       ? "<p class=\"page-desc\" style=\"margin:0 0 0.85rem;font-size:0.82rem;line-height:1.45\">Como <strong>administrador</strong> puede corregir la fecha, el usuario que figura como autor y el contenido de esta entrada.</p>"
       : "";
@@ -32791,7 +32801,7 @@ function __deptUnitsStorageKey() {
     var novArr = Array.isArray(G.state.novedades) ? G.state.novedades : [];
     var prev = novArr.find(function (x) { return x.id === id; });
     var uSave = G.currentUser();
-    if (uSave && uSave.role !== "admin") {
+    if (uSave && !G.userIsAdmin(uSave)) {
       if (!shiftFindOpen(G.state.shiftLogs || [], uSave.id)) {
         G.toast("No puede guardar: debe tener el turno abierto para editar entradas del libro.", "error");
         return;
@@ -32828,7 +32838,7 @@ function __deptUnitsStorageKey() {
           ? G.normalizeNovedadUsuarioTexto(vnx.value || "")
           : vnx.value || ""
     };
-    if (uSave && uSave.role === "admin" && f.at && f.userId) {
+    if (G.userIsAdmin(uSave) && f.at && f.userId) {
       var vAtN = G.validate.datetimeLocal(f.at.value, "Fecha y hora del registro");
       if (!vAtN.ok) {
         G.toast(vAtN.message, "error");
@@ -32867,7 +32877,7 @@ function __deptUnitsStorageKey() {
   };
 
   A.novDel = function (id) {
-    if (!G.currentUser() || G.currentUser().role !== "admin") {
+    if (!G.userIsAdmin(G.currentUser())) {
       G.toast("Solo el administrador puede eliminar entradas del libro de novedades", "warn");
       return;
     }
@@ -33219,7 +33229,7 @@ function __deptUnitsStorageKey() {
       return new Date(a.startAt || 0).getTime() - new Date(b.startAt || 0).getTime();
     });
     var cu = G.currentUser();
-    var showEndMeta = !!(cu && cu.role === "admin");
+    var showEndMeta = !!G.userIsAdmin(cu);
     var sig =
       (showEndMeta ? "1" : "0") +
       "|" +
@@ -33268,7 +33278,7 @@ function __deptUnitsStorageKey() {
 
   A.dashScheduledAlertEdit = function (id) {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede editar alertas.", "error");
       return;
     }
@@ -33298,7 +33308,7 @@ function __deptUnitsStorageKey() {
 
   A.dashScheduledAlertToggle = function (id) {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede cambiar alertas.", "error");
       return;
     }
@@ -33327,7 +33337,7 @@ function __deptUnitsStorageKey() {
 
   A.dashScheduledAlertDel = function (id) {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede eliminar alertas.", "error");
       return;
     }
@@ -33345,7 +33355,7 @@ function __deptUnitsStorageKey() {
 
   A.dashScheduledAlertSave = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede guardar alertas.", "error");
       return;
     }
@@ -33666,7 +33676,7 @@ function __deptUnitsStorageKey() {
 
   A.festiveGlobalSave = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede cambiar la ambientación festiva.", "error");
       return;
     }
@@ -33683,7 +33693,7 @@ function __deptUnitsStorageKey() {
 
   A.festivePreviewApply = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede usar la vista previa.", "error");
       return;
     }
@@ -33701,7 +33711,7 @@ function __deptUnitsStorageKey() {
 
   A.festivePreviewClear = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede quitar la vista previa.", "error");
       return;
     }
@@ -33713,7 +33723,7 @@ function __deptUnitsStorageKey() {
 
   A.festiveRestorePresetCopy = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede restaurar textos.", "error");
       return;
     }
@@ -33744,7 +33754,7 @@ function __deptUnitsStorageKey() {
 
   A.festiveFormNewRange = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede editar la ambientación.", "error");
       return;
     }
@@ -33756,7 +33766,7 @@ function __deptUnitsStorageKey() {
 
   A.festiveRuleEdit = function (id) {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede editar reglas.", "error");
       return;
     }
@@ -33779,7 +33789,7 @@ function __deptUnitsStorageKey() {
 
   A.festiveRuleToggle = function (id) {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede cambiar reglas.", "error");
       return;
     }
@@ -33805,7 +33815,7 @@ function __deptUnitsStorageKey() {
 
   A.festiveRuleDel = function (id) {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede eliminar reglas.", "error");
       return;
     }
@@ -33836,7 +33846,7 @@ function __deptUnitsStorageKey() {
 
   A.festiveRuleSave = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede guardar reglas.", "error");
       return;
     }
@@ -34029,7 +34039,7 @@ function __deptUnitsStorageKey() {
 
   A.staffBirthdayOpen = function (id) {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede editar RRHH.", "error");
       return;
     }
@@ -34066,7 +34076,7 @@ function __deptUnitsStorageKey() {
 
   A.staffBirthdaySave = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede editar RRHH.", "error");
       return;
     }
@@ -34118,7 +34128,7 @@ function __deptUnitsStorageKey() {
 
   A.staffBirthdayDel = function (id) {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador.", "error");
       return;
     }
@@ -34148,7 +34158,7 @@ function __deptUnitsStorageKey() {
       return;
     }
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") return;
+    if (!G.userIsAdmin(cu)) return;
     var existing = Array.isArray(G.state.staffBirthdays) ? G.state.staffBirthdays.slice() : [];
     var keyOf = function (name, dob) {
       return String(name || "")
@@ -34380,7 +34390,7 @@ function __deptUnitsStorageKey() {
 
   A.backupFullDownload = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede descargar el respaldo.", "error");
       return;
     }
@@ -34414,7 +34424,7 @@ function __deptUnitsStorageKey() {
 
   A.backupReminderIntervalSave = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") return;
+    if (!G.userIsAdmin(cu)) return;
     var sel = document.getElementById("cg-backup-interval");
     if (!sel) return;
     var n = parseInt(sel.value, 10);
@@ -34461,7 +34471,7 @@ function __deptUnitsStorageKey() {
 
   A.backupFullRestoreClick = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede restaurar.", "error");
       return;
     }
@@ -34641,7 +34651,7 @@ function __deptUnitsStorageKey() {
 
   A.backupSelectiveImportClick = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede importar.", "error");
       return;
     }
@@ -34798,7 +34808,7 @@ function __deptUnitsStorageKey() {
     var p = renderAdminBindActiveTab(tab);
     if (!p) return;
     var cuRm = G.currentUser();
-    if (cuRm && cuRm.role === "admin" && typeof A.backupMaybeWarnIfStale === "function") {
+    if (G.userIsAdmin(cuRm) && typeof A.backupMaybeWarnIfStale === "function") {
       A.backupMaybeWarnIfStale();
     }
     if (tab === "staff") {
@@ -34878,14 +34888,14 @@ function __deptUnitsStorageKey() {
         byUser[u.id] = { name: u.name, role: u.role, ms: 0 };
       });
       logs.forEach(function (seg) {
-        if (seg.role === "admin") return;
+        if (G.roleIsAdmin(seg.role)) return;
         var endT = seg.endAt ? new Date(seg.endAt) : now;
         var ov = shiftOverlapMs(seg.startAt, endT.toISOString(), wr.start, wr.end);
         if (ov > 0 && byUser[seg.userId]) byUser[seg.userId].ms += ov;
       });
       var sumRows = usersTurn
         .filter(function (u) {
-          return u.role !== "admin";
+          return !G.userIsAdmin(u);
         })
         .map(function (u) {
           return { u: u, ms: byUser[u.id] ? byUser[u.id].ms : 0 };
@@ -35261,7 +35271,7 @@ function __deptUnitsStorageKey() {
 
   A.userOpen = function (id) {
     var cuUo = G.currentUser();
-    if (!cuUo || cuUo.role !== "admin") {
+    if (!G.userIsAdmin(cuUo)) {
       G.toast("Solo el administrador puede gestionar el personal.", "error");
       return;
     }
@@ -35274,8 +35284,8 @@ function __deptUnitsStorageKey() {
       "<div class=\"form-group\"><label>Nombre visible</label><input name=\"name\" required value=\"" + G.escapeAttr(u.name) + "\" /></div>" +
       "<div class=\"form-group\"><label>Usuario</label><input name=\"username\" required value=\"" + G.escapeAttr(u.username) + "\" " + (id ? "readonly" : "") + " /></div>" +
       "<div class=\"form-group\"><label>Contraseña" + (id ? " (dejar vacío para no cambiar)" : "") + "</label><input name=\"password\" type=\"password\" " + (id ? "" : "required") + " /></div>" +
-      "<div class=\"form-group\"><label>Rol</label><select name=\"role\"><option value=\"admin\"" + (u.role === "admin" ? " selected" : "") + ">Administrador</option>" +
-      "<option value=\"conserje\"" + (u.role === "conserje" ? " selected" : "") + ">Conserje</option></select></div>" +
+      "<div class=\"form-group\"><label>Rol</label><select name=\"role\"><option value=\"admin\"" + (G.roleIsAdmin(u.role) ? " selected" : "") + ">Administrador</option>" +
+      "<option value=\"conserje\"" + (G.roleIsConserje(u.role) ? " selected" : "") + ">Conserje</option></select></div>" +
       "<input type=\"hidden\" name=\"uid\" value=\"" + G.escapeAttr(id ? u.id : "") + "\" /></form></div>" +
       "<div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
       "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"userSave\">Guardar</button></div></div>"
@@ -35284,7 +35294,7 @@ function __deptUnitsStorageKey() {
 
   A.userSave = async function () {
     var cuUs = G.currentUser();
-    if (!cuUs || cuUs.role !== "admin") {
+    if (!G.userIsAdmin(cuUs)) {
       G.toast("Solo el administrador puede gestionar el personal.", "error");
       return;
     }
@@ -35355,7 +35365,7 @@ function __deptUnitsStorageKey() {
 
   A.staffCleanupDuplicates = function () {
     var u = G.currentUser();
-    if (!u || u.role !== "admin") {
+    if (!G.userIsAdmin(u)) {
       G.toast("Solo el administrador puede ejecutar la limpieza.", "error");
       return;
     }
@@ -35394,7 +35404,7 @@ function __deptUnitsStorageKey() {
 
   A.userDel = async function (id) {
     var u = G.currentUser();
-    if (!u || u.role !== "admin") {
+    if (!G.userIsAdmin(u)) {
       G.toast("Solo el administrador puede eliminar usuarios.", "error");
       return;
     }
@@ -35423,7 +35433,7 @@ function __deptUnitsStorageKey() {
 
   A.permSave = async function () {
     var cuPerm = G.currentUser();
-    if (!cuPerm || cuPerm.role !== "admin") {
+    if (!G.userIsAdmin(cuPerm)) {
       G.toast("Solo el administrador puede guardar permisos.", "error");
       return;
     }
@@ -35489,7 +35499,7 @@ function __deptUnitsStorageKey() {
 
   A.repMonthlyHtml = function () {
     var cuRep = G.currentUser();
-    if (!cuRep || cuRep.role !== "admin") {
+    if (!G.userIsAdmin(cuRep)) {
       G.toast("Solo el administrador puede generar reportes.", "error");
       return;
     }
@@ -35574,7 +35584,7 @@ function __deptUnitsStorageKey() {
 
     var segs = (G.state.shiftLogs || [])
       .filter(function (s) {
-        return s.role !== "admin" && G.shiftSegmentOverlapChileMonth(s, y, m0);
+        return !G.roleIsAdmin(s.role) && G.shiftSegmentOverlapChileMonth(s, y, m0);
       })
       .sort(function (a, b) {
         return new Date(b.startAt) - new Date(a.startAt);
@@ -35663,7 +35673,7 @@ function __deptUnitsStorageKey() {
       return;
     }
     var cuEx = G.currentUser();
-    if (!cuEx || cuEx.role !== "admin") {
+    if (!G.userIsAdmin(cuEx)) {
       G.toast("Solo el administrador puede exportar datos.", "error");
       return;
     }
@@ -35694,7 +35704,7 @@ function __deptUnitsStorageKey() {
       });
     } else if (mod === "shiftLogs") {
       data = (G.state.shiftLogs || []).filter(function (s) {
-        if (s.role === "admin") return false;
+        if (G.roleIsAdmin(s.role)) return false;
         if (!d1 && !d2) return true;
         var ps = G.cgChileYmdParts(s.startAt);
         var pe = G.cgChileYmdParts(s.endAt != null && s.endAt !== "" ? s.endAt : new Date().toISOString());
@@ -35718,7 +35728,7 @@ function __deptUnitsStorageKey() {
 
   A.cfgParking = function () {
     var cuCfg = G.currentUser();
-    if (!cuCfg || cuCfg.role !== "admin") {
+    if (!G.userIsAdmin(cuCfg)) {
       G.toast("Solo el administrador puede cambiar la configuración.", "error");
       return;
     }
@@ -35756,7 +35766,7 @@ function __deptUnitsStorageKey() {
 
   A.cfgSpacesSave = function () {
     var cuSp = G.currentUser();
-    if (!cuSp || cuSp.role !== "admin") {
+    if (!G.userIsAdmin(cuSp)) {
       G.toast("Solo el administrador puede guardar la configuración.", "error");
       return;
     }
@@ -35773,7 +35783,7 @@ function __deptUnitsStorageKey() {
 
   A.cfgVisitorParkingSave = function () {
     var cuVp = G.currentUser();
-    if (!cuVp || cuVp.role !== "admin") {
+    if (!G.userIsAdmin(cuVp)) {
       G.toast("Solo el administrador puede guardar la configuración.", "error");
       return;
     }
@@ -35807,7 +35817,7 @@ function __deptUnitsStorageKey() {
 
   A.resetSystemLocalData = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede limpiar el almacenamiento local.", "error");
       return;
     }
@@ -35898,7 +35908,7 @@ function __deptUnitsStorageKey() {
 
   A.adminAbsenceAlertAdd = function () {
     var cuAa = G.currentUser();
-    if (!cuAa || cuAa.role !== "admin") {
+    if (!G.userIsAdmin(cuAa)) {
       G.toast("Solo el administrador puede editar las frases.", "error");
       return;
     }
@@ -35938,14 +35948,14 @@ function __deptUnitsStorageKey() {
 
   A.adminAbsenceAlertRemove = function (rowId) {
     var cuAr = G.currentUser();
-    if (!cuAr || cuAr.role !== "admin") return;
+    if (!G.userIsAdmin(cuAr)) return;
     var trR = cgAdminFindAusRow(rowId);
     if (trR) trR.remove();
   };
 
   A.adminAbsenceAlertMove = function (rowId, dir) {
     var cuAm = G.currentUser();
-    if (!cuAm || cuAm.role !== "admin") return;
+    if (!G.userIsAdmin(cuAm)) return;
     var trM = cgAdminFindAusRow(rowId);
     var tbM = document.getElementById("cg-admin-aus-tbody");
     if (!trM || !tbM) return;
@@ -35960,7 +35970,7 @@ function __deptUnitsStorageKey() {
 
   A.adminAbsenceAlertSave = function () {
     var cuAs = G.currentUser();
-    if (!cuAs || cuAs.role !== "admin") {
+    if (!G.userIsAdmin(cuAs)) {
       G.toast("Solo el administrador puede guardar las frases.", "error");
       return;
     }
@@ -35988,7 +35998,7 @@ function __deptUnitsStorageKey() {
 
   A.adminDashQuickLinkAdd = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede editar los accesos.", "error");
       return;
     }
@@ -36029,14 +36039,14 @@ function __deptUnitsStorageKey() {
 
   A.adminDashQuickLinkRemove = function (rowId) {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") return;
+    if (!G.userIsAdmin(cu)) return;
     var tr = cgAdminFindDashQlRow(rowId);
     if (tr) tr.remove();
   };
 
   A.adminDashQuickLinkMove = function (rowId, dir) {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") return;
+    if (!G.userIsAdmin(cu)) return;
     var tr = cgAdminFindDashQlRow(rowId);
     var tb = document.getElementById("cg-admin-dash-ql-tbody");
     if (!tr || !tb) return;
@@ -36051,7 +36061,7 @@ function __deptUnitsStorageKey() {
 
   A.adminDashQuickLinksSave = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede guardar los accesos.", "error");
       return;
     }
@@ -36077,7 +36087,7 @@ function __deptUnitsStorageKey() {
 
   A.adminApplyPalette = function (palId) {
     var cuPal = G.currentUser();
-    if (!cuPal || cuPal.role !== "admin") {
+    if (!G.userIsAdmin(cuPal)) {
       G.toast("Solo el administrador puede cambiar la paleta.", "error");
       return;
     }
@@ -36089,7 +36099,7 @@ function __deptUnitsStorageKey() {
 
   A.adminApplyTheme = function (themeId) {
     var cuTh = G.currentUser();
-    if (!cuTh || cuTh.role !== "admin") {
+    if (!G.userIsAdmin(cuTh)) {
       G.toast("Solo el administrador puede cambiar el modo desde administración.", "error");
       return;
     }
@@ -36103,7 +36113,7 @@ function __deptUnitsStorageKey() {
 
   A.adminStaffChatVoiceSave = function () {
     var cuVs = G.currentUser();
-    if (!cuVs || cuVs.role !== "admin") {
+    if (!G.userIsAdmin(cuVs)) {
       G.toast("Solo el administrador puede guardar la voz del chat.", "error");
       return;
     }
@@ -36125,7 +36135,7 @@ function __deptUnitsStorageKey() {
 
   A.adminStaffChatVoiceTest = function () {
     var cuVt = G.currentUser();
-    if (!cuVt || cuVt.role !== "admin") {
+    if (!G.userIsAdmin(cuVt)) {
       G.toast("Solo el administrador puede probar la voz.", "error");
       return;
     }
@@ -36160,7 +36170,7 @@ function __deptUnitsStorageKey() {
 
   A.persistEnvClearReference = function () {
     var cu = G.currentUser();
-    if (!cu || cu.role !== "admin") {
+    if (!G.userIsAdmin(cu)) {
       G.toast("Solo el administrador puede quitar la referencia.", "warn");
       return;
     }
@@ -36282,7 +36292,7 @@ function __deptUnitsStorageKey() {
       if (!Gc || typeof Gc.currentUser !== "function") return false;
       var u = Gc.currentUser();
       if (!u) return false;
-      if (u.role === "admin") return true;
+      if (G.userIsAdmin(u)) return true;
       if (CG_ACTS_NO_MODULE_GUARD[act]) return true;
       var UIx = window.CG_UI;
       var cv = UIx && typeof UIx.getCurrentView === "function" ? UIx.getCurrentView() : null;
@@ -36377,7 +36387,7 @@ function __deptUnitsStorageKey() {
             e.preventDefault();
             return;
           }
-          if (window.CG && window.CG.currentUser && window.CG.currentUser().role === "conserje") {
+          if (window.CG && window.CG.currentUser && window.CG.roleIsConserje((window.CG.currentUser() || {}).role)) {
             if (!window.CG.canSeeModule || !window.CG.canSeeModule(v)) {
               e.preventDefault();
               if (window.CG.toast) window.CG.toast("No tiene acceso a ese módulo.", "warn");
@@ -36392,7 +36402,7 @@ function __deptUnitsStorageKey() {
       var admTab = t.closest(".admin-tab[data-adm]");
       if (admTab) {
         e.preventDefault();
-        if (window.CG && window.CG.currentUser && window.CG.currentUser().role !== "admin") {
+        if (window.CG && window.CG.currentUser && !window.CG.userIsAdmin(window.CG.currentUser())) {
           if (window.CG.toast) window.CG.toast("Solo administración puede usar esta sección.", "warn");
           return;
         }
@@ -36423,7 +36433,7 @@ function __deptUnitsStorageKey() {
       var winFn = t.closest("[data-cg-win]");
       if (winFn) {
         var Gcw = window.CG;
-        if (Gcw && Gcw.currentUser && Gcw.currentUser().role === "conserje") {
+        if (Gcw && Gcw.currentUser && Gcw.roleIsConserje((Gcw.currentUser() || {}).role)) {
           var cvw = UI && typeof UI.getCurrentView === "function" ? UI.getCurrentView() : null;
           if (!cvw || typeof Gcw.canSeeModule !== "function" || !Gcw.canSeeModule(cvw)) {
             e.preventDefault();
@@ -36684,14 +36694,14 @@ function __deptUnitsStorageKey() {
     }
     var user = cand;
     /* Turnos remotos: tumbas + shiftLogs + users + reconciliación para evitar bloqueos fantasma. */
-    if (user.role === "conserje" && typeof G.pullShiftLogsForRelayConsistency === "function") {
+    if (G.roleIsConserje(user.role) && typeof G.pullShiftLogsForRelayConsistency === "function") {
       try {
         await G.pullShiftLogsForRelayConsistency();
       } catch (ePullSlLogin) {
         console.warn("[CG] pullShiftLogsForRelayConsistency antes de login conserje:", ePullSlLogin);
       }
     }
-    if (user.role === "conserje" && typeof G.loginBlockedByOpenConserjeShift === "function") {
+    if (G.roleIsConserje(user.role) && typeof G.loginBlockedByOpenConserjeShift === "function") {
       var bl = G.loginBlockedByOpenConserjeShift(user.id);
       if (bl) {
         G.toast(
@@ -36751,7 +36761,7 @@ function __deptUnitsStorageKey() {
           console.warn("[CG] initCloudSync rechazó inesperadamente:", eSync);
         })
         .finally(function () {
-          if (user.role === "conserje" && typeof G.kickConserjeIfOpenShiftConflict === "function") {
+          if (G.roleIsConserje(user.role) && typeof G.kickConserjeIfOpenShiftConflict === "function") {
             G.kickConserjeIfOpenShiftConflict();
           }
         });
