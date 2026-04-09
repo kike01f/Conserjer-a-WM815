@@ -23658,7 +23658,8 @@ function __deptUnitsStorageKey() {
           if (typeof G.reconcileShiftLogsLocally === "function") G.reconcileShiftLogsLocally();
         } catch (eSlEarly) {}
       }
-      if (!G.currentUser()) return;
+      /* No cortar aquí con !currentUser(): el listener de Firestore puede aplicar kv antes de que la sesión
+       * esté hidratada; si no, Residentes/Departamentos/Encomiendas quedan desalineados entre dispositivos. */
       var A = window.CG_ACTIONS;
       var view = typeof getCurrentView === "function" ? getCurrentView() : null;
       var dash = view === "dashboard";
@@ -23696,7 +23697,12 @@ function __deptUnitsStorageKey() {
       }
 
       if (k === "shiftLogs" || k === "shiftLogsTombstones") {
-        if (k === "shiftLogs" && A && typeof G.kickConserjeIfOpenShiftConflict === "function") {
+        if (
+          k === "shiftLogs" &&
+          G.currentUser() &&
+          A &&
+          typeof G.kickConserjeIfOpenShiftConflict === "function"
+        ) {
           G.kickConserjeIfOpenShiftConflict();
         }
         if (A && typeof A.renderAdmin === "function") {
@@ -23746,6 +23752,17 @@ function __deptUnitsStorageKey() {
           try {
             updateDashboardActivityAndNovBodiesOnly();
           } catch (eDashDept) {}
+        }
+        /* Listados que muestran depto/unidad: si wm815 o espejo building cambió, repintar aunque la vista no sea Residentes. */
+        if (!remountedMain && A && typeof A.renderEncomiendas === "function" && document.getElementById("enc-wrap")) {
+          try {
+            A.renderEncomiendas();
+          } catch (eEncDeptK) {}
+        }
+        if (!remountedMain && A && typeof A.renderReservas === "function" && document.getElementById("res-module-summary")) {
+          try {
+            A.renderReservas();
+          } catch (eResDeptK) {}
         }
       }
 
