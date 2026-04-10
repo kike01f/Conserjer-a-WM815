@@ -23973,10 +23973,30 @@ function __deptUnitsStorageKey() {
       var dash = view === "dashboard";
       var remountedMain = __cgRemoteRefreshMaybeRemountMain(k, view, dash);
 
+      /* Evita sustituir todo #adm-panel mientras el usuario edita alertas del panel: cada push/pull de dashScheduledAlerts
+       * disparaba renderAdmin y el formulario parecía «recargarse» o perder lo escrito. */
+      function __cgSkipAdminDashAlertsRepaintWhileEditing() {
+        try {
+          if (typeof getCurrentView !== "function" || getCurrentView() !== "admin") return false;
+          var admTabActive = document.querySelector(".admin-tab.active");
+          if (!admTabActive || admTabActive.getAttribute("data-adm") !== "dashAlerts") return false;
+          if (window.__cgDashAlertsFormDirty) return true;
+          var ap = document.getElementById("adm-panel");
+          if (!ap) return false;
+          var ae = document.activeElement;
+          if (!ae || !ap.contains(ae)) return false;
+          var tag = (ae.tagName || "").toUpperCase();
+          return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON";
+        } catch (eSk) {
+          return false;
+        }
+      }
+
       function __cgRefreshAdminActiveSubtabIfNeeded() {
         try {
           if (!A || typeof A.renderAdmin !== "function") return;
           if (typeof getCurrentView !== "function" || getCurrentView() !== "admin") return;
+          if (__cgSkipAdminDashAlertsRepaintWhileEditing()) return;
           var admTabActive = document.querySelector(".admin-tab.active");
           var admTabKey = admTabActive && admTabActive.getAttribute("data-adm");
           if (admTabKey) {
@@ -23996,12 +24016,14 @@ function __deptUnitsStorageKey() {
         /* Repintar la subpestaña de Administración activa (incl. Personal/staff): la tabla lee G.state.users tras el merge en disco. */
         if (A && typeof A.renderAdmin === "function" && view === "admin") {
           try {
-            var admTabActive = document.querySelector(".admin-tab.active");
-            var admTabKey = admTabActive && admTabActive.getAttribute("data-adm");
-            if (admTabKey) {
-              A.renderAdmin(admTabKey);
-            } else if (document.getElementById("adm-panel")) {
-              A.renderAdmin("staff");
+            if (!__cgSkipAdminDashAlertsRepaintWhileEditing()) {
+              var admTabActive = document.querySelector(".admin-tab.active");
+              var admTabKey = admTabActive && admTabActive.getAttribute("data-adm");
+              if (admTabKey) {
+                A.renderAdmin(admTabKey);
+              } else if (document.getElementById("adm-panel")) {
+                A.renderAdmin("staff");
+              }
             }
           } catch (eAdm) {}
         }
@@ -32713,6 +32735,26 @@ function __deptUnitsStorageKey() {
     );
   }
 
+  /** Marca edición local y engancha listeners una vez en #adm-panel para no repintar el formulario por sync remoto mientras hay cambios. */
+  function cgBindDashAlertsAdminFormGuard() {
+    var ap = document.getElementById("adm-panel");
+    if (!ap) return;
+    try {
+      window.__cgDashAlertsFormDirty = false;
+    } catch (e0) {}
+    if (ap.getAttribute("data-cg-dash-alerts-guard") === "1") return;
+    ap.setAttribute("data-cg-dash-alerts-guard", "1");
+    function markDashAlertsDirty() {
+      try {
+        var t = document.querySelector(".admin-tab.active");
+        if (!t || t.getAttribute("data-adm") !== "dashAlerts") return;
+        window.__cgDashAlertsFormDirty = true;
+      } catch (e1) {}
+    }
+    ap.addEventListener("input", markDashAlertsDirty, true);
+    ap.addEventListener("change", markDashAlertsDirty, true);
+  }
+
   A.renderDashboardScheduledAlerts = function () {
     var mount = document.getElementById("dash-scheduled-alerts-mount");
     if (!mount) return;
@@ -34404,6 +34446,11 @@ function __deptUnitsStorageKey() {
   };
 
   A.renderAdmin = function (tab) {
+    if (tab !== "dashAlerts") {
+      try {
+        window.__cgDashAlertsFormDirty = false;
+      } catch (eDz) {}
+    }
     var errAdm = document.getElementById("cg-admin-error");
     if (errAdm) {
       errAdm.classList.add("hidden");
@@ -34719,6 +34766,7 @@ function __deptUnitsStorageKey() {
         dashQlCard;
     } else if (tab === "dashAlerts") {
       p.innerHTML = buildRenderAdminDashAlertsHtml();
+      cgBindDashAlertsAdminFormGuard();
     } else if (tab === "ausAusencia") {
       var ausList = Array.isArray(G.state.absenceAlertPhrases) ? G.state.absenceAlertPhrases : [];
       var ausMax = typeof G.CG_ABSENCE_ALERT_MAX_ITEMS === "number" ? G.CG_ABSENCE_ALERT_MAX_ITEMS : 24;
