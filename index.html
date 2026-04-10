@@ -14028,6 +14028,148 @@
     }
 
     /**
+     * Reparación integral: migraciones locales, reconciliación de turnos, permisos en memoria,
+     * alineación Departamentos → residentes/estacionamientos y (si Firestore está activo) pull completo
+     * seguido de otra pasada de consistencia. No fusiona usuarios duplicados salvo options.mergeDuplicateUsers.
+     * Consola: CG.runFullSystemRepair() o CG.runFullSystemRepair({ cloudPull: false, mergeDuplicateUsers: true }).
+     */
+    function runFullSystemRepair(options) {
+      options = options || {};
+      var wantCloud = options.cloudPull !== false;
+      var wantMerge = options.mergeDuplicateUsers === true;
+      var out = {
+        at: new Date().toISOString(),
+        ok: true,
+        steps: [],
+        mergeResult: null
+      };
+      function pushStep(name, detail) {
+        var row = { name: name };
+        if (detail && typeof detail === "object") {
+          var k;
+          for (k in detail) {
+            if (Object.prototype.hasOwnProperty.call(detail, k)) row[k] = detail[k];
+          }
+        }
+        out.steps.push(row);
+      }
+      function safe(name, fn) {
+        try {
+          var r = fn();
+          pushStep(name, { ok: true, result: r });
+          return r;
+        } catch (err) {
+          out.ok = false;
+          pushStep(name, { ok: false, error: String(err && err.message ? err.message : err) });
+          return null;
+        }
+      }
+
+      safe("ensureInit", function () {
+        ensureInit();
+      });
+      safe("runStartupLocalMigrations", function () {
+        runStartupLocalMigrations();
+      });
+      safe("ensureReservasCommonSpacesDefaults", function () {
+        return ensureReservasCommonSpacesDefaults();
+      });
+      safe("reconcileShiftLogsLocally", function () {
+        return reconcileShiftLogsLocally();
+      });
+      safe("syncPermSnapshotWithDirectory", function () {
+        syncPermSnapshotWithDirectory();
+      });
+      safe("syncDepartamentosModuleFromLocal", function () {
+        if (window.CG_ACTIONS && typeof window.CG_ACTIONS.syncDepartamentosModuleFromLocal === "function") {
+          window.CG_ACTIONS.syncDepartamentosModuleFromLocal();
+          return { ran: true };
+        }
+        return { ran: false };
+      });
+      safe("syncParkingSlotsFromBuilding", function () {
+        if (window.CG_ACTIONS && typeof window.CG_ACTIONS.syncParkingSlotsFromBuilding === "function") {
+          window.CG_ACTIONS.syncParkingSlotsFromBuilding();
+          return { ran: true };
+        }
+        return { ran: false };
+      });
+
+      if (wantMerge) {
+        safe("cleanupStaffDirectoryAndShiftOrphans", function () {
+          var mr = cleanupStaffDirectoryAndShiftOrphans();
+          out.mergeResult = mr;
+          return mr;
+        });
+        safe("reconcileShiftLogsLocally_afterMerge", function () {
+          return reconcileShiftLogsLocally();
+        });
+        safe("syncPermSnapshotWithDirectory_afterMerge", function () {
+          syncPermSnapshotWithDirectory();
+        });
+      }
+
+      function tail() {
+        try {
+          if (typeof scheduleValidateCurrentSessionPermissions === "function") {
+            scheduleValidateCurrentSessionPermissions();
+          }
+        } catch (eVal) {}
+        try {
+          out.diagnostics = runAppDiagnostics();
+        } catch (eDiag) {
+          out.ok = false;
+          pushStep("runAppDiagnostics", { ok: false, error: String(eDiag && eDiag.message ? eDiag.message : eDiag) });
+        }
+        try {
+          if (typeof flushPendingCloudWritesNow === "function") {
+            flushPendingCloudWritesNow();
+          }
+        } catch (eFl) {}
+        return out;
+      }
+
+      if (typeof __cgFsCoreActive !== "function" || !__cgFsCoreActive() || !wantCloud) {
+        return Promise.resolve(tail());
+      }
+
+      return cloudPullAllOnce()
+        .then(function (pullRes) {
+          var pullOk = !!(pullRes && (pullRes.ok === true || pullRes.skipped === true));
+          pushStep("cloudPullAllOnce", { ok: pullOk, detail: pullRes });
+          if (pullRes && pullRes.ok === false && !pullRes.skipped) {
+            out.ok = false;
+          }
+          safe("reconcileShiftLogsLocally_afterPull", function () {
+            return reconcileShiftLogsLocally();
+          });
+          safe("syncPermSnapshotWithDirectory_afterPull", function () {
+            syncPermSnapshotWithDirectory();
+          });
+          safe("syncDepartamentosModuleFromLocal_afterPull", function () {
+            if (window.CG_ACTIONS && typeof window.CG_ACTIONS.syncDepartamentosModuleFromLocal === "function") {
+              window.CG_ACTIONS.syncDepartamentosModuleFromLocal();
+              return { ran: true };
+            }
+            return { ran: false };
+          });
+          safe("syncParkingSlotsFromBuilding_afterPull", function () {
+            if (window.CG_ACTIONS && typeof window.CG_ACTIONS.syncParkingSlotsFromBuilding === "function") {
+              window.CG_ACTIONS.syncParkingSlotsFromBuilding();
+              return { ran: true };
+            }
+            return { ran: false };
+          });
+          return tail();
+        })
+        .catch(function (err) {
+          out.ok = false;
+          pushStep("cloudPullAllOnce", { ok: false, error: String(err && err.message ? err.message : err) });
+          return tail();
+        });
+    }
+
+    /**
      * Diagnóstico rápido (soporte / depuración): nube, volúmenes de datos y presencia de CG_ACTIONS.
      * Consola: CG.runAppDiagnostics() — revisar .issues / .warnings y .dataCounts.
      */
@@ -14515,6 +14657,7 @@
       refreshFirestoreSyncBanner: function () {
         if (typeof window.__cgRefreshFirestoreSyncBanner === "function") window.__cgRefreshFirestoreSyncBanner();
       },
+      runFullSystemRepair,
       runAppDiagnostics,
       getPersistenceEnvironmentReport: getPersistenceEnvironmentReport,
       checkPersistenceEnvironmentWarnOnce: cgCheckPersistenceEnvironmentWarnOnce,
@@ -32369,10 +32512,12 @@ function __deptUnitsStorageKey() {
       "<div class=\"card\"><div class=\"card-h\"><h3>Personal</h3>" +
       "<div class=\"toolbar\" style=\"gap:0.5rem;flex-wrap:wrap\">" +
       "<button type=\"button\" class=\"btn btn-primary btn-sm\" data-cg-act=\"userOpen\" data-cg-empty=\"1\"><i class=\"fa-solid fa-user-plus\"></i> Nuevo usuario</button>" +
+      "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"adminFullSystemRepair\" data-cg-empty=\"1\" title=\"Migraciones, turnos, residentes/estacionamientos desde Departamentos y sincronización con la nube si está activa\">" +
+      "<i class=\"fa-solid fa-screwdriver-wrench\"></i> Reparación integral</button>" +
       "<button type=\"button\" class=\"btn btn-secondary btn-sm\" data-cg-act=\"staffCleanupDuplicates\" data-cg-empty=\"1\" title=\"Cierra turnos de empleados inexistentes y fusiona usuarios con el mismo nombre de acceso\">" +
       "<i class=\"fa-solid fa-broom\"></i> Limpiar duplicados / turnos huérfanos</button></div></div>" +
       "<div class=\"card-b\"><p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.86rem\">" +
-      "Si hubo sincronizaciones o altas repetidas, puede quedar más de una ficha con el mismo <strong>usuario</strong> o turnos abiertos ligados a fichas ya borradas; eso bloquea el botón «Abrir turno». Use la limpieza con todos los conserjes fuera de sesión si es posible.</p>" +
+      "La <strong>reparación integral</strong> aplica migraciones, alinea turnos y datos de edificio y descarga un snapshot desde la nube si está configurada; use «Limpiar duplicados» solo si necesita fusionar cuentas repetidas. Si hubo sincronizaciones o altas repetidas, puede quedar más de una ficha con el mismo <strong>usuario</strong> o turnos abiertos ligados a fichas ya borradas; eso bloquea el botón «Abrir turno». Use la limpieza con todos los conserjes fuera de sesión si es posible.</p>" +
       "<p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.82rem\">" +
       "Solo hay dos tipos de cuenta: <strong>Administrador</strong> (acceso total y módulo Administración) y <strong>Conserje</strong> (módulos asignados en Control de accesos). Los datos se sincronizan entre equipos vía la nube cuando está configurada.</p>" +
       "<table class=\"data-table\"><thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th></th></tr></thead><tbody>" +
@@ -35017,6 +35162,45 @@ function __deptUnitsStorageKey() {
     } catch (eUsSave) {
       console.error("[CG][admin] userSave", eUsSave);
       G.toast("No se pudo guardar el usuario. Intente de nuevo o revise la consola (F12).", "error");
+    }
+  };
+
+  A.adminFullSystemRepair = async function () {
+    var u = G.currentUser();
+    if (!G.userIsAdmin(u)) {
+      G.toast("Solo el administrador puede ejecutar la reparación integral.", "error");
+      return;
+    }
+    var cloudHint =
+      window.cgFsBridge && typeof window.cgFsBridge.active === "function" && window.cgFsBridge.active()
+        ? " Si la sincronización con Firestore está activa, se descargará un snapshot completo de la nube."
+        : "";
+    if (
+      !confirm(
+        "Se ejecutarán migraciones locales, se corregirán inconsistencias de turnos (tumbas, huérfanos, tramos duplicados abiertos), se actualizarán residentes y estacionamientos desde el módulo Departamentos y se alinearán permisos de sesión." +
+          cloudHint +
+          " No fusiona usuarios duplicados (use «Limpiar duplicados» si lo necesita). ¿Continuar?"
+      )
+    ) {
+      return;
+    }
+    G.toast("Reparación integral en curso…", "info");
+    try {
+      var r = await G.runFullSystemRepair({ cloudPull: true, mergeDuplicateUsers: false });
+      if (window.CG && typeof window.CG.flushPendingCloudWritesNow === "function") {
+        window.CG.flushPendingCloudWritesNow();
+      }
+      var ok = r && r.ok !== false;
+      G.toast(ok ? "Reparación integral completada." : "Reparación finalizada con advertencias (revise F12).", ok ? "success" : "warn");
+      if (window.__CG_DEBUG) console.info("[CG] runFullSystemRepair", r);
+      A.renderAdmin("staff");
+      var admTurnosTab = document.querySelector(".admin-tab[data-adm=\"turnos\"].active");
+      if (admTurnosTab) A.renderAdmin("turnos");
+      if (typeof A.renderShiftPanelNovedades === "function") A.renderShiftPanelNovedades();
+      if (typeof G.kickConserjeIfOpenShiftConflict === "function") G.kickConserjeIfOpenShiftConflict();
+    } catch (eRep) {
+      console.error("[CG][admin] adminFullSystemRepair", eRep);
+      G.toast("No se pudo completar la reparación integral (F12).", "error");
     }
   };
 
