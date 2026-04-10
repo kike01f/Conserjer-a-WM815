@@ -31544,10 +31544,6 @@ function __deptUnitsStorageKey() {
   A.shiftAbrirTurno = function () {
     var u = G.currentUser();
     if (!u) return;
-    if (G.userIsAdmin(u)) {
-      G.toast("El control horario no aplica al administrador; solo a conserjes.", "warn");
-      return;
-    }
     function shiftAbrirTurnoProceed() {
       var list = (G.state.shiftLogs || []).slice();
       var blOpen = typeof G.conserjeShiftBlockerFor === "function" ? G.conserjeShiftBlockerFor(u.id) : null;
@@ -31609,10 +31605,6 @@ function __deptUnitsStorageKey() {
   function shiftCierreTurnoExecute() {
     var u = G.currentUser();
     if (!u) return;
-    if (G.userIsAdmin(u)) {
-      G.toast("El administrador no registra cierres de turno. Si queda un tramo antiguo suyo, elimínelo en Administración → Turnos.", "warn");
-      return;
-    }
     var base = G.state.shiftLogs || [];
     var open = shiftFindOpen(base, u.id);
     if (!open) {
@@ -31668,7 +31660,7 @@ function __deptUnitsStorageKey() {
   A.shiftDemarcacionBitacoraConfirm = function () {
     UI.closeModal();
     var u = G.currentUser();
-    if (!u || G.userIsAdmin(u)) return;
+    if (!u) return;
     var ta = document.getElementById("cg-shift-demarca-text");
     var rawText = ta && ta.value != null ? String(ta.value).trim() : "";
     var fallback = "Demarcación de turno.";
@@ -31706,14 +31698,10 @@ function __deptUnitsStorageKey() {
     if (typeof A.renderShiftPanelNovedades === "function") A.renderShiftPanelNovedades();
   };
 
-  /** Muestra alerta en modal antes de cerrar el tramo (sustituye al confirm del navegador). Sin tramo abierto: modal para demarcación en bitácora. */
+  /** Sin tramo abierto: modal para demarcación en bitácora. Con tramo abierto: cierra de inmediato (sin paso intermedio). */
   A.shiftCierreTurno = function () {
     var u = G.currentUser();
     if (!u) return;
-    if (G.userIsAdmin(u)) {
-      G.toast("El administrador no registra cierres de turno. Si queda un tramo antiguo suyo, elimínelo en Administración → Turnos.", "warn");
-      return;
-    }
     var open = shiftFindOpen(G.state.shiftLogs || [], u.id);
     if (!open) {
       UI.openModal(
@@ -31732,29 +31720,7 @@ function __deptUnitsStorageKey() {
       );
       return;
     }
-    var startLab = G.fmtDate(open.startAt);
-    UI.openModal(
-      "<div class=\"modal modal-lg cg-shift-close-alert-modal\">" +
-        "<div class=\"modal-h\"><h4><i class=\"fa-solid fa-triangle-exclamation\" style=\"color:#ea580c;margin-right:0.35rem\" aria-hidden=\"true\"></i> Cerrar turno</h4>" +
-        "<button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal aria-label=\"Cancelar\">Cerrar</button></div>" +
-        "<div class=\"modal-b\">" +
-        "<div class=\"cg-shift-close-alert\" role=\"alert\">" +
-        "<strong>¿Confirma que desea cerrar su turno ahora?</strong>" +
-        "<ul>" +
-        "<li>Se finalizará el tramo abierto desde <strong>" +
-        G.escapeHtml(startLab) +
-        "</strong>.</li>" +
-        "<li>Hasta que pulse <strong>Abrir turno</strong> de nuevo, el sistema <strong>bloqueará</strong> visitas, encomiendas, reservas y nuevas entradas en el libro de novedades.</li>" +
-        "<li>Se añadirá automáticamente la marca <strong>Turno cerrado</strong> en la bitácora.</li>" +
-        "<li>Cerrar solo la pestaña o el navegador <strong>no cierra</strong> el turno. Use <strong>Cerrar sesión</strong> en el menú lateral para salir y dejar el turno cerrado al relevo, o este botón cuando termine su responsabilidad en recepción.</li>" +
-        "</ul></div>" +
-        "<p class=\"page-desc\" style=\"margin:0.9rem 0 0;line-height:1.45\">Su cuenta seguirá iniciada sesión; solo cambia el estado del turno de trabajo.</p>" +
-        "</div>" +
-        "<div class=\"modal-f\" style=\"display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:flex-end;width:100%\">" +
-        "<button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
-        "<button type=\"button\" class=\"btn btn-danger\" data-cg-act=\"shiftCierreTurnoConfirm\"><i class=\"fa-solid fa-clock\" aria-hidden=\"true\"></i> Sí, cerrar turno</button>" +
-        "</div></div>"
-    );
+    shiftCierreTurnoExecute();
   };
 
   A.shiftCierreTurnoConfirm = function () {
@@ -31836,15 +31802,22 @@ function __deptUnitsStorageKey() {
     }
     if (G.userIsAdmin(u)) {
       var openAdm = shiftFindOpen(G.state.shiftLogs || [], u.id);
-      var orphan =
-        openAdm
-          ? "<p class=\"page-desc\" style=\"margin-top:0.5rem\">Hay un <strong>tramo de turno abierto</strong> asociado a este usuario (datos antiguos). El administrador <strong>no acumula horas</strong> de control. Elimine ese tramo en <strong>Administración → Turnos</strong> si desea limpiar el listado.</p>"
-          : "";
+      var startLabAdm = openAdm ? G.fmtDate(openAdm.startAt) : "—";
+      var extraAdm = openAdm
+        ? "<p class=\"page-desc\" style=\"margin-top:0.5rem\">Turno abierto desde <strong>" +
+          G.escapeHtml(startLabAdm) +
+          "</strong>. Use <strong>Cierre de turno</strong> para finalizar el tramo.</p>" +
+          "<button type=\"button\" class=\"btn btn-secondary\" data-cg-act=\"shiftCierreTurno\"><i class=\"fa-solid fa-clock\"></i> Cierre de turno</button>"
+        : "<p class=\"page-desc\" style=\"margin-top:0\">No hay turno abierto. Puede <strong>Abrir turno</strong> o usar <strong>Cierre de turno</strong> para una demarcación en el libro sin tramo.</p>" +
+          "<div class=\"toolbar\" style=\"margin-top:0.5rem;flex-wrap:wrap;gap:0.5rem;align-items:center\">" +
+          "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"shiftAbrirTurno\"><i class=\"fa-solid fa-play\"></i> Abrir turno</button>" +
+          "<button type=\"button\" class=\"btn btn-secondary\" data-cg-act=\"shiftCierreTurno\" title=\"Con tramo abierto: cierra el control horario. Sin tramo: demarcación en el libro.\"><i class=\"fa-solid fa-clock\"></i> Cierre de turno</button>" +
+          "</div>";
       el.innerHTML =
         "<p class=\"page-desc\" style=\"margin:0\"><strong>" +
         G.escapeHtml(u.name) +
         "</strong> · Administrador</p>" +
-        orphan;
+        extraAdm;
       syncNovedadEntryFormShiftGate();
       return;
     }
