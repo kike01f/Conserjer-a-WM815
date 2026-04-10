@@ -11515,7 +11515,7 @@
       /* Administrador: acceso total a la app; los checkboxes en Control de accesos solo afinan conserjes (y el estado guardado para informes). */
       if (roleIsAdmin(u.role)) return true;
       var rm = state.roleModules;
-      if (!rm || typeof rm !== "object") return false;
+      if (!rm || typeof rm !== "object" || Array.isArray(rm)) return false;
       var co = rm.conserje;
       return Array.isArray(co) && co.indexOf(modId) >= 0;
     }
@@ -35001,6 +35001,35 @@ function __deptUnitsStorageKey() {
       if (inp.getAttribute("data-role") === "admin") adm.push(mod);
       else con.push(mod);
     });
+    var allowedAll = Object.create(null);
+    var allowedConserje = Object.create(null);
+    (Array.isArray(G.MODULES) ? G.MODULES : []).forEach(function (m) {
+      if (!m || !m.id) return;
+      allowedAll[m.id] = true;
+      if (!m.adminOnly) allowedConserje[m.id] = true;
+    });
+    function dedupeFiltered(arr, allow) {
+      var seen = Object.create(null);
+      var out = [];
+      var i;
+      var id;
+      for (i = 0; i < (arr || []).length; i++) {
+        id = arr[i];
+        if (!id || !allow[id] || seen[id]) continue;
+        seen[id] = true;
+        out.push(id);
+      }
+      return out;
+    }
+    adm = dedupeFiltered(adm, allowedAll);
+    con = dedupeFiltered(con, allowedConserje);
+    if (!con.length) {
+      G.toast(
+        "Debe marcar al menos un módulo para el rol Conserje. Si no, ningún conserje podrá usar la aplicación.",
+        "error"
+      );
+      return;
+    }
     G.state.roleModules = { admin: adm, conserje: con };
     var pr = null;
     if (typeof G.cloudPushLsKeyPromise === "function") {
