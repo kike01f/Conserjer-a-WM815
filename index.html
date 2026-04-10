@@ -10872,10 +10872,15 @@
     }
 
     function currentUser() {
-      if (!state.session || state.session.userId == null || state.session.userId === "") return null;
+      /* Siempre leer sesión desde persistencia: otras pestañas pueden cerrar sesión o el bridge FS actualizar claves sin tocar state.session en memoria. */
+      var sess = load("session", null);
+      try {
+        state.session = sess;
+      } catch (eSessSync) {}
+      if (!sess || sess.userId == null || sess.userId === "") return null;
       var users = state.users;
       if (!Array.isArray(users)) return null;
-      var uid = state.session.userId;
+      var uid = sess.userId;
       var i;
       for (i = 0; i < users.length; i++) {
         if (users[i] && sameUserId(users[i].id, uid)) {
@@ -10889,6 +10894,22 @@
       return null;
     }
 
+    /** Alinea __cgPermSnapshot con el directorio (misma regla que validateCurrentSessionPermissions). Tras rehidratación o pull de users. */
+    function syncPermSnapshotWithDirectory() {
+      try {
+        var u = currentUser();
+        if (!u) {
+          try {
+            window.__cgPermSnapshot = null;
+          } catch (eSn) {}
+          return;
+        }
+        var dirU = directoryUserById(u.id);
+        var storedFromDir = dirU ? normalizeRoleForAuth(dirU.role) : normalizeRoleForAuth(u.role);
+        window.__cgPermSnapshot = { userId: u.id, storedRole: storedFromDir };
+      } catch (eSp) {}
+    }
+
     function setSession(user) {
       if (!user || user.id == null || user.id === "") {
         console.warn("[CG] setSession: usuario inválido");
@@ -10897,9 +10918,7 @@
       var sess = { userId: user.id, at: new Date().toISOString() };
       state.session = sess;
       save("session", state.session);
-      try {
-        window.__cgPermSnapshot = { userId: user.id, storedRole: normalizeRoleForAuth(user.role) };
-      } catch (eSessSnap) {}
+      syncPermSnapshotWithDirectory();
     }
 
     /** Obsoleto: antes alternaba admin/conserje en una sola cuenta; ahora solo hay dos roles fijos en el directorio. */
@@ -10918,6 +10937,7 @@
           save("session", c);
         }
       } catch (eRm) {}
+      syncPermSnapshotWithDirectory();
     }
 
     function clearSession() {
@@ -11570,7 +11590,19 @@
         try {
           window.__cgPermSnapshot = null;
         } catch (eSn0) {}
-        return { ok: true, action: "noop" };
+        try {
+          state.session = null;
+        } catch (eSst0) {}
+        if (appVisible && typeof UI.showLogin === "function") {
+          try {
+            UI.showLogin();
+          } catch (eSl0) {}
+          toast(
+            "Su sesión ya no es válida (usuario eliminado o datos de acceso actualizados). Inicie sesión de nuevo.",
+            "warn"
+          );
+        }
+        return { ok: false, action: "logged_out" };
       }
 
       var u = currentUser();
@@ -36650,6 +36682,24 @@ function __deptUnitsStorageKey() {
   G.ensureInit();
   G.runStartupLocalMigrations();
   if (typeof G.rehydrateSessionFromStorage === "function") G.rehydrateSessionFromStorage();
+  if (!window.__cgStorageSessionSyncBound) {
+    window.__cgStorageSessionSyncBound = true;
+    try {
+      window.addEventListener("storage", function (evSt) {
+        try {
+          if (!evSt || evSt.key == null || evSt.storageArea !== window.localStorage) return;
+          var ls = window.CG && window.CG.LS;
+          if (!ls) return;
+          var ek = evSt.key;
+          if (ek !== ls + "session" && ek !== ls + "users" && ek !== ls + "roleModules") return;
+          if (typeof window.CG.rehydrateSessionFromStorage === "function") window.CG.rehydrateSessionFromStorage();
+          if (typeof window.CG.scheduleValidateCurrentSessionPermissions === "function") {
+            window.CG.scheduleValidateCurrentSessionPermissions();
+          }
+        } catch (eStg) {}
+      });
+    } catch (eAddSt) {}
+  }
   G.ensureBuildingKeys();
   function cgDeferParkingBoot() {
     if (window.CG_ACTIONS && typeof window.CG_ACTIONS.migrateParkingENomenclature === "function") {
