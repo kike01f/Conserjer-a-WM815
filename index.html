@@ -10898,7 +10898,7 @@
       state.session = sess;
       save("session", state.session);
       try {
-        window.__cgPermSnapshot = { userId: user.id, storedRole: nr };
+        window.__cgPermSnapshot = { userId: user.id, storedRole: normalizeRoleForAuth(user.role) };
       } catch (eSessSnap) {}
     }
 
@@ -35972,10 +35972,14 @@ function __deptUnitsStorageKey() {
       if (!Gc || typeof Gc.currentUser !== "function") return false;
       var u = Gc.currentUser();
       if (!u) return false;
-      if (G.userIsAdmin(u)) return true;
+      if (Gc.userIsAdmin(u)) return true;
       if (CG_ACTS_NO_MODULE_GUARD[act]) return true;
       var UIx = window.CG_UI;
       var cv = UIx && typeof UIx.getCurrentView === "function" ? UIx.getCurrentView() : null;
+      /* Si el router quedó desalineado pero el HTML de Administración sigue montado, usar vista "admin" para canSeeModule. */
+      if ((!cv || cv !== "admin") && document.getElementById("cg-page-admin")) {
+        cv = "admin";
+      }
       if (!cv || typeof Gc.canSeeModule !== "function" || !Gc.canSeeModule(cv)) {
         if (Gc.toast) {
           Gc.toast("Acción no permitida: sus permisos cambiaron o esta vista ya no está autorizada.", "warn");
