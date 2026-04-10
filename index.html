@@ -31513,7 +31513,49 @@ function __deptUnitsStorageKey() {
     }
   }
 
-  /** Muestra alerta en modal antes de cerrar el tramo (sustituye al confirm del navegador). */
+  /** Registra en el libro una entrada Turno sin cerrar tramo (demarcación cuando no hay segmento abierto). */
+  A.shiftDemarcacionBitacoraConfirm = function () {
+    UI.closeModal();
+    var u = G.currentUser();
+    if (!u || G.userIsAdmin(u)) return;
+    var ta = document.getElementById("cg-shift-demarca-text");
+    var rawText = ta && ta.value != null ? String(ta.value).trim() : "";
+    var fallback = "Demarcación de turno.";
+    var vt = G.validate.textBlock(rawText || fallback, { label: "Texto de la demarcación", min: 1, max: 4000 });
+    if (!vt.ok) {
+      G.toast(vt.message, "error");
+      return;
+    }
+    var text =
+      typeof G.normalizeNovedadUsuarioTexto === "function" ? G.normalizeNovedadUsuarioTexto(vt.value) : vt.value;
+    var now = new Date().toISOString();
+    var novRec = {
+      id: G.uid(),
+      seq: nextNovedadSeq(),
+      at: now,
+      editedAt: Date.now(),
+      userId: u.id,
+      userName: u.name,
+      category: "Turno",
+      text: text,
+      shiftSegmentId: ""
+    };
+    var novBase = Array.isArray(G.state.novedades) ? G.state.novedades : [];
+    G.state.novedades = novBase.concat([novRec]);
+    if (typeof G.cloudPushKeyImmediate === "function") {
+      G.cloudPushKeyImmediate("novedades").then(function (r) {
+        if (r && r.ok === false && !r.skipped && typeof G.toast === "function") {
+          G.toast("Demarcación guardada en este equipo. No se pudo sincronizar con la nube ahora; revise la red.", "warn");
+        }
+      });
+    }
+    G.logConserjeActivity("turno_demarcacion", "Registró demarcación de turno en bitácora (sin tramo abierto)");
+    G.toast("Demarcación registrada en el libro de novedades.");
+    if (document.getElementById("tl-nov") && typeof A.renderNovedades === "function") A.renderNovedades();
+    if (typeof A.renderShiftPanelNovedades === "function") A.renderShiftPanelNovedades();
+  };
+
+  /** Muestra alerta en modal antes de cerrar el tramo (sustituye al confirm del navegador). Sin tramo abierto: modal para demarcación en bitácora. */
   A.shiftCierreTurno = function () {
     var u = G.currentUser();
     if (!u) return;
@@ -31523,7 +31565,20 @@ function __deptUnitsStorageKey() {
     }
     var open = shiftFindOpen(G.state.shiftLogs || [], u.id);
     if (!open) {
-      G.toast("No hay turno abierto", "warn");
+      UI.openModal(
+        "<div class=\"modal modal-lg cg-shift-close-alert-modal\">" +
+          "<div class=\"modal-h\"><h4><i class=\"fa-solid fa-book\" style=\"color:var(--blue-600);margin-right:0.35rem\" aria-hidden=\"true\"></i> Demarcación en el libro</h4>" +
+          "<button type=\"button\" class=\"btn btn-sm btn-secondary\" data-close-modal aria-label=\"Cancelar\">Cerrar</button></div>" +
+          "<div class=\"modal-b\">" +
+          "<p class=\"page-desc\" style=\"margin:0 0 0.65rem\">No hay un <strong>tramo de turno abierto</strong> para cerrar. Puede dejar una <strong>marca</strong> en la bitácora (categoría <strong>Turno</strong>) para delimitar responsabilidad, entrega de puesto o fin de jornada, <strong>sin</strong> tiempo de tramo vinculado.</p>" +
+          "<div class=\"form-group\"><label for=\"cg-shift-demarca-text\">Texto en el libro</label>" +
+          "<textarea id=\"cg-shift-demarca-text\" class=\"form-control\" rows=\"3\" placeholder=\"Ej. Entrega de puesto a siguiente turno.\">Demarcación de turno.</textarea></div>" +
+          "</div>" +
+          "<div class=\"modal-f\" style=\"display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:flex-end;width:100%\">" +
+          "<button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
+          "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"shiftDemarcacionBitacoraConfirm\"><i class=\"fa-solid fa-check\" aria-hidden=\"true\"></i> Registrar demarcación</button>" +
+          "</div></div>"
+      );
       return;
     }
     var startLab = G.fmtDate(open.startAt);
@@ -31649,8 +31704,11 @@ function __deptUnitsStorageKey() {
         G.escapeHtml(startLab) +
         "</strong>. El tiempo se cuenta desde que pulsó <strong>Abrir turno</strong> (no desde el inicio de sesión). Cerrar sesión <strong>no</strong> cierra el tramo: use el botón de cierre.</p>" +
         "<button type=\"button\" class=\"btn btn-secondary\" data-cg-act=\"shiftCierreTurno\"><i class=\"fa-solid fa-clock\"></i> Cierre de turno</button>"
-      : "<p class=\"page-desc\" style=\"margin-top:0\">No hay turno abierto. Cuando comience su jornada en conserjería, pulse <strong>Abrir turno</strong> para que empiece a registrarse el tiempo.</p>" +
-        "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"shiftAbrirTurno\"><i class=\"fa-solid fa-play\"></i> Abrir turno</button>";
+      : "<p class=\"page-desc\" style=\"margin-top:0\">No hay turno abierto. Pulse <strong>Abrir turno</strong> para iniciar el tramo horario. El botón <strong>Cierre de turno</strong> sigue disponible para registrar una <strong>demarcación</strong> en la bitácora (categoría Turno) aunque no haya tramo abierto —por ejemplo entrega de puesto o límite de responsabilidad.</p>" +
+        "<div class=\"toolbar\" style=\"margin-top:0.5rem;flex-wrap:wrap;gap:0.5rem;align-items:center\">" +
+        "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"shiftAbrirTurno\"><i class=\"fa-solid fa-play\"></i> Abrir turno</button>" +
+        "<button type=\"button\" class=\"btn btn-secondary\" data-cg-act=\"shiftCierreTurno\" title=\"Con tramo abierto: cierra el control horario. Sin tramo: registra una marca de Turno (demarcación) en el libro.\"><i class=\"fa-solid fa-clock\"></i> Cierre de turno</button>" +
+        "</div>";
     el.innerHTML =
       "<p class=\"page-desc\" style=\"margin:0\"><strong>" + G.escapeHtml(u.name) + "</strong> · Conserje</p>" +
       extra;
