@@ -10288,16 +10288,17 @@
     }
 
     /**
-     * Normaliza rol para RBAC (import Excel/JSON, datos viejos o espacios).
+     * Normaliza rol para RBAC: solo existen dos roles, administrador y conserje (mismo mundo de datos sincronizado).
      * Sin esto, "Admin" o " admin " no coincide con === "admin" y Administración queda roto.
+     * Cualquier valor heredado o desconocido se trata como conserje; el antiguo rol dual «ambos» pasa a administrador.
      */
     function normalizeRoleForAuth(role) {
-      if (role == null || role === "") return role;
+      if (role == null || role === "") return "conserje";
       var s = String(role).trim().toLowerCase();
       if (s === "admin" || s === "administrator") return "admin";
       if (s === "conserje") return "conserje";
-      if (s === "ambos" || s === "both" || s === "dual" || s === "admin_y_conserje" || s === "admin+conserje") return "ambos";
-      return role;
+      if (s === "ambos" || s === "both" || s === "dual" || s === "admin_y_conserje" || s === "admin+conserje") return "admin";
+      return "conserje";
     }
     /** Comprobaciones RBAC: usar en toda la app en lugar de === "admin" / "conserje". */
     function roleIsAdmin(role) {
@@ -10306,10 +10307,9 @@
     function roleIsConserje(role) {
       return String(normalizeRoleForAuth(role) || "") === "conserje";
     }
-    /** Rol en directorio (users[]): conserje o cuenta unificada admin+conserje — turnos, bloqueos de login, etc. */
+    /** Rol en directorio (users[]): solo conserje cuenta como personal de conserjería (turnos, bloqueos de login). */
     function roleIsConserjeScopeForDirectory(role) {
-      var n = normalizeRoleForAuth(role);
-      return n === "conserje" || n === "ambos";
+      return normalizeRoleForAuth(role) === "conserje";
     }
     function userIsAdmin(user) {
       return !!(user && roleIsAdmin(user.role));
@@ -10406,11 +10406,29 @@
       }
       if (changed) save("users", users);
     }
+    /** Persiste solo admin|conserje en `users` (sustituye «ambos» y valores heredados). */
+    function cgAuthMigrateUserRolesToBinary() {
+      var users = load("users", []);
+      if (!Array.isArray(users) || !users.length) return;
+      var changed = false;
+      var i;
+      for (i = 0; i < users.length; i++) {
+        var u = users[i];
+        if (!u) continue;
+        var next = normalizeRoleForAuth(u.role);
+        if (String(u.role) !== String(next)) {
+          users[i] = Object.assign({}, u, { role: next });
+          changed = true;
+        }
+      }
+      if (changed) save("users", users);
+    }
     function authEnsureReady() {
       if (__cgAuthReadyPromise) return __cgAuthReadyPromise;
       __cgAuthReadyPromise = (async function () {
         try {
           await cgAuthMigrateUsersFromLegacy();
+          cgAuthMigrateUserRolesToBinary();
         } catch (e1) {
           console.warn("[Auth] Migración usuarios:", e1);
         }
@@ -10862,16 +10880,9 @@
       for (i = 0; i < users.length; i++) {
         if (users[i] && sameUserId(users[i].id, uid)) {
           var raw = users[i];
-          var stored = normalizeRoleForAuth(raw.role);
-          var eff;
-          if (stored === "ambos") {
-            var mode = (state.session && state.session.roleMode) || "conserje";
-            eff = mode === "admin" ? "admin" : "conserje";
-          } else {
-            eff = stored;
-          }
+          var eff = normalizeRoleForAuth(raw.role);
           var out = Object.assign({}, raw);
-          if (normalizeRoleForAuth(raw.role) !== raw.role) out.role = normalizeRoleForAuth(raw.role);
+          if (eff !== raw.role) out.role = eff;
           return Object.assign({}, out, { role: eff });
         }
       }
@@ -10883,11 +10894,7 @@
         console.warn("[CG] setSession: usuario inválido");
         return;
       }
-      var nr = normalizeRoleForAuth(user.role);
       var sess = { userId: user.id, at: new Date().toISOString() };
-      if (nr === "ambos") {
-        sess.roleMode = "conserje";
-      }
       state.session = sess;
       save("session", state.session);
       try {
@@ -10895,40 +10902,22 @@
       } catch (eSessSnap) {}
     }
 
-    /**
-     * Cuenta «ambos»: alternar entre operación tipo conserjería (turno, libro) y administración sin cerrar sesión.
-     */
-    function setSessionRoleMode(mode) {
-      if (mode !== "admin" && mode !== "conserje") return;
-      var sess = state.session || load("session", null);
-      if (!sess || sess.userId == null) return;
-      var du = directoryUserById(sess.userId);
-      if (!du || normalizeRoleForAuth(du.role) !== "ambos") return;
-      sess = Object.assign({}, sess, { roleMode: mode, at: new Date().toISOString() });
-      state.session = sess;
-      save("session", state.session);
-      validateCurrentSessionPermissions({ silentModuleRedirect: true });
-      if (window.CG_UI && typeof window.CG_UI.renderTopUser === "function") {
-        try {
-          window.CG_UI.renderTopUser();
-        } catch (eRt) {}
-      }
-      if (window.CG_UI && typeof window.CG_UI.renderNav === "function") {
-        try {
-          window.CG_UI.renderNav();
-        } catch (eRn) {}
-      }
-      toast(mode === "admin" ? "Modo administración activo." : "Modo conserjería activo.", "success");
-    }
+    /** Obsoleto: antes alternaba admin/conserje en una sola cuenta; ahora solo hay dos roles fijos en el directorio. */
+    function setSessionRoleMode(mode) {}
 
     function userHasDualRoleInSession() {
-      var sess = state.session;
-      if (!sess || sess.userId == null) return false;
-      var du = directoryUserById(sess.userId);
-      return !!(du && normalizeRoleForAuth(du.role) === "ambos");
+      return false;
     }
     function rehydrateSessionFromStorage() {
       state.session = load("session", null);
+      try {
+        if (state.session && state.session.roleMode != null) {
+          var c = Object.assign({}, state.session);
+          delete c.roleMode;
+          state.session = c;
+          save("session", c);
+        }
+      } catch (eRm) {}
     }
 
     function clearSession() {
@@ -11363,8 +11352,8 @@
         var g = groups[gk];
         if (g.length < 2) return;
         g.sort(function (a, b) {
-          var aa = roleIsAdmin(a.u.role) || normalizeRoleForAuth(a.u.role) === "ambos" ? 0 : 1;
-          var bb = roleIsAdmin(b.u.role) || normalizeRoleForAuth(b.u.role) === "ambos" ? 0 : 1;
+          var aa = roleIsAdmin(a.u.role) ? 0 : 1;
+          var bb = roleIsAdmin(b.u.role) ? 0 : 1;
           if (aa !== bb) return aa - bb;
           var av = a.u.passwordVerifier ? 0 : 1;
           var bv = b.u.passwordVerifier ? 0 : 1;
@@ -21792,20 +21781,6 @@ function __deptUnitsStorageKey() {
         ", " +
         (G.escapeAttr ? G.escapeAttr(roleLbl) : G.escapeHtml(roleLbl));
       var roleAttr = G.escapeAttr ? G.escapeAttr(roleKey || "other") : String(roleKey || "other").replace(/"/g, "&quot;");
-      var dualHtml = "";
-      if (typeof G.userHasDualRoleInSession === "function" && G.userHasDualRoleInSession()) {
-        var sessRm = G.load("session", null);
-        var m = sessRm && sessRm.roleMode === "admin" ? "admin" : "conserje";
-        dualHtml =
-          "<div class=\"cg-topbar-role-mode\" style=\"display:flex;gap:0.35rem;margin-top:0.35rem;flex-wrap:wrap\" role=\"group\" aria-label=\"Cambiar modo de trabajo\">" +
-          "<button type=\"button\" class=\"btn btn-sm btn-secondary\" style=\"font-size:0.72rem;padding:0.15rem 0.45rem;line-height:1.2\"" +
-          (m === "conserje" ? " disabled" : "") +
-          " data-cg-act=\"sessionRoleMode\" data-cg-param=\"conserje\" title=\"Recepción, turno y módulos de conserjería\">Conserjería</button>" +
-          "<button type=\"button\" class=\"btn btn-sm btn-secondary\" style=\"font-size:0.72rem;padding:0.15rem 0.45rem;line-height:1.2\"" +
-          (m === "admin" ? " disabled" : "") +
-          " data-cg-act=\"sessionRoleMode\" data-cg-param=\"admin\" title=\"Panel de administración\">Administración</button>" +
-          "</div>";
-      }
       if (tb) {
         tb.setAttribute("role", "status");
         tb.setAttribute("aria-live", "polite");
@@ -21832,7 +21807,6 @@ function __deptUnitsStorageKey() {
           "\" aria-hidden=\"true\"></i> " +
           G.escapeHtml(roleLbl) +
           "</span></div>" +
-          dualHtml +
           "</div></div>";
       }
       if (sb) sb.textContent = u.name + " · " + roleLbl;
@@ -22563,11 +22537,10 @@ function __deptUnitsStorageKey() {
       var monthIdx = pm.m;
       var monthTitle = new Date(y, monthIdx, 1).toLocaleDateString("es-CL", { month: "long", year: "numeric" });
       var norm = G.normalizeActivityName;
-      /* Incluir conserje, cuenta dual (ambos) y admin: antes solo roleIsConserje excluía a «ambos» y el panel no reflejaba registros de esos usuarios. */
+      /* Administradores y conserjes (mismo personal del edificio; actividad por nombre de usuario). */
       var conserjes = (G.state.users || []).filter(function (u) {
         if (!u) return false;
-        var r = G.normalizeRoleForAuth(u.role);
-        return r === "conserje" || r === "ambos" || r === "admin";
+        return G.roleIsAdmin(u.role) || G.roleIsConserje(u.role);
       });
       var wm = wm815UnitsRaw();
       var visits = G.state.visits || [];
@@ -22621,7 +22594,7 @@ function __deptUnitsStorageKey() {
 
       var leadRows =
         rows.length === 0
-          ? "<tr><td colspan=\"6\" class=\"page-desc\">No hay usuarios con rol conserje en Personal. Agréguelos en Administración.</td></tr>"
+          ? "<tr><td colspan=\"6\" class=\"page-desc\">No hay personal en Administración → Personal. Cree usuarios administrador o conserje.</td></tr>"
           : rows
               .map(function (r, idx) {
                 var med = dashActivityMedalHtml(medalRankForIndex(idx, r.tot));
@@ -22670,16 +22643,7 @@ function __deptUnitsStorageKey() {
             "<table class=\"cg-dash-act-table\"><thead><tr><th>Hora</th><th>Usuario</th><th>Detalle</th></tr></thead><tbody>" +
             actLog
               .map(function (a) {
-                var roleLab =
-                  G.normalizeRoleForAuth(a.role) === "ambos"
-                    ? "Admin + Conserje"
-                    : G.roleIsAdmin(a.role)
-                      ? "Admin"
-                      : G.roleIsConserje(a.role)
-                        ? "Conserje"
-                        : a.role
-                          ? String(a.role)
-                          : "—";
+                var roleLab = G.roleIsAdmin(a.role) ? "Administrador" : "Conserje";
                 return (
                   "<tr><td style=\"white-space:nowrap\">" +
                   G.escapeHtml(G.fmtDate(a.at)) +
@@ -32331,10 +32295,9 @@ function __deptUnitsStorageKey() {
     var staffUsers = Array.isArray(G.state.users) ? G.state.users : [];
     function staffRoleLabel(r) {
       var n = G.normalizeRoleForAuth(r);
-      if (n === "ambos") return "Admin + Conserje";
       if (n === "admin") return "Administrador";
       if (n === "conserje") return "Conserje";
-      return r != null ? String(r) : "—";
+      return "—";
     }
     return (
       "<div class=\"card\"><div class=\"card-h\"><h3>Personal</h3>" +
@@ -32345,7 +32308,7 @@ function __deptUnitsStorageKey() {
       "<div class=\"card-b\"><p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.86rem\">" +
       "Si hubo sincronizaciones o altas repetidas, puede quedar más de una ficha con el mismo <strong>usuario</strong> o turnos abiertos ligados a fichas ya borradas; eso bloquea el botón «Abrir turno». Use la limpieza con todos los conserjes fuera de sesión si es posible.</p>" +
       "<p class=\"page-desc\" style=\"margin:0 0 0.75rem;font-size:0.82rem\">" +
-      "El rol <strong>Admin + Conserje</strong> es una sola cuenta: en la barra superior puede alternar entre modo conserjería y administración sin cerrar sesión.</p>" +
+      "Solo hay dos tipos de cuenta: <strong>Administrador</strong> (acceso total y módulo Administración) y <strong>Conserje</strong> (módulos asignados en Control de accesos). Los datos se sincronizan entre equipos vía la nube cuando está configurada.</p>" +
       "<table class=\"data-table\"><thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th></th></tr></thead><tbody>" +
       staffUsers
         .map(function (u) {
@@ -34821,9 +34784,7 @@ function __deptUnitsStorageKey() {
       (G.normalizeRoleForAuth(u.role) === "admin" ? " selected" : "") +
       ">Administrador</option><option value=\"conserje\"" +
       (G.normalizeRoleForAuth(u.role) === "conserje" ? " selected" : "") +
-      ">Conserje</option><option value=\"ambos\"" +
-      (G.normalizeRoleForAuth(u.role) === "ambos" ? " selected" : "") +
-      ">Administrador y conserjería (una sola cuenta)</option></select></div>" +
+      ">Conserje</option></select></div>" +
       "<input type=\"hidden\" name=\"uid\" value=\"" + G.escapeAttr(id ? u.id : "") + "\" /></form></div>" +
       "<div class=\"modal-f\"><button type=\"button\" class=\"btn btn-secondary\" data-close-modal>Cancelar</button>" +
       "<button type=\"button\" class=\"btn btn-primary\" data-cg-act=\"userSave\">Guardar</button></div></div>"
@@ -34862,7 +34823,7 @@ function __deptUnitsStorageKey() {
       }
       list[i] = Object.assign({}, list[i], {
         name: f.name.value.trim(),
-        role: f.role.value,
+        role: G.normalizeRoleForAuth(f.role.value),
         updatedAt: Date.now()
       });
       if (f.password.value) {
@@ -34895,7 +34856,7 @@ function __deptUnitsStorageKey() {
         id: G.uid(),
         username: f.username.value.trim(),
         name: f.name.value.trim(),
-        role: f.role.value,
+        role: G.normalizeRoleForAuth(f.role.value),
         passwordVerifier: vNew,
         updatedAt: Date.now()
       });
@@ -34910,11 +34871,7 @@ function __deptUnitsStorageKey() {
         if (editedSelf) {
           var nrs = G.normalizeRoleForAuth(editedSelf.role);
           window.__cgPermSnapshot = { userId: editedSelf.id, storedRole: nrs };
-          if (nrs === "ambos") {
-            var s0 = G.load("session", null) || {};
-            var rm0 = s0.roleMode === "admin" || s0.roleMode === "conserje" ? s0.roleMode : "admin";
-            G.save("session", Object.assign({}, s0, { roleMode: rm0, at: new Date().toISOString() }));
-          } else if (sessSelf.roleMode != null) {
+          if (sessSelf.roleMode != null) {
             var s1 = G.load("session", null);
             if (s1) {
               var c1 = Object.assign({}, s1);
