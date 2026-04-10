@@ -6108,25 +6108,6 @@
     #dash-scheduled-alerts-mount .cg-dash-sched-card:nth-child(n + 4) {
       animation-delay: 0.28s;
     }
-    #dash-scheduled-alerts-mount .cg-dash-sched-card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      pointer-events: none;
-      background: linear-gradient(
-        105deg,
-        transparent 0%,
-        transparent 40%,
-        rgba(255, 255, 255, 0.45) 50%,
-        transparent 60%,
-        transparent 100%
-      );
-      background-size: 220% 100%;
-      animation: cg-dash-sched-shine 6.5s ease-in-out infinite;
-      opacity: 0.55;
-      z-index: 0;
-    }
     /* Franjas tipo cinta de seguridad / precaución (arriba y abajo) */
     #dash-scheduled-alerts-mount .cg-dash-sched-card::after {
       content: "";
@@ -6183,19 +6164,6 @@
         transform: translateY(0) scale(1);
       }
     }
-    @keyframes cg-dash-sched-shine {
-      0%,
-      15% {
-        background-position: 130% 0;
-      }
-      50% {
-        background-position: -30% 0;
-      }
-      85%,
-      100% {
-        background-position: -130% 0;
-      }
-    }
     @keyframes cg-dash-sched-icon {
       0%,
       100% {
@@ -6223,15 +6191,11 @@
     }
     @media (prefers-reduced-motion: reduce) {
       #dash-scheduled-alerts-mount .cg-dash-sched-card,
-      #dash-scheduled-alerts-mount .cg-dash-sched-card::before,
       .cg-dash-sched-card .cg-dash-bday-card-h h3 > i {
         animation: none !important;
         transition: none !important;
         opacity: 1;
         transform: none;
-      }
-      #dash-scheduled-alerts-mount .cg-dash-sched-card::before {
-        display: none;
       }
       #dash-scheduled-alerts-mount .cg-dash-sched-card::after {
         animation: none !important;
