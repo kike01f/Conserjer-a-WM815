@@ -10985,19 +10985,14 @@
       if (!u || !roleIsConserje(u.role)) return false;
       var list = load("shiftLogs", []);
       if (!Array.isArray(list) || list.length === 0) return false;
-      var openIds = Object.create(null);
-      var i;
-      for (i = 0; i < list.length; i++) {
-        var s = list[i];
-        if (!s || !shiftLogTramoIsOpen(s)) continue;
-        if (sameUserId(s.userId, u.id)) openIds[s.id] = true;
-      }
-      if (!Object.keys(openIds).length) return false;
       var now = new Date().toISOString();
+      var touched = false;
       var newList = list.map(function (x) {
-        if (!x || !openIds[x.id]) return x;
+        if (!x || !shiftLogTramoIsOpen(x) || !sameUserId(x.userId, u.id)) return x;
+        touched = true;
         return Object.assign({}, x, { endAt: now, endReason: "logout" });
       });
+      if (!touched) return false;
       state.shiftLogs = newList;
       if (window.CG && typeof window.CG.cloudPushKeyImmediate === "function") {
         window.CG.cloudPushKeyImmediate("shiftLogs");
@@ -31481,18 +31476,13 @@ function __deptUnitsStorageKey() {
       G.toast("No hay turno abierto", "warn");
       return;
     }
-    var openIds = Object.create(null);
-    var ji, seg;
-    for (ji = 0; ji < base.length; ji++) {
-      seg = base[ji];
-      if (!seg || !G.sameUserId(seg.userId, u.id) || !shiftTramoAbiertoSeg(seg)) continue;
-      openIds[seg.id] = true;
-    }
     var now = new Date().toISOString();
     var list = base.map(function (x) {
-      if (!x || !openIds[x.id]) return x;
+      if (!x || !G.sameUserId(x.userId, u.id) || !shiftTramoAbiertoSeg(x)) return x;
       return Object.assign({}, x, { endAt: now, endReason: "cierre_turno" });
     });
+    var segIdNov =
+      open.id != null && String(open.id).trim() !== "" ? open.id : "";
     var novRec = {
       id: G.uid(),
       seq: nextNovedadSeq(),
@@ -31502,7 +31492,7 @@ function __deptUnitsStorageKey() {
       userName: u.name,
       category: "Turno",
       text: "Turno cerrado.",
-      shiftSegmentId: open.id
+      shiftSegmentId: segIdNov
     };
     var novBase = Array.isArray(G.state.novedades) ? G.state.novedades : [];
     G.state.shiftLogs = list;
@@ -34988,8 +34978,6 @@ function __deptUnitsStorageKey() {
           return G.sameUserId(x.id, id);
         });
         if (editedSelf) {
-          var nrs = G.normalizeRoleForAuth(editedSelf.role);
-          window.__cgPermSnapshot = { userId: editedSelf.id, storedRole: nrs };
           if (sessSelf.roleMode != null) {
             var s1 = G.load("session", null);
             if (s1) {
