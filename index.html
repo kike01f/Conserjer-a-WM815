@@ -23445,9 +23445,22 @@ function __deptUnitsStorageKey() {
         "<div class=\"toolbar\">" +
         "<button type=\"submit\" class=\"btn btn-primary\"><i class=\"fa-solid fa-floppy-disk\"></i> Guardar</button>" +
         "<button type=\"button\" class=\"btn btn-secondary\" id=\"btn-prov-clear\">Limpiar</button></div></form></div></div>" +
-        "<div class=\"card cg-card-accent--prov-list\"><div class=\"card-h\"><h3>Directorio</h3>" +
-        "<div class=\"toolbar\"><label class=\"sr-only\" for=\"flt-prov-q\">Filtrar proveedores</label><input type=\"search\" id=\"flt-prov-q\" placeholder=\"Buscar empresa, servicio, contactos u otros datos…\" aria-label=\"Filtrar listado de proveedores\" /></div></div>" +
-        "<div class=\"card-b\"><div id=\"tbl-prov-wrap\"></div></div></div></div>"
+        "<div class=\"card cg-card-accent--prov-list\">" +
+        "<div class=\"card-h\" style=\"align-items:center;flex-wrap:wrap;gap:0.5rem\">" +
+        "<h3 style=\"margin:0\">Directorio</h3>" +
+        "<div class=\"toolbar\" style=\"margin-left:auto;flex-wrap:wrap;gap:0.5rem;row-gap:0.35rem\">" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"btn-prov-export-json\" title=\"Descargar directorio como archivo JSON\">" +
+        "<i class=\"fa-solid fa-download\" aria-hidden=\"true\"></i> Exportar JSON</button>" +
+        "<button type=\"button\" class=\"btn btn-secondary btn-sm\" id=\"btn-prov-import-json\" title=\"Restaurar desde un archivo JSON\">" +
+        "<i class=\"fa-solid fa-upload\" aria-hidden=\"true\"></i> Importar JSON</button>" +
+        "<input type=\"file\" id=\"input-prov-json\" class=\"hidden\" accept=\".json,application/json\" aria-hidden=\"true\" />" +
+        "<label class=\"sr-only\" for=\"flt-prov-q\">Filtrar proveedores</label>" +
+        "<input type=\"search\" id=\"flt-prov-q\" placeholder=\"Buscar empresa, servicio, contactos…\" aria-label=\"Filtrar listado de proveedores\" />" +
+        "</div></div>" +
+        "<div class=\"card-b\">" +
+        "<p class=\"page-desc\" style=\"margin:0 0 0.55rem;font-size:0.82rem;line-height:1.45\">" +
+        "Respaldo o traslado: <strong>exportar</strong> a JSON; al <strong>importar</strong> puede fusionar por <code>id</code> o reemplazar todo el listado.</p>" +
+        "<div id=\"tbl-prov-wrap\"></div></div></div></div>"
       );
     }
 
@@ -29354,6 +29367,224 @@ function __deptUnitsStorageKey() {
     return (G.state.proveedores || []).find(function (p) { return p.id === id; });
   }
 
+  /** Raíz del JSON de importación: array puro o envoltorio de exportación de este módulo. */
+  function extractProveedoresArrayFromImportJson(data) {
+    if (Array.isArray(data)) return data;
+    if (data && typeof data === "object") {
+      if (data.format === "conciergeria_proveedores_v1" && Array.isArray(data.proveedores)) return data.proveedores;
+      if (Array.isArray(data.proveedores)) return data.proveedores;
+    }
+    return null;
+  }
+
+  function proveedorNormalizeImportRow(raw) {
+    if (!raw || typeof raw !== "object") return { ok: false };
+    var ve = G.validate.textBlock(String(raw.empresa || ""), { label: "Empresa", min: 2, max: 120 });
+    var tipoSrc = raw.tipoServicio != null ? raw.tipoServicio : raw.tipo != null ? raw.tipo : raw.rubro;
+    var vt = G.validate.textBlock(String(tipoSrc != null ? tipoSrc : ""), { label: "Tipo de servicio", min: 2, max: 120 });
+    if (!ve.ok) return { ok: false };
+    if (!vt.ok) return { ok: false };
+    var contactos = [];
+    if (Array.isArray(raw.contactos)) {
+      raw.contactos.forEach(function (c) {
+        if (!c || typeof c !== "object") return;
+        var vn = G.validate.textBlock(String(c.nombre || ""), { label: "Nombre del contacto", min: 0, max: 100 });
+        var vtel = G.validate.textBlock(String(c.telefono || ""), { label: "Teléfono del contacto", min: 0, max: 40 });
+        var vm = G.validate.simpleEmailOrEmpty(String(c.email || ""));
+        if (!vn.ok || !vtel.ok || !vm.ok) return;
+        if (!String(vn.value).trim() && !String(vtel.value).trim() && !String(vm.value).trim()) return;
+        contactos.push({ nombre: vn.value, telefono: vtel.value, email: vm.value });
+      });
+    }
+    var prim = contactos[0] || { telefono: "", email: "" };
+    var extras;
+    if (raw.extras && typeof raw.extras === "object" && !Array.isArray(raw.extras)) {
+      extras = {};
+      Object.keys(raw.extras).forEach(function (k) {
+        if (String(k).length > 80) return;
+        var v = raw.extras[k];
+        if (v == null) return;
+        extras[String(k)] =
+          typeof v === "object" ? String(JSON.stringify(v)).slice(0, 500) : String(v).slice(0, 500);
+      });
+      if (!Object.keys(extras).length) extras = undefined;
+    }
+    var idRaw = raw.id != null ? String(raw.id).trim() : "";
+    return {
+      ok: true,
+      item: {
+        id: idRaw || null,
+        empresa: ve.value,
+        tipoServicio: vt.value,
+        telefono: prim.telefono || "",
+        email: prim.email || "",
+        contactos: contactos,
+        extras: extras
+      }
+    };
+  }
+
+  function proveedorBuildListAfterImportReplace(normalizedRows) {
+    var out = [];
+    var used = {};
+    normalizedRows.forEach(function (row) {
+      if (!row.ok) return;
+      var base = row.item;
+      var id = base.id || G.uid();
+      if (used[id]) id = G.uid();
+      while (used[id]) id = G.uid();
+      used[id] = true;
+      out.push(
+        Object.assign({}, base, {
+          id: id,
+          telefono: base.telefono || "",
+          email: base.email || "",
+          contactos: base.contactos || []
+        })
+      );
+    });
+    return out;
+  }
+
+  function proveedorBuildListAfterImportMerge(currentList, normalizedRows) {
+    var byId = {};
+    (currentList || []).forEach(function (p) {
+      if (p && p.id) byId[p.id] = Object.assign({}, p);
+    });
+    normalizedRows.forEach(function (row) {
+      if (!row.ok) return;
+      var it = row.item;
+      var fid = it.id;
+      var merged = Object.assign({}, it, {
+        telefono: it.telefono || "",
+        email: it.email || "",
+        contactos: it.contactos || []
+      });
+      if (fid && byId[fid]) {
+        byId[fid] = Object.assign({}, byId[fid], merged, { id: fid });
+      } else if (fid) {
+        byId[fid] = Object.assign({}, merged, { id: fid });
+      } else {
+        var nid = G.uid();
+        while (byId[nid]) nid = G.uid();
+        byId[nid] = Object.assign({}, merged, { id: nid });
+      }
+    });
+    return Object.keys(byId).map(function (k) {
+      return byId[k];
+    });
+  }
+
+  A.proveedoresExportJson = function () {
+    if (!G.userMayOperateModule("proveedores")) {
+      G.toast("No tiene permiso para exportar proveedores en su perfil.", "warn");
+      return;
+    }
+    var list = Array.isArray(G.state.proveedores) ? G.state.proveedores.slice() : [];
+    var payload = {
+      format: "conciergeria_proveedores_v1",
+      exportedAt: new Date().toISOString(),
+      appBrand: typeof G.APP_BRAND_NAME === "string" ? G.APP_BRAND_NAME : "",
+      proveedores: list
+    };
+    var json;
+    try {
+      json = JSON.stringify(payload, null, 2);
+    } catch (eJ) {
+      G.toast("No se pudo generar el archivo JSON.", "error");
+      return;
+    }
+    var blob = new Blob([json], { type: "application/json;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    var stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    a.href = url;
+    a.download = "conserjeria_proveedores_" + stamp + ".json";
+    a.click();
+    URL.revokeObjectURL(url);
+    G.toast("Archivo JSON de proveedores descargado.");
+  };
+
+  A.proveedoresImportJsonApply = function (data) {
+    if (!G.userMayOperateModule("proveedores")) {
+      G.toast("No tiene permiso para importar proveedores en su perfil.", "warn");
+      return;
+    }
+    var arr = extractProveedoresArrayFromImportJson(data);
+    if (!arr) {
+      G.toast(
+        "Formato no reconocido. Use el JSON exportado desde este módulo o un array de objetos con empresa y tipo de servicio.",
+        "error"
+      );
+      return;
+    }
+    var normalized = arr.map(function (raw) {
+      return proveedorNormalizeImportRow(raw);
+    });
+    var okCount = normalized.filter(function (r) {
+      return r.ok;
+    }).length;
+    var badCount = normalized.length - okCount;
+    if (!okCount) {
+      G.toast("No hay filas válidas (empresa y tipo de servicio obligatorios, 2–120 caracteres).", "error");
+      return;
+    }
+    var replaceAll = confirm(
+      "¿Desea REEMPLAZAR por completo el directorio actual por las " +
+        okCount +
+        " fila(s) válida(s) del archivo?\n\n" +
+        "Aceptar = reemplazar todo.\nCancelar = continuar para fusionar por id (sin borrar el resto)."
+    );
+    var nextList;
+    if (replaceAll) {
+      if (
+        !confirm(
+          "Se eliminarán los proveedores que no estén en el archivo. ¿Confirmar reemplazo total?"
+        )
+      ) {
+        return;
+      }
+      nextList = proveedorBuildListAfterImportReplace(normalized);
+    } else {
+      if (
+        !confirm(
+          "Fusionar: se actualizarán los registros con el mismo id y se añadirán los nuevos (" +
+            okCount +
+            " fila(s) válida(s))."
+        )
+      ) {
+        return;
+      }
+      var cur = Array.isArray(G.state.proveedores) ? G.state.proveedores : [];
+      nextList = proveedorBuildListAfterImportMerge(cur, normalized);
+    }
+    G.state.proveedores = nextList;
+    if (typeof G.cloudPushWarnIfFailed === "function") {
+      G.cloudPushWarnIfFailed(
+        "proveedores",
+        "Importación guardada en este equipo. No se pudo sincronizar con la nube ahora; revise la red."
+      );
+    } else if (typeof G.cloudPushKeyImmediate === "function") {
+      G.cloudPushKeyImmediate("proveedores");
+    }
+    var msg = "Importación lista: " + okCount + " proveedor(es)";
+    if (badCount) msg += " (" + badCount + " fila(s) omitidas por datos inválidos)";
+    G.toast(msg, badCount ? "warn" : "success");
+    A.renderProveedores();
+    try {
+      var UIx = window.CG_UI;
+      if (UIx && typeof UIx.getCurrentView === "function" && UIx.getCurrentView() === "visitas") {
+        document.querySelectorAll(".cg-vis-proveedor-select").forEach(function (sel) {
+          var curV = sel.value;
+          sel.innerHTML = G.proveedorSelectOptionsHtml();
+          if (curV && Array.prototype.some.call(sel.options, function (o) {
+            return o.value === curV;
+          })) sel.value = curV;
+        });
+      }
+    } catch (eVis) {}
+  };
+
   function proveedorContactosNormalized(p) {
     if (!p || typeof p !== "object") return [];
     if (Array.isArray(p.contactos) && p.contactos.length) {
@@ -29684,6 +29915,39 @@ function __deptUnitsStorageKey() {
           proveedorClearContactosWrap(w2);
           proveedorAddContactoRow(w2, {});
         }
+      };
+    }
+    var btnProvEx = document.getElementById("btn-prov-export-json");
+    var btnProvIm = document.getElementById("btn-prov-import-json");
+    var inpProvJson = document.getElementById("input-prov-json");
+    if (btnProvEx) {
+      btnProvEx.onclick = function () {
+        A.proveedoresExportJson();
+      };
+    }
+    if (btnProvIm && inpProvJson) {
+      btnProvIm.onclick = function () {
+        inpProvJson.value = "";
+        inpProvJson.click();
+      };
+      inpProvJson.onchange = function () {
+        var fx = inpProvJson.files && inpProvJson.files[0];
+        if (!fx) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          try {
+            var parsed = JSON.parse(String(reader.result || ""));
+            A.proveedoresImportJsonApply(parsed);
+          } catch (eP) {
+            G.toast("No es un JSON válido.", "error");
+          }
+          inpProvJson.value = "";
+        };
+        reader.onerror = function () {
+          G.toast("No se pudo leer el archivo.", "error");
+          inpProvJson.value = "";
+        };
+        reader.readAsText(fx, "UTF-8");
       };
     }
     if (wrap && !wrap.querySelector(".cg-prov-contacto-row")) {
